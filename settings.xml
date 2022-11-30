@@ -1,0 +1,7 @@
+<settings>
+    <chart>
+        <upcolor>green</upcolor>
+        <downcolor>red</downcolor>
+        <basestyle>nightclouds</basestyle>
+    </chart>
+</settings>

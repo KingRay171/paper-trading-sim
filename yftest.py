@@ -1,23 +1,29 @@
 # Started by Ray Ikome on 11/16/22
 
-from PyQt6.QtWidgets import QGroupBox, QWidget, QApplication, QLabel, QProgressBar, QTableWidget,QTableWidgetItem, QTabWidget, QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox
+from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
+                             QTableWidget, QTableWidgetItem, QTabWidget,
+                             QSplashScreen, QPushButton, QDialog, QLineEdit,
+                             QComboBox, QWidget)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
 from PyQt6.QtCore import QRect, QCoreApplication
 import yfinance as yf
 import sys
-import numpy as np
 import mplfinance as mpf
 from threading import Thread
-import pandas as pd
 import time
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 from enum import Enum
 
+
 def showGraph(ticker):
+
     """Plots a ticker from yfinance in a separate matplotfinance window."""
+    # retrieves user's chart style preferences from settings.xml
     mc = mpf.make_marketcolors(up=up_color[0].text.lower(), down=down_color[0].text.lower(),inherit=True)
     s  = mpf.make_mpf_style(base_mpf_style=base_style[0].text,marketcolors=mc)
+
+    # plots chart
     mpf.plot(ticker['2022-01-01':], 
              type='candle', 
              style = s, 
@@ -25,7 +31,9 @@ def showGraph(ticker):
              volume = True, 
              tight_layout = True)
 
+
 def retranslateChartDialogUi(self):
+    """required retranslation function for chart dialog"""
     _translate = QCoreApplication.translate
     self.setWindowTitle(_translate("Dialog", "Dialog"))
     self.spyButton.setText(_translate("Dialog", "Chart SPY"))
@@ -33,47 +41,91 @@ def retranslateChartDialogUi(self):
     self.diaButton.setText(_translate("Dialog", "Chart DIA"))
     self.vixButton.setText(_translate("Dialog", "Chart VIX"))
 
+
 def retranslatePortfolioDialogUi(self):
+    """required retranslation function for portfolio dialog"""
     _translate = QCoreApplication.translate
     self.setWindowTitle(_translate("Dialog", "Dialog"))
 
+
 def updateWatchlist():
+    """Updates the user's watchlist"""
     while True:
         for i in range(len(portfolio_tickers)):
-            # sets the value of the current row in the price tab to reflect the live price of the stock
-            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 1, QTableWidgetItem('${:0,.2f}'.format(yf.Ticker(watchlist_tickers[i].text.upper()).info['regularMarketPrice'])))
-            
-            # sets the stock's icon to reflect its movement for the day
-            ticker_open = yf.Ticker(watchlist_tickers[i].text).info['open']
+            # sets the value of the current row in the price tab to reflect
+            # the live price of the stock
             ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
-            ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][1]
+            column_one_widget_item = QTableWidgetItem('${:0,.2f}'.format(ticker_current))
+            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 1, column_one_widget_item)
+            new_icon = QTableWidgetItem()
 
-            w = QTableWidgetItem()
+            ####################################################################
+            # code to set the stock's icon to reflect its movement for the day #
+            ####################################################################
 
-            up_from_open = ticker_current > ticker_open
-            up_from_last_close = ticker_current > ticker_last_close
+            # gets the stock's open price and last close price
+            ticker_open = yf.Ticker(watchlist_tickers[i].text).info['open']
+            ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][4]
+
+            # calculates the stock's percent change from open and from last close
+            open_change = (ticker_current - ticker_open) / ticker_open * 100
+            close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
+
+            # determines if the stock was up, down, or flat from open and from last close
+            open_pos = "UP"
+            close_pos = "UP"
+            if open_change < -.1:
+                open_pos = "DOWN"
+            elif open_change > -.1 and open_change < .1:
+                open_pos = "FLAT"
             
-            if up_from_open and up_from_last_close:
-                w.setIcon(QIcon("greenarrowgreenbox.png"))
-            elif up_from_open and not up_from_last_close:
-                w.setIcon(QIcon("greenarrowredbox.png"))
-            elif not up_from_open and up_from_last_close:
-                w.setIcon(QIcon("redarrowgreenbox.png"))
-            elif not up_from_open and not up_from_last_close:
-                w.setIcon(QIcon("redarrowredbox.png"))
-                
-            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 2, w)
+            if close_change < -.1:
+                close_pos = "DOWN"
+            elif close_change > -.1 and open_change < .1:
+                close_pos = "FLAT"
+
+            # determines icon for the stock based on its performance relative to open and last close
+            if open_pos == "UP":
+                if close_pos == "UP":
+                    new_icon.setIcon(QIcon('greenarrowgreenbox.png'))
+                elif close_pos == "FLAT":
+                    new_icon.setIcon(QIcon('greenarrowflatbox.png'))
+                elif close_pos == "DOWN":
+                    new_icon.setIcon(QIcon('greenarrowredbox.png'))
+            elif open_pos == "FLAT":
+                if close_pos == "UP":
+                    new_icon.setIcon(QIcon('flatarrowgreenbox.png'))
+                elif close_pos == "FLAT":
+                    new_icon.setIcon(QIcon('flatarrowflatbox.png'))
+                elif close_pos == "DOWN":
+                    new_icon.setIcon(QIcon('flatarrowredbox.png'))
+            elif open_pos == "DOWN":
+                if close_pos == "UP":
+                    new_icon.setIcon(QIcon('redarrowgreenbox.png'))
+                elif close_pos == "FLAT":
+                    new_icon.setIcon(QIcon('redarrowflatbox.png'))
+                elif close_pos == "DOWN":
+                    new_icon.setIcon(QIcon('redarrowredbox.png'))
+
+            # displays new icon
+            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 2, new_icon)
 
             time.sleep(1)
 
+
 def updateNav():
-    """Updates the user's NAV tab"""
+    """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
+    (1.5 * value of all short positions)."""
     while True:
+
+        # sets buying power to user's cash
         newVal = float(amts[0].text)
         buying_power = cash
         total_long = 0
         total_short = 0
 
+        # iterates through all the user's positions and adds (or subtracts) their impact on BP
+        # from the running count
         for i in range(1, len(portfolio_tickers)):
             stock = yf.Ticker(portfolio_tickers[i].text)
             price = stock.info['regularMarketPrice']
@@ -85,14 +137,15 @@ def updateNav():
                 total_short += float(price) * int(amts[i].text)
             newVal += float(price) * int(amts[i].text)
 
+        # calculates buying power and updates GUI
         buying_power += .5 * total_long
         buying_power -= 1.5 * total_short
         portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
         portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
         portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
-        
 
         time.sleep(1)
+
 
 def calculateBuyingPower():
     buying_power = cash
@@ -111,16 +164,23 @@ def calculateBuyingPower():
     buying_power -= 1.5 * total_short
     return buying_power
 
+
 def getXMLData(file, keyword):
+    """Returns a ResultSet containing all instances of the given keyword in the given file"""
     return BeautifulSoup(open(file, 'r').read(), "xml").find_all(keyword)
 
+
 def applySettingsChanges():
-    """"""
+    """Updates settings.xml with the currently selected settings in the GUI"""
+    # gets currently selected settings
     up_color = settings_dialog.up_color_combobox.currentText()[0]
     down_color = settings_dialog.down_color_combobox.currentText()[0]
     base_style = settings_dialog.chart_style_combobox.currentText()[0]
+
+    # parses XML file into an ElementTree
     tree = et.parse('settings.xml')
 
+    # replaces old data in the file with the current data
     for upcolor in tree.getroot().iter('upcolor'):
         upcolor.text = up_color
 
@@ -131,13 +191,18 @@ def applySettingsChanges():
         basestyle.text = base_style
 
     tree.write('settings.xml')
+
+    # updates global settings variables
     up_color = getXMLData('settings.xml', 'upcolor')
     down_color = getXMLData('settings.xml', 'downcolor')
     base_style = getXMLData('settings.xml', 'basestyle')
 
+
 def close_event(event):
+    """Function that is called when the user exits the game. WIP"""
     print("closed")
-    
+
+
 app = QApplication(sys.argv)
 widget = QTabWidget()
 widget.setWindowTitle("Ray's Stock Market Trading Simulator")
@@ -195,12 +260,8 @@ for i in range(1, len(amts)):
 # add genius font to database
 QFontDatabase.addApplicationFont('genius.ttf')
 
-position_from_open = Enum('position', ['UP', 'FLAT', 'DOWN'])
-position_from_last_close = Enum('position', ['UP', 'FLAT', 'DOWN'])
+position = Enum('position', ['UP', 'FLAT', 'DOWN'])
 
-stock_up_from_open = position_from_open.UP.value
-
-print(stock_up_from_opne)
 
 progressBar.setValue(50)
 
@@ -274,6 +335,7 @@ portfolio_dialog.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gai
 portfolio_dialog.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
 
 for i in range(1, len(portfolio_tickers)):
+    # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
     stock = yf.Ticker(portfolio_tickers[i].text)
     price = stock.info['regularMarketPrice']
     portfolio_dialog.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
@@ -292,32 +354,60 @@ portfolio_dialog.watchlistGroupBox.watchlist_view = QTableWidget(portfolio_dialo
 portfolio_dialog.watchlistGroupBox.watchlist_view.setRowCount(len(watchlist_tickers))
 portfolio_dialog.watchlistGroupBox.watchlist_view.setColumnCount(3)
 portfolio_dialog.watchlistGroupBox.watchlist_view.setColumnWidth(2, 50)
-
-
 portfolio_dialog.watchlistGroupBox.watchlist_view.setGeometry(10, 20, 400, 200)
-for i in range (len(watchlist_tickers)):
+
+for i in range(len(watchlist_tickers)):
+    # for each stock in the watchlist, populate its row with its ticker, its current price,
+    # and its performance for the day
     portfolio_dialog.watchlistGroupBox.watchlist_view.setRowHeight(i, 50)
     
     portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 0, QTableWidgetItem(watchlist_tickers[i].text.upper()))
     portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 1, QTableWidgetItem('${:0,.2f}'.format(yf.Ticker(watchlist_tickers[i].text.upper()).info['regularMarketPrice'])))
-    l = QLabel()
+    w = QTableWidgetItem()
     ticker_open = yf.Ticker(watchlist_tickers[i].text).info['open']
     ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
-    ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][1]
+    ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d',
+                                                                     interval='1d')['Close'][4]
 
-    up_from_open = ticker_current > ticker_open
-    up_from_last_close = ticker_current > ticker_last_close
+            
+    open_change = (ticker_current - ticker_open) / ticker_open * 100
+    close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
 
-    if up_from_open and up_from_last_close:
-        l.setPixmap(QPixmap('greenarrowgreenbox.png'))
-    elif up_from_open and not up_from_last_close:
-        l.setPixmap(QPixmap('greenarrowredbox.png'))
-    elif not up_from_open and up_from_last_close:
-        l.setPixmap(QPixmap('redarrowgreenbox.png'))
-    elif not up_from_open and not up_from_last_close:
-        l.setPixmap(QPixmap('redarrowredbox.png'))
+    open_pos = "UP"
+    close_pos = "UP"
+    if open_change < -.1:
+        open_pos = "DOWN"
+    elif open_change > -.1 and open_change < .1:
+        open_pos = "FLAT"
+    
+    if close_change < -.1:
+        close_pos = "DOWN"
+    elif close_change > -.1 and open_change < .1:
+        close_pos = "FLAT"
 
-    portfolio_dialog.watchlistGroupBox.watchlist_view.setCellWidget(i, 2, l)
+    if open_pos == "UP":
+        if close_pos == "UP":
+            w.setIcon(QIcon('greenarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('greenarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('greenarrowredbox.png'))
+    elif open_pos == "FLAT":
+        if close_pos == "UP":
+            w.setIcon(QIcon('flatarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('flatarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('flatarrowredbox.png'))
+    elif open_pos == "DOWN":
+        if close_pos == "UP":
+            w.setIcon(QIcon('redarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('redarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('redarrowredbox.png'))
+
+    portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 2, w)
 
 retranslatePortfolioDialogUi(portfolio_dialog)
 
@@ -335,25 +425,25 @@ chart_dialog.resize(1000, 600)
 chart_dialog.spyButton = QPushButton(chart_dialog)
 chart_dialog.spyButton.setGeometry(QRect(10, 10, 150, 20))
 chart_dialog.spyButton.setObjectName("spyButton")
-chart_dialog.spyButton.clicked.connect(lambda : showGraph(spy))
+chart_dialog.spyButton.clicked.connect(lambda: showGraph(spy))
 
 # button for charting QQQ
 chart_dialog.qqqButton = QPushButton(chart_dialog)
 chart_dialog.qqqButton.setGeometry(QRect(170, 10, 150, 20))
 chart_dialog.qqqButton.setObjectName("qqqButton")
-chart_dialog.qqqButton.clicked.connect(lambda : showGraph(qqq))
+chart_dialog.qqqButton.clicked.connect(lambda: showGraph(qqq))
 
 # button for charting DIA
 chart_dialog.diaButton = QPushButton(chart_dialog)
 chart_dialog.diaButton.setGeometry(QRect(330, 10, 150, 20))
 chart_dialog.diaButton.setObjectName("diaButton")
-chart_dialog.diaButton.clicked.connect(lambda : showGraph(dia))
+chart_dialog.diaButton.clicked.connect(lambda: showGraph(dia))
 
 # button for charting VIX
 chart_dialog.vixButton = QPushButton(chart_dialog)
 chart_dialog.vixButton.setGeometry(QRect(490, 10, 150, 20))
 chart_dialog.vixButton.setObjectName("vixButton")
-chart_dialog.vixButton.clicked.connect(lambda : showGraph(vix))
+chart_dialog.vixButton.clicked.connect(lambda: showGraph(vix))
 
 # search bar for searching for a stock to chart
 chart_dialog.searchBar = QLineEdit(chart_dialog)
@@ -419,7 +509,7 @@ settings_dialog.chart_style_combobox.setGeometry(430, 50, 200, 40)
 settings_dialog.apply_button = QPushButton(settings_dialog)
 settings_dialog.apply_button.setText("Apply")
 settings_dialog.apply_button.setGeometry(450, 500, 100, 50)
-settings_dialog.apply_button.clicked.connect(lambda : applySettingsChanges())
+settings_dialog.apply_button.clicked.connect(lambda: applySettingsChanges())
 
 # adding tabs to main window
 widget.addTab(portfolio_dialog, "Your Portfolio")

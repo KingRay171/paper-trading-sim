@@ -17,14 +17,17 @@ from enum import Enum
 
 def updateTickerIcon(ticker):
     """Updates the performance icon for the given stock"""
+    # initializes new table widget item and gets the ticker's open, last close, and current prices
     w = QTableWidgetItem()
     ticker_open = yf.Ticker(ticker).info['open']
     ticker_current = yf.Ticker(ticker).info['regularMarketPrice']
     ticker_last_close = yf.Ticker(ticker).history(period='5d', interval='1d')['Close'][3]
 
+    # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
     close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
 
+    # decides if the stock is up, down, or flat compared to open and yesterday's close
     open_pos = "UP"
     close_pos = "UP"
     if open_change < -.1:
@@ -58,7 +61,7 @@ def updateTickerIcon(ticker):
             w.setIcon(QIcon('redarrowflatbox.png'))
         elif close_pos == "DOWN":
             w.setIcon(QIcon('redarrowredbox.png'))
-    
+    # returns a tablewidgetitem containing the new icon
     return w
 
 

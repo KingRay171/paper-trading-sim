@@ -15,11 +15,59 @@ from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 from enum import Enum
 
+def updateTickerIcon(ticker):
+    """Updates the performance icon for the given stock"""
+    w = QTableWidgetItem()
+    ticker_open = yf.Ticker(ticker).info['open']
+    ticker_current = yf.Ticker(ticker).info['regularMarketPrice']
+    ticker_last_close = yf.Ticker(ticker).history(period='5d', interval='1d')['Close'][3]
+
+    open_change = (ticker_current - ticker_open) / ticker_open * 100
+    close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
+
+    open_pos = "UP"
+    close_pos = "UP"
+    if open_change < -.1:
+        open_pos = "DOWN"
+    elif open_change > -.1 and open_change < .1:
+        open_pos = "FLAT"
+    
+    if close_change < -.1:
+        close_pos = "DOWN"
+    elif close_change > -.1 and open_change < .1:
+        close_pos = "FLAT"
+
+    if open_pos == "UP":
+        if close_pos == "UP":
+            w.setIcon(QIcon('greenarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('greenarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('greenarrowredbox.png'))
+    elif open_pos == "FLAT":
+        if close_pos == "UP":
+            w.setIcon(QIcon('flatarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('flatarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('flatarrowredbox.png'))
+    elif open_pos == "DOWN":
+        if close_pos == "UP":
+            w.setIcon(QIcon('redarrowgreenbox.png'))
+        elif close_pos == "FLAT":
+            w.setIcon(QIcon('redarrowflatbox.png'))
+        elif close_pos == "DOWN":
+            w.setIcon(QIcon('redarrowredbox.png'))
+    
+    return w
+
 
 def showGraph(ticker):
-
     """Plots a ticker from yfinance in a separate matplotfinance window."""
     # retrieves user's chart style preferences from settings.xml
+    up_color = getXMLData('settings.xml', 'upcolor')
+    down_color = getXMLData('settings.xml', 'downcolor')
+    base_style = getXMLData('settings.xml', 'basestyle')
     mc = mpf.make_marketcolors(up=up_color[0].text.lower(), down=down_color[0].text.lower(),inherit=True)
     s  = mpf.make_mpf_style(base_mpf_style=base_style[0].text,marketcolors=mc)
 
@@ -57,58 +105,8 @@ def updateWatchlist():
             ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
             column_one_widget_item = QTableWidgetItem('${:0,.2f}'.format(ticker_current))
             portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 1, column_one_widget_item)
-            new_icon = QTableWidgetItem()
-
-            ####################################################################
-            # code to set the stock's icon to reflect its movement for the day #
-            ####################################################################
-
-            # gets the stock's open price and last close price
-            ticker_open = yf.Ticker(watchlist_tickers[i].text).info['open']
-            ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][4]
-
-            # calculates the stock's percent change from open and from last close
-            open_change = (ticker_current - ticker_open) / ticker_open * 100
-            close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
-
-            # determines if the stock was up, down, or flat from open and from last close
-            open_pos = "UP"
-            close_pos = "UP"
-            if open_change < -.1:
-                open_pos = "DOWN"
-            elif open_change > -.1 and open_change < .1:
-                open_pos = "FLAT"
             
-            if close_change < -.1:
-                close_pos = "DOWN"
-            elif close_change > -.1 and open_change < .1:
-                close_pos = "FLAT"
-
-            # determines icon for the stock based on its performance relative to open and last close
-            if open_pos == "UP":
-                if close_pos == "UP":
-                    new_icon.setIcon(QIcon('greenarrowgreenbox.png'))
-                elif close_pos == "FLAT":
-                    new_icon.setIcon(QIcon('greenarrowflatbox.png'))
-                elif close_pos == "DOWN":
-                    new_icon.setIcon(QIcon('greenarrowredbox.png'))
-            elif open_pos == "FLAT":
-                if close_pos == "UP":
-                    new_icon.setIcon(QIcon('flatarrowgreenbox.png'))
-                elif close_pos == "FLAT":
-                    new_icon.setIcon(QIcon('flatarrowflatbox.png'))
-                elif close_pos == "DOWN":
-                    new_icon.setIcon(QIcon('flatarrowredbox.png'))
-            elif open_pos == "DOWN":
-                if close_pos == "UP":
-                    new_icon.setIcon(QIcon('redarrowgreenbox.png'))
-                elif close_pos == "FLAT":
-                    new_icon.setIcon(QIcon('redarrowflatbox.png'))
-                elif close_pos == "DOWN":
-                    new_icon.setIcon(QIcon('redarrowredbox.png'))
-
-            # displays new icon
-            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 2, new_icon)
+            portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 3, updateTickerIcon(watchlist_tickers[i].text))
 
             time.sleep(1)
 
@@ -131,6 +129,7 @@ def updateNav():
             price = stock.info['regularMarketPrice']
             portfolio_dialog.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
             portfolio_dialog.positions_view.setItem(i - 1, 1, QTableWidgetItem('${:0,.2f}'.format(price)))
+            portfolio_dialog.positions_view.setItem(i - 1, 3, updateTickerIcon(watchlist_tickers[i].text))
             if int(amts[i].text) > 0:
                 total_long += float(price) * int(amts[i].text)
             elif int(amts[i].text) < 0:
@@ -143,6 +142,7 @@ def updateNav():
         portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
         portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
         portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
+        
 
         time.sleep(1)
 
@@ -173,29 +173,24 @@ def getXMLData(file, keyword):
 def applySettingsChanges():
     """Updates settings.xml with the currently selected settings in the GUI"""
     # gets currently selected settings
-    up_color = settings_dialog.up_color_combobox.currentText()[0]
-    down_color = settings_dialog.down_color_combobox.currentText()[0]
-    base_style = settings_dialog.chart_style_combobox.currentText()[0]
+    up = settings_dialog.up_color_combobox.currentText()
+    down = settings_dialog.down_color_combobox.currentText()
+    style = settings_dialog.chart_style_combobox.currentText()
 
     # parses XML file into an ElementTree
     tree = et.parse('settings.xml')
 
     # replaces old data in the file with the current data
     for upcolor in tree.getroot().iter('upcolor'):
-        upcolor.text = up_color
+        upcolor.text = up
 
     for downcolor in tree.getroot().iter('downcolor'):
-        downcolor.text = down_color
+        downcolor.text = down
 
     for basestyle in tree.getroot().iter('basestyle'):
-        basestyle.text = base_style
+        basestyle.text = style
 
     tree.write('settings.xml')
-
-    # updates global settings variables
-    up_color = getXMLData('settings.xml', 'upcolor')
-    down_color = getXMLData('settings.xml', 'downcolor')
-    base_style = getXMLData('settings.xml', 'basestyle')
 
 
 def close_event(event):
@@ -336,11 +331,12 @@ portfolio_dialog.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gai
 
 for i in range(1, len(portfolio_tickers)):
     # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
-    stock = yf.Ticker(portfolio_tickers[i].text)
-    price = stock.info['regularMarketPrice']
     portfolio_dialog.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
     portfolio_dialog.positions_view.setItem(i - 1, 1, QTableWidgetItem('${:0,.2f}'.format(price)))
     portfolio_dialog.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+
+    portfolio_dialog.positions_view.setItem(i - 1, 3, updateTickerIcon(portfolio_tickers[i].text))
+
 
 progressBar.setValue(80)
 
@@ -352,7 +348,7 @@ portfolio_dialog.watchlistGroupBox.setStyleSheet('background-color: white;')
 
 portfolio_dialog.watchlistGroupBox.watchlist_view = QTableWidget(portfolio_dialog.watchlistGroupBox)
 portfolio_dialog.watchlistGroupBox.watchlist_view.setRowCount(len(watchlist_tickers))
-portfolio_dialog.watchlistGroupBox.watchlist_view.setColumnCount(3)
+portfolio_dialog.watchlistGroupBox.watchlist_view.setColumnCount(4)
 portfolio_dialog.watchlistGroupBox.watchlist_view.setColumnWidth(2, 50)
 portfolio_dialog.watchlistGroupBox.watchlist_view.setGeometry(10, 20, 400, 200)
 
@@ -363,51 +359,8 @@ for i in range(len(watchlist_tickers)):
     
     portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 0, QTableWidgetItem(watchlist_tickers[i].text.upper()))
     portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 1, QTableWidgetItem('${:0,.2f}'.format(yf.Ticker(watchlist_tickers[i].text.upper()).info['regularMarketPrice'])))
-    w = QTableWidgetItem()
-    ticker_open = yf.Ticker(watchlist_tickers[i].text).info['open']
-    ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
-    ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d',
-                                                                     interval='1d')['Close'][4]
-
-            
-    open_change = (ticker_current - ticker_open) / ticker_open * 100
-    close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
-
-    open_pos = "UP"
-    close_pos = "UP"
-    if open_change < -.1:
-        open_pos = "DOWN"
-    elif open_change > -.1 and open_change < .1:
-        open_pos = "FLAT"
     
-    if close_change < -.1:
-        close_pos = "DOWN"
-    elif close_change > -.1 and open_change < .1:
-        close_pos = "FLAT"
-
-    if open_pos == "UP":
-        if close_pos == "UP":
-            w.setIcon(QIcon('greenarrowgreenbox.png'))
-        elif close_pos == "FLAT":
-            w.setIcon(QIcon('greenarrowflatbox.png'))
-        elif close_pos == "DOWN":
-            w.setIcon(QIcon('greenarrowredbox.png'))
-    elif open_pos == "FLAT":
-        if close_pos == "UP":
-            w.setIcon(QIcon('flatarrowgreenbox.png'))
-        elif close_pos == "FLAT":
-            w.setIcon(QIcon('flatarrowflatbox.png'))
-        elif close_pos == "DOWN":
-            w.setIcon(QIcon('flatarrowredbox.png'))
-    elif open_pos == "DOWN":
-        if close_pos == "UP":
-            w.setIcon(QIcon('redarrowgreenbox.png'))
-        elif close_pos == "FLAT":
-            w.setIcon(QIcon('redarrowflatbox.png'))
-        elif close_pos == "DOWN":
-            w.setIcon(QIcon('redarrowredbox.png'))
-
-    portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 2, w)
+    portfolio_dialog.watchlistGroupBox.watchlist_view.setItem(i, 3, updateTickerIcon(watchlist_tickers[i].text))
 
 retranslatePortfolioDialogUi(portfolio_dialog)
 
@@ -500,9 +453,9 @@ settings_dialog.down_color_combobox.setGeometry(220, 50, 200, 40)
 # label and dropdown menu to set the chart style
 settings_dialog.chart_style_combobox = QComboBox(settings_dialog)
 settings_dialog.chart_style_label = QLabel(settings_dialog)
-settings_dialog.chart_style_label.setText("Down Candle Color:")
+settings_dialog.chart_style_label.setText("Chart Style:")
 settings_dialog.chart_style_label.setGeometry(430, 10, 200, 40)
-settings_dialog.chart_style_combobox.addItems(down_colors)
+settings_dialog.chart_style_combobox.addItems(chart_styles)
 settings_dialog.chart_style_combobox.setGeometry(430, 50, 200, 40)
 
 # button to apply changes
@@ -529,6 +482,5 @@ portfolio_background_thread.start()
 
 watchlist_background_thread = Thread(target=updateWatchlist, daemon=True)
 watchlist_background_thread.start()
-
 
 sys.exit(app.exec())

@@ -3,9 +3,9 @@
 from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
                              QTableWidget, QTableWidgetItem, QTabWidget,
                              QSplashScreen, QPushButton, QDialog, QLineEdit,
-                             QComboBox, QWidget)
+                             QComboBox, QCompleter)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
-from PyQt6.QtCore import QRect, QCoreApplication
+from PyQt6.QtCore import QRect, QCoreApplication, QStringListModel
 import yfinance as yf
 import sys
 import mplfinance as mpf
@@ -13,6 +13,7 @@ from threading import Thread
 import time
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
+import pandas as pd
 from enum import Enum
 
 def updateTickerIcon(ticker):
@@ -65,7 +66,7 @@ def updateTickerIcon(ticker):
     return w
 
 
-def showGraph(ticker):
+def showGraph(ticker, title):
     """Plots a ticker from yfinance in a separate matplotfinance window."""
     # retrieves user's chart style preferences from settings.xml
     up_color = getXMLData('settings.xml', 'upcolor')
@@ -76,9 +77,10 @@ def showGraph(ticker):
 
     # plots chart
     mpf.plot(ticker['2022-01-01':], 
+             
              type='candle', 
              style = s, 
-             title = 'Stock Price', 
+             title = title, 
              volume = True, 
              tight_layout = True)
 
@@ -252,6 +254,8 @@ base_style = getXMLData('settings.xml', 'basestyle')
 amts = getXMLData('portfolio.xml', 'amount')
 purchase_prices = getXMLData('portfolio.xml', 'costbasis')
 
+all_tickers_list = pd.read_csv("stock_list.csv")['Symbol'].tolist()
+all_tickers_list[5023] = 'NAN'
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
 nav = float(amts[0].text)
@@ -402,7 +406,6 @@ portfolio_dialog.watchlist_groupbox.watchlist_view.resizeColumnsToContents()
 
 retranslatePortfolioDialogUi(portfolio_dialog)
 
-
 ################
 # chart dialog #
 ################
@@ -416,29 +419,42 @@ chart_dialog.resize(1000, 600)
 chart_dialog.spyButton = QPushButton(chart_dialog)
 chart_dialog.spyButton.setGeometry(QRect(10, 10, 150, 20))
 chart_dialog.spyButton.setObjectName("spyButton")
-chart_dialog.spyButton.clicked.connect(lambda: showGraph(spy))
+chart_dialog.spyButton.clicked.connect(lambda: showGraph(spy, 'SPY'))
 
 # button for charting QQQ
 chart_dialog.qqqButton = QPushButton(chart_dialog)
 chart_dialog.qqqButton.setGeometry(QRect(170, 10, 150, 20))
 chart_dialog.qqqButton.setObjectName("qqqButton")
-chart_dialog.qqqButton.clicked.connect(lambda: showGraph(qqq))
+chart_dialog.qqqButton.clicked.connect(lambda: showGraph(qqq, 'QQQ'))
 
 # button for charting DIA
 chart_dialog.diaButton = QPushButton(chart_dialog)
 chart_dialog.diaButton.setGeometry(QRect(330, 10, 150, 20))
 chart_dialog.diaButton.setObjectName("diaButton")
-chart_dialog.diaButton.clicked.connect(lambda: showGraph(dia))
+chart_dialog.diaButton.clicked.connect(lambda: showGraph(dia, 'DIA'))
 
 # button for charting VIX
 chart_dialog.vixButton = QPushButton(chart_dialog)
 chart_dialog.vixButton.setGeometry(QRect(490, 10, 150, 20))
 chart_dialog.vixButton.setObjectName("vixButton")
-chart_dialog.vixButton.clicked.connect(lambda: showGraph(vix))
+chart_dialog.vixButton.clicked.connect(lambda: showGraph(vix, 'VIX'))
 
 # search bar for searching for a stock to chart
 chart_dialog.searchBar = QLineEdit(chart_dialog)
 chart_dialog.searchBar.setGeometry(100, 200, 400, 40)
+chart_dialog.searchBar.textChanged.connect(lambda txt: chart_dialog.searchBar.setText(txt.upper()))
+
+model = QStringListModel()
+model.setStringList(all_tickers_list)
+
+completer = QCompleter()
+completer.setModel(model)
+chart_dialog.searchBar.setCompleter(completer)
+
+chart_dialog.search_button = QPushButton(chart_dialog)
+chart_dialog.search_button.setGeometry(510, 200, 80, 40)
+chart_dialog.search_button.setText("Chart")
+chart_dialog.search_button.clicked.connect(lambda: showGraph(yf.download(chart_dialog.searchBar.text(), start, end), chart_dialog.searchBar.text()))
 retranslateChartDialogUi(chart_dialog)
 
 ################

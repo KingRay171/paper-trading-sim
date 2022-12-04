@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
                              QComboBox, QCompleter)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
 from PyQt6.QtCore import QRect, QCoreApplication, QStringListModel
+from PyQt6 import QtCore
 import yfinance as yf
 import sys
 import mplfinance as mpf
@@ -14,7 +15,23 @@ import time
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 import pandas as pd
+import autocomplete as ac
 from enum import Enum
+
+def searchTextChanged(txt):
+    chart_dialog.search_bar_groupbox.searchBar.setText(txt.upper())
+
+
+def searchButtonClicked():
+    ticker = ''
+    i = 0
+    while chart_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
+        ticker += chart_dialog.search_bar_groupbox.searchBar.text()[i]
+        i += 1
+    showGraph(yf.download(ticker, start, end), ticker)
+    chart_dialog.search_bar_groupbox.search_button.setEnabled(False)
+    chart_dialog.search_bar_groupbox.searchBar.setText("")
+
 
 def updateTickerIcon(ticker):
     """Updates the performance icon for the given stock"""
@@ -89,10 +106,10 @@ def retranslateChartDialogUi(self):
     """required retranslation function for chart dialog"""
     _translate = QCoreApplication.translate
     self.setWindowTitle(_translate("Dialog", "Dialog"))
-    self.spyButton.setText(_translate("Dialog", "Chart SPY"))
-    self.qqqButton.setText(_translate("Dialog", "Chart QQQ"))
-    self.diaButton.setText(_translate("Dialog", "Chart DIA"))
-    self.vixButton.setText(_translate("Dialog", "Chart VIX"))
+    self.broad_market_groupbox.spyButton.setText(_translate("Dialog", "Chart SPY"))
+    self.broad_market_groupbox.qqqButton.setText(_translate("Dialog", "Chart QQQ"))
+    self.broad_market_groupbox.diaButton.setText(_translate("Dialog", "Chart DIA"))
+    self.broad_market_groupbox.vixButton.setText(_translate("Dialog", "Chart VIX"))
 
 
 def retranslatePortfolioDialogUi(self):
@@ -113,7 +130,7 @@ def updateWatchlist():
             ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
             ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-            portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format((ticker_current - ticker_last_close) / ticker_last_close * 100)))
+            portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
 
             time.sleep(1)
 
@@ -140,7 +157,7 @@ def updateNav():
 
             ticker_last_close = yf.Ticker(portfolio_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-            portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format((price - ticker_last_close) / ticker_last_close * 100)))
+            portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(price - ticker_last_close) + " (" + str(round(((price - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
             portfolio_dialog.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
             if int(amts[i].text) > 0:
                 total_long += float(price) * int(amts[i].text)
@@ -215,6 +232,7 @@ widget = QTabWidget()
 widget.setWindowTitle("Ray's Stock Market Trading Simulator")
 
 splash = QSplashScreen(QPixmap('splash.png'))
+splash.setWindowFlag(QtCore.Qt.WindowType.WindowStaysOnTopHint)
 progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
 
@@ -250,12 +268,15 @@ progressBar.setValue(40)
 
 down_color = getXMLData('settings.xml', 'downcolor')
 base_style = getXMLData('settings.xml', 'basestyle')
-
 amts = getXMLData('portfolio.xml', 'amount')
 purchase_prices = getXMLData('portfolio.xml', 'costbasis')
 
 all_tickers_list = pd.read_csv("stock_list.csv")['Symbol'].tolist()
+all_names_list = pd.read_csv("stock_list.csv")['Name'].tolist()
 all_tickers_list[5023] = 'NAN'
+
+for i in range(len(all_tickers_list)):
+    all_tickers_list[i] += ' - ' + all_names_list[i]
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
 nav = float(amts[0].text)
@@ -358,8 +379,9 @@ for i in range(1, len(portfolio_tickers)):
     ticker_current = yf.Ticker(portfolio_tickers[i].text).info['regularMarketPrice']
     ticker_last_close = yf.Ticker(portfolio_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-    portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format((ticker_current - ticker_last_close) / ticker_last_close * 100)))
+    portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
     portfolio_dialog.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+    portfolio_dialog.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
 
     
 
@@ -389,6 +411,7 @@ for i in range (portfolio_dialog.watchlist_groupbox.watchlist_view.rowCount()):
 portfolio_dialog.watchlist_groupbox.watchlist_view.setFont(QFont('arial', 10))
 portfolio_dialog.watchlist_groupbox.watchlist_view.setGeometry(10, 20, 500, 200)
 
+
 for i in range(len(watchlist_tickers)):
     # for each stock in the watchlist, populate its row with its ticker, its current price,
     # and its performance for the day
@@ -400,7 +423,7 @@ for i in range(len(watchlist_tickers)):
     ticker_current = yf.Ticker(watchlist_tickers[i].text).info['regularMarketPrice']
     ticker_last_close = yf.Ticker(watchlist_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-    portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format((ticker_current - ticker_last_close) / ticker_last_close * 100)))
+    portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
     
 portfolio_dialog.watchlist_groupbox.watchlist_view.resizeColumnsToContents()
 
@@ -414,47 +437,59 @@ progressBar.setValue(90)
 chart_dialog = QDialog()
 chart_dialog.setObjectName("Dialog")
 chart_dialog.resize(1000, 600)
+chart_dialog.setStyleSheet('background-color: deepskyblue;')
 
-# button for charting SPY
-chart_dialog.spyButton = QPushButton(chart_dialog)
-chart_dialog.spyButton.setGeometry(QRect(10, 10, 150, 20))
-chart_dialog.spyButton.setObjectName("spyButton")
-chart_dialog.spyButton.clicked.connect(lambda: showGraph(spy, 'SPY'))
+chart_dialog.broad_market_groupbox = QGroupBox(chart_dialog)
+chart_dialog.broad_market_groupbox.setTitle("Broad Market Indicies")
+chart_dialog.broad_market_groupbox.setStyleSheet('background-color: white;')
+chart_dialog.broad_market_groupbox.setGeometry(10, 10, 700, 50)
 
-# button for charting QQQ
-chart_dialog.qqqButton = QPushButton(chart_dialog)
-chart_dialog.qqqButton.setGeometry(QRect(170, 10, 150, 20))
-chart_dialog.qqqButton.setObjectName("qqqButton")
-chart_dialog.qqqButton.clicked.connect(lambda: showGraph(qqq, 'QQQ'))
+chart_dialog.broad_market_groupbox.spyButton = QPushButton(chart_dialog.broad_market_groupbox)
+chart_dialog.broad_market_groupbox.spyButton.setGeometry(QRect(10, 20, 150, 20))
+chart_dialog.broad_market_groupbox.spyButton.setObjectName("spyButton")
+chart_dialog.broad_market_groupbox.spyButton.clicked.connect(lambda: showGraph(spy, 'SPY'))
 
-# button for charting DIA
-chart_dialog.diaButton = QPushButton(chart_dialog)
-chart_dialog.diaButton.setGeometry(QRect(330, 10, 150, 20))
-chart_dialog.diaButton.setObjectName("diaButton")
-chart_dialog.diaButton.clicked.connect(lambda: showGraph(dia, 'DIA'))
+chart_dialog.broad_market_groupbox.qqqButton = QPushButton(chart_dialog.broad_market_groupbox)
+chart_dialog.broad_market_groupbox.qqqButton.setGeometry(QRect(170, 20, 150, 20))
+chart_dialog.broad_market_groupbox.qqqButton.setObjectName("qqqButton")
+chart_dialog.broad_market_groupbox.qqqButton.clicked.connect(lambda: showGraph(qqq, 'QQQ'))
 
-# button for charting VIX
-chart_dialog.vixButton = QPushButton(chart_dialog)
-chart_dialog.vixButton.setGeometry(QRect(490, 10, 150, 20))
-chart_dialog.vixButton.setObjectName("vixButton")
-chart_dialog.vixButton.clicked.connect(lambda: showGraph(vix, 'VIX'))
+chart_dialog.broad_market_groupbox.diaButton = QPushButton(chart_dialog.broad_market_groupbox)
+chart_dialog.broad_market_groupbox.diaButton.setGeometry(QRect(330, 20, 150, 20))
+chart_dialog.broad_market_groupbox.diaButton.setObjectName("diaButton")
+chart_dialog.broad_market_groupbox.diaButton.clicked.connect(lambda: showGraph(dia, 'DIA'))
+
+chart_dialog.broad_market_groupbox.vixButton = QPushButton(chart_dialog.broad_market_groupbox)
+chart_dialog.broad_market_groupbox.vixButton.setGeometry(QRect(490, 20, 150, 20))
+chart_dialog.broad_market_groupbox.vixButton.setObjectName("vixButton")
+chart_dialog.broad_market_groupbox.vixButton.clicked.connect(lambda: showGraph(vix, 'VIX'))
 
 # search bar for searching for a stock to chart
-chart_dialog.searchBar = QLineEdit(chart_dialog)
-chart_dialog.searchBar.setGeometry(100, 200, 400, 40)
-chart_dialog.searchBar.textChanged.connect(lambda txt: chart_dialog.searchBar.setText(txt.upper()))
+chart_dialog.search_bar_groupbox = QGroupBox(chart_dialog)
+chart_dialog.search_bar_groupbox.setStyleSheet('background-color: white;')
+chart_dialog.search_bar_groupbox.setTitle("Find a Stock")
+chart_dialog.search_bar_groupbox.setGeometry(10, 70, 850, 70)
+
+chart_dialog.search_bar_groupbox.searchBar = QLineEdit(chart_dialog.search_bar_groupbox)
+chart_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 700, 40)
+chart_dialog.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: searchTextChanged(txt))
+chart_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
+
 
 model = QStringListModel()
 model.setStringList(all_tickers_list)
 
-completer = QCompleter()
+completer = ac.CustomQCompleter()
 completer.setModel(model)
-chart_dialog.searchBar.setCompleter(completer)
+chart_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
+completer.activated.connect(lambda: chart_dialog.search_bar_groupbox.search_button.setEnabled(True))
+completer.setMaxVisibleItems(5)
 
-chart_dialog.search_button = QPushButton(chart_dialog)
-chart_dialog.search_button.setGeometry(510, 200, 80, 40)
-chart_dialog.search_button.setText("Chart")
-chart_dialog.search_button.clicked.connect(lambda: showGraph(yf.download(chart_dialog.searchBar.text(), start, end), chart_dialog.searchBar.text()))
+chart_dialog.search_bar_groupbox.search_button = QPushButton(chart_dialog.search_bar_groupbox)
+chart_dialog.search_bar_groupbox.search_button.setGeometry(710, 20, 80, 40)
+chart_dialog.search_bar_groupbox.search_button.setText("Chart")
+chart_dialog.search_bar_groupbox.search_button.setEnabled(False)
+chart_dialog.search_bar_groupbox.search_button.clicked.connect(searchButtonClicked)
 retranslateChartDialogUi(chart_dialog)
 
 ################

@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
                              QComboBox, QCompleter)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
 from PyQt6.QtCore import QRect, QCoreApplication, QStringListModel
-from PyQt6 import QtCore
+from PyQt6 import QtCore 
 import yfinance as yf
 import sys
 import mplfinance as mpf
@@ -151,14 +151,20 @@ def updateNav():
         for i in range(1, len(portfolio_tickers)):
             stock = yf.Ticker(portfolio_tickers[i].text)
             price = stock.info['regularMarketPrice']
-            portfolio_dialog.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
-            portfolio_dialog.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
-            portfolio_dialog.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
 
             ticker_last_close = yf.Ticker(portfolio_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-            portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(price - ticker_last_close) + " (" + str(round(((price - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
-            portfolio_dialog.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(price - ticker_last_close) + " (" + str(round(((price - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(price * int(amts[i].text))))
+            total_return = (price - float(purchase_prices[i - 1].text)) * int(amts[i].text)
+            percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
+            
             if int(amts[i].text) > 0:
                 total_long += float(price) * int(amts[i].text)
             elif int(amts[i].text) < 0:
@@ -347,45 +353,54 @@ portfolio_dialog.currentNAV.returnSinceInception.setGeometry(10, 160, 120, 30)
 progressBar.setValue(70)
 
 # positions table settings
-portfolio_dialog.positions_view = QTableWidget(portfolio_dialog)
+portfolio_dialog.positions_view_groupbox = QGroupBox(portfolio_dialog)
+portfolio_dialog.positions_view_groupbox.setGeometry(10, 300, 950, 250)
+portfolio_dialog.positions_view_groupbox.setTitle("Your Portfolio")
+portfolio_dialog.positions_view_groupbox.setStyleSheet('background-color: white;')
 
-portfolio_dialog.positions_view.setFont(QFont('arial', 10))
-portfolio_dialog.positions_view.setRowCount(len(amts) - 1)
-portfolio_dialog.positions_view.setColumnCount(8)
-portfolio_dialog.positions_view.setGeometry(10, 300, 950, 200)
-portfolio_dialog.positions_view.setStyleSheet('background-color: white;')
-portfolio_dialog.positions_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(4, QTableWidgetItem("Purchase Price"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(5, QTableWidgetItem("# of Shares"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(6, QTableWidgetItem("Total Value"))
-portfolio_dialog.positions_view.setHorizontalHeaderItem(7, QTableWidgetItem("Gain/Loss"))
+portfolio_dialog.positions_view_groupbox.positions_view = QTableWidget(portfolio_dialog.positions_view_groupbox)
+portfolio_dialog.positions_view_groupbox.positions_view.setFont(QFont('arial', 10))
+portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(len(amts) - 1)
+portfolio_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
+portfolio_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 900, 200)
+portfolio_dialog.positions_view_groupbox.positions_view.setStyleSheet('background-color: white;')
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(4, QTableWidgetItem("Purchase Price"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(5, QTableWidgetItem("# of Shares"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(6, QTableWidgetItem("Total Value"))
+portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(7, QTableWidgetItem("Gain/Loss"))
 
 
 for i in range (8):
-    portfolio_dialog.positions_view.horizontalHeaderItem(i).setFont(QFont('arial', 10))
-for i in range (portfolio_dialog.positions_view.rowCount()):
-    portfolio_dialog.positions_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
-    portfolio_dialog.positions_view.verticalHeaderItem(i).setFont(QFont('arial', 10))
+    portfolio_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(i).setFont(QFont('arial', 10))
+for i in range (portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
+    portfolio_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
+    portfolio_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(i).setFont(QFont('arial', 10))
 
 for i in range(1, len(portfolio_tickers)):
     # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
-    portfolio_dialog.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
-    portfolio_dialog.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
-    portfolio_dialog.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
 
     ticker_current = yf.Ticker(portfolio_tickers[i].text).info['regularMarketPrice']
     ticker_last_close = yf.Ticker(portfolio_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-    portfolio_dialog.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
-    portfolio_dialog.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
-    portfolio_dialog.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
-
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * int(amts[i].text))))
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)))))
+    total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)
+    percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
+    portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
+    
     
 
-portfolio_dialog.positions_view.resizeColumnsToContents()
+portfolio_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 progressBar.setValue(80)
 
 # watchlist table settings

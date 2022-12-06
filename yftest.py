@@ -3,7 +3,7 @@
 from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
                              QTableWidget, QTableWidgetItem, QTabWidget,
                              QSplashScreen, QPushButton, QDialog, QLineEdit,
-                             QComboBox, QCompleter)
+                             QComboBox, QButtonGroup, QRadioButton)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
 from PyQt6.QtCore import QRect, QCoreApplication, QStringListModel
 from PyQt6 import QtCore 
@@ -19,18 +19,54 @@ import autocomplete as ac
 from enum import Enum
 
 def searchTextChanged(txt):
+    """
+    Executed when text is typed into the search bar on the "Chart Stocks" tab.
+    The function takes the entered text and appends it to the search bar
+    """
     chart_dialog.search_bar_groupbox.searchBar.setText(txt.upper())
 
 
 def searchButtonClicked():
+    """
+    Shows graph for the selected ticker when the search button is pressed.
+    """
+    # gets the stock ticker from the search bar
     ticker = ''
     i = 0
     while chart_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
         ticker += chart_dialog.search_bar_groupbox.searchBar.text()[i]
         i += 1
-    showGraph(yf.download(ticker, start, end), ticker)
-    chart_dialog.search_bar_groupbox.search_button.setEnabled(False)
-    chart_dialog.search_bar_groupbox.searchBar.setText("")
+    
+    period = chart_dialog.settings_groupbox.data_period_combobox.currentText()
+    interval = chart_dialog.settings_groupbox.data_timeframe_combobox.currentText()
+
+    include_prepost = False
+    if(chart_dialog.settings_groupbox.prepost_radiobutton.isChecked()):
+        include_prepost = True
+
+    adjust_ohlc = False
+    if(chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.isChecked()):
+        adjust_ohlc = True
+    # shows the requested ticker's chart
+    split_dividend = False
+    if(chart_dialog.settings_groupbox.split_dividend_radiobutton.isChecked()):
+        split_dividend = True
+    
+    include_volume = False
+    if(chart_dialog.settings_groupbox.volume_radiobutton.isChecked()):
+        include_volume = True
+    
+    non_trading = False
+    if(chart_dialog.settings_groupbox.nontrading_radiobutton.isChecked()):
+        non_trading = True
+
+    showGraph(yf.download(tickers=ticker,
+                          period=period, 
+                          interval=interval,
+                          prepost=include_prepost,
+                          auto_adjust=adjust_ohlc,
+                          actions=split_dividend
+                          ),  ticker, include_volume, non_trading)
 
 
 def updateTickerIcon(ticker):
@@ -83,23 +119,26 @@ def updateTickerIcon(ticker):
     return w
 
 
-def showGraph(ticker, title):
+def showGraph(ticker, title, volume, non_trading):
     """Plots a ticker from yfinance in a separate matplotfinance window."""
     # retrieves user's chart style preferences from settings.xml
     up_color = getXMLData('settings.xml', 'upcolor')
     down_color = getXMLData('settings.xml', 'downcolor')
     base_style = getXMLData('settings.xml', 'basestyle')
+
+    # creates a chart style based on the user's settings
     mc = mpf.make_marketcolors(up=up_color[0].text.lower(), down=down_color[0].text.lower(),inherit=True)
     s  = mpf.make_mpf_style(base_mpf_style=base_style[0].text,marketcolors=mc)
-
     # plots chart
+
     mpf.plot(ticker['2022-01-01':], 
-             
+             show_nontrading = non_trading,
              type='candle', 
              style = s, 
              title = title, 
-             volume = True, 
-             tight_layout = True)
+             volume = volume, 
+             tight_layout = True
+             )
 
 
 def retranslateChartDialogUi(self):
@@ -149,22 +188,41 @@ def updateNav():
         # iterates through all the user's positions and adds (or subtracts) their impact on BP
         # from the running count
         for i in range(1, len(portfolio_tickers)):
-            stock = yf.Ticker(portfolio_tickers[i].text)
-            price = stock.info['regularMarketPrice']
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
 
+            # gets ticker's current price and last close
+            price = yf.Ticker(portfolio_tickers[i].text).info['regularMarketPrice']
             ticker_last_close = yf.Ticker(portfolio_tickers[i].text).history(period='5d', interval='1d')['Close'][3]
 
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(price - ticker_last_close) + " (" + str(round(((price - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(price * int(amts[i].text))))
+            # calculates the total return on the position since it was opened
             total_return = (price - float(purchase_prices[i - 1].text)) * int(amts[i].text)
             percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
+
+            # column 1 holds the stock's ticker
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
+
+            # column 2 holds the stock's performance icon
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(portfolio_tickers[i].text))
+
+            # column 3 holds the stock's current price
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(price)))
+
+            # column 4 holds the stock's return for the day
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(price - ticker_last_close) + " (" + str(round(((price - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+
+            # column 5 holds the user's cost basis for the stock
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
+            
+            # column 6 holds the # of shares the user has. Negative should indicate user being short
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
+
+            # column 7 holds the total market value of all the user's shares (or the total size of the liability if the user is short)
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(price * int(amts[i].text))))
+            
+            # column 8 holds the user's total return on the position since it was opened
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
             
+            # if user is long, add the position's value to the tabulation of market value held long
+            # if user is short, add the position's value to the tabulation of market value held short
             if int(amts[i].text) > 0:
                 total_long += float(price) * int(amts[i].text)
             elif int(amts[i].text) < 0:
@@ -238,7 +296,6 @@ widget = QTabWidget()
 widget.setWindowTitle("Ray's Stock Market Trading Simulator")
 
 splash = QSplashScreen(QPixmap('splash.png'))
-splash.setWindowFlag(QtCore.Qt.WindowType.WindowStaysOnTopHint)
 progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
 
@@ -490,6 +547,55 @@ chart_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 700, 40)
 chart_dialog.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: searchTextChanged(txt))
 chart_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
 
+chart_dialog.settings_groupbox = QGroupBox(chart_dialog)
+chart_dialog.settings_groupbox.setStyleSheet('background-color: white;')
+chart_dialog.settings_groupbox.setGeometry(10, 150, 850, 100)
+chart_dialog.settings_groupbox.setTitle("Chart Settings")
+
+chart_dialog.settings_groupbox.data_period_combobox = QComboBox(chart_dialog.settings_groupbox)
+periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
+timeframes = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"]
+
+chart_dialog.settings_groupbox.data_period_combobox.addItems(periods)
+chart_dialog.settings_groupbox.data_period_combobox.setGeometry(10, 50, 50, 30)
+
+
+chart_dialog.settings_groupbox.data_timeframe_combobox = QComboBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.data_timeframe_combobox.addItems(timeframes)
+chart_dialog.settings_groupbox.data_timeframe_combobox.setGeometry(70, 50, 50, 30)
+
+
+
+
+chart_dialog.settings_groupbox.prepost_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.prepost_radiobutton.setText("Include Pre/Post Market Data")
+chart_dialog.settings_groupbox.prepost_radiobutton.setGeometry(130, 50, 100, 30)
+chart_dialog.settings_groupbox.prepost_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.prepost_buttongroup.addButton(chart_dialog.settings_groupbox.prepost_radiobutton)
+
+chart_dialog.settings_groupbox.split_dividend_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.split_dividend_radiobutton.setText("Show Split and Dividend Actions")
+chart_dialog.settings_groupbox.split_dividend_radiobutton.setGeometry(240, 50, 100, 30)
+chart_dialog.settings_groupbox.split_dividend_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.split_dividend_buttongroup.addButton(chart_dialog.settings_groupbox.split_dividend_radiobutton)
+
+chart_dialog.settings_groupbox.adjust_ohlc_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.setText("Adjust OHLC")
+chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.setGeometry(350, 50, 100, 30)
+chart_dialog.settings_groupbox.adjust_ohlc_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.adjust_ohlc_buttongroup.addButton(chart_dialog.settings_groupbox.adjust_ohlc_radiobutton)
+
+chart_dialog.settings_groupbox.volume_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.volume_radiobutton.setText("Include Volume Bars")
+chart_dialog.settings_groupbox.volume_radiobutton.setGeometry(460, 50, 140, 30)
+chart_dialog.settings_groupbox.volume_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.volume_buttongroup.addButton(chart_dialog.settings_groupbox.volume_radiobutton)
+
+chart_dialog.settings_groupbox.nontrading_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.nontrading_radiobutton.setText("Include Non-Trading Days")
+chart_dialog.settings_groupbox.nontrading_radiobutton.setGeometry(610, 50, 160, 30)
+chart_dialog.settings_groupbox.nontrading_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.nontrading_buttongroup.addButton(chart_dialog.settings_groupbox.nontrading_radiobutton)
 
 model = QStringListModel()
 model.setStringList(all_tickers_list)
@@ -519,6 +625,8 @@ trade_dialog = QDialog()
 #####################
 
 stockinfo_dialog = QDialog()
+stockinfo_dialog.setStyleSheet('background-color: deepskyblue;')
+
 
 
 ###################

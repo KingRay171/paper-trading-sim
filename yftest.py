@@ -3,7 +3,8 @@
 from PyQt6.QtWidgets import (QGroupBox, QApplication, QLabel, QProgressBar,
                              QTableWidget, QTableWidgetItem, QTabWidget,
                              QSplashScreen, QPushButton, QDialog, QLineEdit,
-                             QComboBox, QButtonGroup, QRadioButton)
+                             QComboBox, QButtonGroup, QRadioButton, QCalendarWidget, 
+                             QCheckBox)
 from PyQt6.QtGui import QFontDatabase, QFont, QPixmap, QIcon
 from PyQt6.QtCore import QRect, QCoreApplication, QStringListModel
 from PyQt6 import QtCore 
@@ -17,6 +18,18 @@ import xml.etree.ElementTree as et
 import pandas as pd
 import autocomplete as ac
 from enum import Enum
+
+def daterange_radiobutton_clicked():
+    chart_dialog.settings_groupbox.start_date.setEnabled(True)
+    chart_dialog.settings_groupbox.end_date.setEnabled(True)
+    chart_dialog.settings_groupbox.data_period_combobox.setEnabled(False)
+
+
+def period_radiobutton_clicked():
+    chart_dialog.settings_groupbox.start_date.setEnabled(False)
+    chart_dialog.settings_groupbox.end_date.setEnabled(False)
+    chart_dialog.settings_groupbox.data_period_combobox.setEnabled(True)
+
 
 def searchTextChanged(txt):
     """
@@ -41,32 +54,46 @@ def searchButtonClicked():
     interval = chart_dialog.settings_groupbox.data_timeframe_combobox.currentText()
 
     include_prepost = False
-    if(chart_dialog.settings_groupbox.prepost_radiobutton.isChecked()):
+    if(chart_dialog.settings_groupbox.prepost_checkbox.isChecked()):
         include_prepost = True
 
     adjust_ohlc = False
-    if(chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.isChecked()):
+    if(chart_dialog.settings_groupbox.adjust_ohlc_checkbox.isChecked()):
         adjust_ohlc = True
     # shows the requested ticker's chart
     split_dividend = False
-    if(chart_dialog.settings_groupbox.split_dividend_radiobutton.isChecked()):
+    if(chart_dialog.settings_groupbox.split_dividend_checkbox.isChecked()):
         split_dividend = True
     
     include_volume = False
-    if(chart_dialog.settings_groupbox.volume_radiobutton.isChecked()):
+    if(chart_dialog.settings_groupbox.volume_checkbox.isChecked()):
         include_volume = True
     
     non_trading = False
-    if(chart_dialog.settings_groupbox.nontrading_radiobutton.isChecked()):
+    if(chart_dialog.settings_groupbox.nontrading_checkbox.isChecked()):
         non_trading = True
-
-    showGraph(yf.download(tickers=ticker,
-                          period=period, 
-                          interval=interval,
-                          prepost=include_prepost,
-                          auto_adjust=adjust_ohlc,
-                          actions=split_dividend
-                          ),  ticker, include_volume, non_trading)
+    
+    start_date = None
+    end_date = None
+    if(chart_dialog.settings_groupbox.daterange_radiobutton.isChecked()):
+        start_date = chart_dialog.settings_groupbox.start_date.selectedDate().toString("yyyy-MM-dd")
+        end_date = chart_dialog.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
+        showGraph(yf.download(tickers=ticker,
+                              start=start_date,
+                              end=end_date, 
+                              interval=interval,
+                              prepost=include_prepost,
+                              auto_adjust=adjust_ohlc,
+                              actions=split_dividend
+                              ), ticker, include_volume, non_trading)
+    else:
+        showGraph(yf.download(tickers=ticker,
+                              period=period,
+                              interval=interval,
+                              prepost=include_prepost,
+                              auto_adjust=adjust_ohlc,
+                              actions=split_dividend
+                              ), ticker, include_volume, non_trading)
 
 
 def updateTickerIcon(ticker):
@@ -131,7 +158,7 @@ def showGraph(ticker, title, volume, non_trading):
     s  = mpf.make_mpf_style(base_mpf_style=base_style[0].text,marketcolors=mc)
     # plots chart
 
-    mpf.plot(ticker['2022-01-01':], 
+    mpf.plot(ticker, 
              show_nontrading = non_trading,
              type='candle', 
              style = s, 
@@ -293,7 +320,7 @@ def close_event(event):
 
 app = QApplication(sys.argv)
 widget = QTabWidget()
-widget.setWindowTitle("Ray's Stock Market Trading Simulator")
+widget.setWindowTitle("Ray's Paper Trading Game")
 
 splash = QSplashScreen(QPixmap('splash.png'))
 progressBar = QProgressBar(splash)
@@ -540,62 +567,76 @@ chart_dialog.broad_market_groupbox.vixButton.clicked.connect(lambda: showGraph(v
 chart_dialog.search_bar_groupbox = QGroupBox(chart_dialog)
 chart_dialog.search_bar_groupbox.setStyleSheet('background-color: white;')
 chart_dialog.search_bar_groupbox.setTitle("Find a Stock")
-chart_dialog.search_bar_groupbox.setGeometry(10, 70, 850, 70)
+chart_dialog.search_bar_groupbox.setGeometry(10, 70, 960, 70)
 
 chart_dialog.search_bar_groupbox.searchBar = QLineEdit(chart_dialog.search_bar_groupbox)
-chart_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 700, 40)
+chart_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
 chart_dialog.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: searchTextChanged(txt))
 chart_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
 
+chart_dialog.search_bar_groupbox.search_button = QPushButton(chart_dialog.search_bar_groupbox)
+chart_dialog.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
+chart_dialog.search_bar_groupbox.search_button.setText("Chart")
+chart_dialog.search_bar_groupbox.search_button.setEnabled(False)
+chart_dialog.search_bar_groupbox.search_button.clicked.connect(searchButtonClicked)
+
 chart_dialog.settings_groupbox = QGroupBox(chart_dialog)
 chart_dialog.settings_groupbox.setStyleSheet('background-color: white;')
-chart_dialog.settings_groupbox.setGeometry(10, 150, 850, 100)
+chart_dialog.settings_groupbox.setGeometry(10, 150, 1280, 600)
 chart_dialog.settings_groupbox.setTitle("Chart Settings")
 
-chart_dialog.settings_groupbox.data_period_combobox = QComboBox(chart_dialog.settings_groupbox)
 periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
 timeframes = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"]
 
+chart_dialog.settings_groupbox.period_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.period_radiobutton.setText("Chart by Period")
+chart_dialog.settings_groupbox.period_radiobutton.setGeometry(10, 50, 100, 30)
+chart_dialog.settings_groupbox.period_radiobutton.setChecked(True)
+chart_dialog.settings_groupbox.period_radiobutton.clicked.connect(period_radiobutton_clicked)
+
+chart_dialog.settings_groupbox.daterange_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.daterange_radiobutton.setText("Chart by Date Range")
+chart_dialog.settings_groupbox.daterange_radiobutton.setGeometry(10, 100, 170, 30)
+chart_dialog.settings_groupbox.daterange_radiobutton.clicked.connect(daterange_radiobutton_clicked)
+
+chart_dialog.settings_groupbox.data_period_combobox = QComboBox(chart_dialog.settings_groupbox)
 chart_dialog.settings_groupbox.data_period_combobox.addItems(periods)
-chart_dialog.settings_groupbox.data_period_combobox.setGeometry(10, 50, 50, 30)
+chart_dialog.settings_groupbox.data_period_combobox.setGeometry(120, 60, 50, 20)
 
 
 chart_dialog.settings_groupbox.data_timeframe_combobox = QComboBox(chart_dialog.settings_groupbox)
 chart_dialog.settings_groupbox.data_timeframe_combobox.addItems(timeframes)
-chart_dialog.settings_groupbox.data_timeframe_combobox.setGeometry(70, 50, 50, 30)
+chart_dialog.settings_groupbox.data_timeframe_combobox.setGeometry(850, 50, 50, 30)
 
+chart_dialog.settings_groupbox.prepost_checkbox = QCheckBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.prepost_checkbox.setText("Include Pre/Post Market Data")
+chart_dialog.settings_groupbox.prepost_checkbox.setGeometry(10, 20, 180, 30)
 
+chart_dialog.settings_groupbox.split_dividend_checkbox = QCheckBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.split_dividend_checkbox.setText("Show Split and Dividend Actions")
+chart_dialog.settings_groupbox.split_dividend_checkbox.setGeometry(200, 20, 160, 30)
 
+chart_dialog.settings_groupbox.adjust_ohlc_checkbox = QCheckBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.adjust_ohlc_checkbox.setText("Adjust OHLC")
+chart_dialog.settings_groupbox.adjust_ohlc_checkbox.setGeometry(370, 20, 100, 30)
 
-chart_dialog.settings_groupbox.prepost_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.prepost_radiobutton.setText("Include Pre/Post Market Data")
-chart_dialog.settings_groupbox.prepost_radiobutton.setGeometry(130, 50, 100, 30)
-chart_dialog.settings_groupbox.prepost_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.prepost_buttongroup.addButton(chart_dialog.settings_groupbox.prepost_radiobutton)
+chart_dialog.settings_groupbox.volume_checkbox = QCheckBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.volume_checkbox.setText("Include Volume Bars")
+chart_dialog.settings_groupbox.volume_checkbox.setGeometry(460, 20, 140, 30)
 
-chart_dialog.settings_groupbox.split_dividend_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.split_dividend_radiobutton.setText("Show Split and Dividend Actions")
-chart_dialog.settings_groupbox.split_dividend_radiobutton.setGeometry(240, 50, 100, 30)
-chart_dialog.settings_groupbox.split_dividend_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.split_dividend_buttongroup.addButton(chart_dialog.settings_groupbox.split_dividend_radiobutton)
+chart_dialog.settings_groupbox.nontrading_checkbox = QCheckBox(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.nontrading_checkbox.setText("Include Non-Trading Days")
+chart_dialog.settings_groupbox.nontrading_checkbox.setGeometry(610, 20, 160, 30)
 
-chart_dialog.settings_groupbox.adjust_ohlc_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.setText("Adjust OHLC")
-chart_dialog.settings_groupbox.adjust_ohlc_radiobutton.setGeometry(350, 50, 100, 30)
-chart_dialog.settings_groupbox.adjust_ohlc_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.adjust_ohlc_buttongroup.addButton(chart_dialog.settings_groupbox.adjust_ohlc_radiobutton)
+chart_dialog.settings_groupbox.start_date = QCalendarWidget(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.start_date.setGeometry(10, 130, 600, 370)
+chart_dialog.settings_groupbox.start_date.setStyleSheet('background-color: deepskyblue; border: 3px solid black;')
+chart_dialog.settings_groupbox.start_date.setEnabled(False)
 
-chart_dialog.settings_groupbox.volume_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.volume_radiobutton.setText("Include Volume Bars")
-chart_dialog.settings_groupbox.volume_radiobutton.setGeometry(460, 50, 140, 30)
-chart_dialog.settings_groupbox.volume_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.volume_buttongroup.addButton(chart_dialog.settings_groupbox.volume_radiobutton)
-
-chart_dialog.settings_groupbox.nontrading_radiobutton = QRadioButton(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.nontrading_radiobutton.setText("Include Non-Trading Days")
-chart_dialog.settings_groupbox.nontrading_radiobutton.setGeometry(610, 50, 160, 30)
-chart_dialog.settings_groupbox.nontrading_buttongroup = QButtonGroup(chart_dialog.settings_groupbox)
-chart_dialog.settings_groupbox.nontrading_buttongroup.addButton(chart_dialog.settings_groupbox.nontrading_radiobutton)
+chart_dialog.settings_groupbox.end_date = QCalendarWidget(chart_dialog.settings_groupbox)
+chart_dialog.settings_groupbox.end_date.setGeometry(620, 130, 600, 370)
+chart_dialog.settings_groupbox.end_date.setStyleSheet('background-color: deepskyblue; border: 3px solid black;')
+chart_dialog.settings_groupbox.end_date.setEnabled(False)
 
 model = QStringListModel()
 model.setStringList(all_tickers_list)
@@ -606,11 +647,7 @@ chart_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
 completer.activated.connect(lambda: chart_dialog.search_bar_groupbox.search_button.setEnabled(True))
 completer.setMaxVisibleItems(5)
 
-chart_dialog.search_bar_groupbox.search_button = QPushButton(chart_dialog.search_bar_groupbox)
-chart_dialog.search_bar_groupbox.search_button.setGeometry(710, 20, 80, 40)
-chart_dialog.search_bar_groupbox.search_button.setText("Chart")
-chart_dialog.search_bar_groupbox.search_button.setEnabled(False)
-chart_dialog.search_bar_groupbox.search_button.clicked.connect(searchButtonClicked)
+
 retranslateChartDialogUi(chart_dialog)
 
 ################
@@ -679,14 +716,23 @@ settings_dialog.apply_button.setText("Apply")
 settings_dialog.apply_button.setGeometry(450, 500, 100, 50)
 settings_dialog.apply_button.clicked.connect(lambda: applySettingsChanges())
 
+
+#################
+# wallet dialog #
+#################
+
+wallet_dialog = QDialog()
+wallet_dialog.setStyleSheet('background-color: goldenrod;')
+
 # adding tabs to main window
 widget.addTab(portfolio_dialog, "Your Portfolio")
 widget.addTab(chart_dialog, "Chart Stocks")
 widget.addTab(trade_dialog, "Trade Stocks")
 widget.addTab(stockinfo_dialog, "Get Stock Info")
+widget.addTab(wallet_dialog, "Your Crypto Wallet")
 widget.addTab(settings_dialog, "Settings")
 
-widget.resize(1000, 600)
+widget.resize(1300, 700)
 widget.show()
 
 splash.close()

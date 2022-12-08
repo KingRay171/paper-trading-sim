@@ -1,4 +1,4 @@
-from PyQt6 import QtGui, QtCore, QtWidgets
+from PySide6 import QtGui, QtCore, QtWidgets
 
 class CustomQCompleter(QtWidgets.QCompleter):
     

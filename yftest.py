@@ -1,7 +1,5 @@
 # Started by Ray Ikome on 11/16/22
 
-
-
 from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries
 from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
                                 QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox
@@ -22,16 +20,18 @@ from enum import Enum
 
 def spy_button_clicked():
     chart_dialog.search_bar_groupbox.searchBar.setText("SPY ")
-    
     searchButtonClicked()
+
 
 def qqq_button_clicked():
     chart_dialog.search_bar_groupbox.searchBar.setText("QQQ ")
     searchButtonClicked()
 
+
 def dia_button_clicked():
     chart_dialog.search_bar_groupbox.searchBar.setText("DIA ")
     searchButtonClicked()
+
 
 def vix_button_clicked():
     chart_dialog.search_bar_groupbox.searchBar.setText("^VIX ")
@@ -46,7 +46,7 @@ def update_portfolio_tickers():
         ticker_last_close = ticker.history(period='5d', interval='1d')['Close'][3]
         total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)
         percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
-        
+
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(ticker))
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
@@ -250,43 +250,30 @@ def updateNav():
     """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
     (1.5 * value of all short positions)."""
     while True:
-
+        update_portfolio_tickers()
         # sets buying power to user's cash
         newVal = float(amts[0].text)
-        buying_power = cash
-        total_long = 0
-        total_short = 0
 
-        update_portfolio_tickers()
-
-        # iterates through all the user's positions and adds (or subtracts) their impact on BP
-        # from the running count
         for i in range(1, len(portfolio_tickers)):
-            price = yf.Ticker(portfolio_tickers[i].text).info['regularMarketPrice']
-            # if user is long, add the position's value to the tabulation of market value held long
-            # if user is short, add the position's value to the tabulation of market value held short
+            price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
             if int(amts[i].text) > 0:
-                total_long += float(price) * int(amts[i].text)
+                newVal += float(price) * int(amts[i].text)
             elif int(amts[i].text) < 0:
-                total_short += float(price) * int(amts[i].text)
-            newVal += float(price) * int(amts[i].text)
+                newVal -= float(price) * int(amts[i].text)
 
-        # calculates buying power and updates GUI
-        buying_power += .5 * total_long
-        buying_power -= 1.5 * total_short
+        buying_power = calculateBuyingPower() 
         portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
         portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
         portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
         
 
-def calculateBuyingPower():
+def calculateBuyingPower() -> float:
     buying_power = cash
     total_long = 0
     total_short = 0
 
     for i in range (1, len(amts)):
-        stock = yf.Ticker(portfolio_tickers[i].text)
-        price = stock.info['regularMarketPrice']
+        price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         if int(amts[i].text) > 0:
             total_long += float(price) * int(amts[i].text)
         elif int(amts[i].text) < 0:
@@ -359,6 +346,7 @@ progressBar.setValue(30)
 #####################################################
 
 portfolio_tickers = getXMLData('portfolio.xml', 'name')
+portfolio_asset_types = getXMLData('portfolio.xml', 'type')
 watchlist_tickers = getXMLData('watchlist.xml', 'name')
 up_color = getXMLData('settings.xml', 'upcolor')
 
@@ -400,53 +388,9 @@ portfolio_dialog.resize(1000, 600)
 portfolio_dialog.setAutoFillBackground(True)
 portfolio_dialog.setStyleSheet('background-color: deepskyblue;')
 
-# user's nav settings
-portfolio_dialog.currentNAV = QGroupBox(portfolio_dialog)
-portfolio_dialog.currentNAV.setTitle("Your NAV")
-portfolio_dialog.currentNAV.setGeometry(10, 10, 250, 200)
-portfolio_dialog.currentNAV.setStyleSheet('background-color: white;')
-
-# net liquidation value labels
-portfolio_dialog.currentNAV.netLiq = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.netLiq.setText("Net Liq: ")
-portfolio_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
-portfolio_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
-portfolio_dialog.currentNAV.liq = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(nav))))
-portfolio_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
-portfolio_dialog.currentNAV.liq.setFont(QFont('genius', 20))
-
-# cash value labels
-portfolio_dialog.currentNAV.cashLabel = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cashLabel.setText("Cash: ")
-portfolio_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
-portfolio_dialog.currentNAV.cash = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cash.setText('${:0,.2f}'.format(cash))
-portfolio_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
-
-progressBar.setValue(60)
-
-# buying power labels
-portfolio_dialog.currentNAV.buyingPowerLabel = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
-portfolio_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
-portfolio_dialog.currentNAV.buyingPower = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(calculateBuyingPower()))
-portfolio_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
-
-# return since inception labels
-portfolio_dialog.currentNAV.returnSinceInceptionLabel = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.returnSinceInceptionLabel.setText("Return Since Inception: ")
-portfolio_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(10, 130, 120, 20)
-portfolio_dialog.currentNAV.returnSinceInception = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
-portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((nav / 10000 - 1) * 100) + "%")
-portfolio_dialog.currentNAV.returnSinceInception.setGeometry(10, 160, 120, 30)
-progressBar.setValue(70)
-
 # positions table settings
 portfolio_dialog.positions_view_groupbox = QGroupBox(portfolio_dialog)
-portfolio_dialog.positions_view_groupbox.setGeometry(10, 300, 950, 250)
+portfolio_dialog.positions_view_groupbox.setGeometry(10, 300, 900, 250)
 portfolio_dialog.positions_view_groupbox.setTitle("Your Portfolio")
 portfolio_dialog.positions_view_groupbox.setStyleSheet('background-color: white;')
 
@@ -455,7 +399,7 @@ portfolio_dialog.positions_view_groupbox.positions_view.setEditTriggers(QAbstrac
 portfolio_dialog.positions_view_groupbox.positions_view.setFont(QFont('arial', 10))
 portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(len(amts) - 1)
 portfolio_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
-portfolio_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 900, 200)
+portfolio_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 850, 200)
 portfolio_dialog.positions_view_groupbox.positions_view.setStyleSheet('background-color: white;')
 portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
 portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
@@ -477,8 +421,81 @@ for i in range (portfolio_dialog.positions_view_groupbox.positions_view.rowCount
 update_portfolio_tickers()
     
 portfolio_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
-progressBar.setValue(80)
+progressBar.setValue(60)
 
+# user's nav settings
+portfolio_dialog.currentNAV = QGroupBox(portfolio_dialog)
+portfolio_dialog.currentNAV.setTitle("Your NAV")
+portfolio_dialog.currentNAV.setGeometry(10, 10, 250, 250)
+portfolio_dialog.currentNAV.setStyleSheet('background-color: white;')
+
+# net liquidation value labels
+portfolio_dialog.currentNAV.netLiq = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.netLiq.setText("Net Liq: ")
+portfolio_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
+portfolio_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
+portfolio_dialog.currentNAV.liq = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(nav))))
+portfolio_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
+portfolio_dialog.currentNAV.liq.setFont(QFont('genius', 20))
+
+# cash value labels
+portfolio_dialog.currentNAV.cashLabel = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.cashLabel.setText("Cash: ")
+portfolio_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
+portfolio_dialog.currentNAV.cash = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.cash.setText('${:0,.2f}'.format(cash))
+portfolio_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
+
+progressBar.setValue(70)
+
+# buying power labels
+portfolio_dialog.currentNAV.buyingPowerLabel = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
+portfolio_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
+portfolio_dialog.currentNAV.buyingPower = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(calculateBuyingPower()))
+portfolio_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
+
+# assets labels
+portfolio_dialog.currentNAV.assetsLabel = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
+portfolio_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
+portfolio_dialog.currentNAV.assets = QLabel(portfolio_dialog.currentNAV)
+total_long = 0
+for i in range (1, len(amts)):
+    price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    if int(amts[i].text) > 0:
+        total_long += float(price) * int(amts[i].text)
+
+portfolio_dialog.currentNAV.assets.setText('${:0,.2f}'.format(total_long))
+portfolio_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
+
+# liabilities labels
+portfolio_dialog.currentNAV.liabilitiesLabel = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
+portfolio_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
+portfolio_dialog.currentNAV.liabilities = QLabel(portfolio_dialog.currentNAV)
+total_short = 0
+for i in range (1, len(amts)):
+    price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    if int(amts[i].text) < 0:
+        total_short -= float(price) * int(amts[i].text)
+
+portfolio_dialog.currentNAV.liabilities.setText('${:0,.2f}'.format(total_short))
+portfolio_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
+
+
+# return since inception labels
+portfolio_dialog.currentNAV.returnSinceInceptionLabel = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.returnSinceInceptionLabel.setText("Return Since Inception: ")
+portfolio_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(10, 170, 120, 20)
+portfolio_dialog.currentNAV.returnSinceInception = QLabel(portfolio_dialog.currentNAV)
+portfolio_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
+portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((nav / 10000 - 1) * 100) + "%")
+portfolio_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
+
+progressBar.setValue(80)
 # watchlist table settings
 portfolio_dialog.watchlist_groupbox = QGroupBox(portfolio_dialog)
 portfolio_dialog.watchlist_groupbox.setTitle("Your Watchlist")
@@ -507,21 +524,54 @@ update_watchlist_tickers()
 portfolio_dialog.watchlist_groupbox.watchlist_view.resizeColumnsToContents()
 
 # asset class pie chart
+cash_amount = 0
+etf_amount = 0
+stock_amount = 0
+option_amount = 0
+futures_amount = 0
+
+for i in range(len(amts)):
+    if(portfolio_asset_types[i].text == "ETF"):
+        etf_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    elif(portfolio_asset_types[i].text == "Liquidity"):
+        cash_amount += float(amts[i].text)
+    elif(portfolio_asset_types[i].text == "Stock"):
+        stock_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    elif(portfolio_asset_types[i].text == "Futures"):
+        futures_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    elif(portfolio_asset_types[i].text == "Option"):
+        option_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        
 asset_class_chart = QPieSeries()
 asset_class_chart.append("ETFs", 1)
 asset_class_chart.append("Stocks", 2)
 asset_class_chart.append("Options", 3)
 asset_class_chart.append("Futures", 4)
+asset_class_chart.append("Cash", 5)
 
 chart = QChart()
 chart.addSeries(asset_class_chart)
 chart.setTitle("Positions by Asset Class")
 chart.setVisible(True)
-# chart.setAnimationOptions()
+
+etf_slice = asset_class_chart.slices()[0]
+etf_slice.setValue(etf_amount / nav * 100)
+
+stock_slice = asset_class_chart.slices()[1]
+stock_slice.setValue(stock_amount / nav * 100)
+
+options_slice = asset_class_chart.slices()[2]
+options_slice.setValue(stock_amount / nav * 100)
+
+futures_slice = asset_class_chart.slices()[3]
+futures_slice.setValue(futures_amount / nav * 100)
+
+cash_slice = asset_class_chart.slices()[4]
+cash_slice.setValue(cash_amount / nav * 100)
 
 portfolio_dialog.chart_view = QChartView(chart)
 portfolio_dialog.chart_view.setParent(portfolio_dialog)
-portfolio_dialog.chart_view.setGeometry(800, 10, 300, 300)
+portfolio_dialog.chart_view.setGeometry(800, 5, 350, 250)
 portfolio_dialog.chart_view.setVisible(True)
 
 retranslatePortfolioDialogUi(portfolio_dialog)
@@ -772,5 +822,4 @@ portfolio_background_thread.start()
 
 watchlist_background_thread = Thread(target=updateWatchlist, daemon=True)
 watchlist_background_thread.start()
-
 sys.exit(app.exec())

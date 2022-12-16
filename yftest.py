@@ -3,7 +3,7 @@
 from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries
 from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
                                 QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox
-                                , QApplication, QProgressBar)
+                                , QApplication, QProgressBar, QVBoxLayout)
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon
 from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel
 from PyQt6 import QtCore 
@@ -312,6 +312,139 @@ def applySettingsChanges():
     tree.write('settings.xml')
 
 
+def stockinfo_searchbar_click(dialog: QDialog):
+    ticker = ''
+    i = 0
+    while stockinfo_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
+        ticker += stockinfo_dialog.search_bar_groupbox.searchBar.text()[i]
+        i += 1
+    
+    ticker_info = yf.Ticker(ticker).info
+    if(ticker_info['quoteType'] == 'ETF'):
+        setup_etf_info(ticker_info)
+
+
+def get_etf_weights(ticker_info: dict) -> list:
+    weights_list = []
+    weights_list.append(["Real Estate", ticker_info['sectorWeightings'][0]['realestate']])
+    weights_list.append(["Consumer Cyclicals", ticker_info['sectorWeightings'][1]['consumer_cyclical']])
+    weights_list.append(["Basic Materials", ticker_info['sectorWeightings'][2]['basic_materials']])
+    weights_list.append(["Consumer Defensives", ticker_info['sectorWeightings'][3]['consumer_defensive']])
+    weights_list.append(["Technology", ticker_info['sectorWeightings'][4]['technology']])
+    weights_list.append(["Communication Services", ticker_info['sectorWeightings'][5]['communication_services']])
+    weights_list.append(["Financial Services", ticker_info['sectorWeightings'][6]['financial_services']])
+    weights_list.append(["Utilities", ticker_info['sectorWeightings'][7]['utilities']])
+    weights_list.append(["Industrials", ticker_info['sectorWeightings'][8]['industrials']])
+    weights_list.append(["Energy", ticker_info['sectorWeightings'][9]['energy']])
+    weights_list.append( ["Healthcare", ticker_info['sectorWeightings'][10]['healthcare']])
+    return weights_list
+
+
+def update_piechart():
+    while True:
+
+
+
+def setup_etf_info(ticker_info: dict):
+    stockinfo_dialog.about_groupbox.setVisible(True)
+    stockinfo_dialog.asset_info_groupbox.setVisible(True)
+    stockinfo_dialog.weights_holdings_groupbox.setVisible(True)
+
+    etf_weights = get_etf_weights(ticker_info)
+
+
+    full_name_label = QLabel(f"Full Name: {ticker_info['longName']}", stockinfo_dialog.about_groupbox)
+    
+    category_label = QLabel(f"Category: {ticker_info['category']}", stockinfo_dialog.about_groupbox)
+
+    exchange_label = QLabel(f"Exchange: {ticker_info['exchange']}", stockinfo_dialog.about_groupbox)
+    
+    market_label = QLabel(f"Market: {ticker_info['market']}", stockinfo_dialog.about_groupbox)
+
+    total_assets_label = QLabel(f"Total Assets: {ticker_info['totalAssets']}")
+
+    description_label = QLabel(f"Description: " + ticker_info['longBusinessSummary'], stockinfo_dialog.about_groupbox)
+    description_label.adjustSize()
+    description_label.setWordWrap(True)
+
+    date_inception = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ticker_info['fundInceptionDate']))
+    inception_label = QLabel(f"Date of Inception: " + date_inception, stockinfo_dialog.about_groupbox)
+
+    weights_piechart = QPieSeries()
+    
+    for i in range(len(etf_weights)):
+        weights_piechart.append(etf_weights[i][0], i + 1)
+        weights_piechart.slices()[i].setValue(etf_weights[i][1] * 100)
+        weights_piechart.slices()[i].setLabelVisible(True)
+
+    weights_chart = QChart()
+    weights_chart.addSeries(weights_piechart)
+    weights_chart.setTitle(f"{ticker_info['symbol']} Holdings by Sector")
+    weights_chart.setVisible(True)
+
+    current_price_label = QLabel(f"Current Price: {ticker_info['regularMarketPrice']}", stockinfo_dialog.asset_info_groupbox)
+    open_price_label = QLabel(f"\tOpen: {ticker_info['open']}", stockinfo_dialog.asset_info_groupbox)
+    high_price_label = QLabel(f"\tHigh: {ticker_info['dayHigh']}", stockinfo_dialog.asset_info_groupbox)
+    low_price_label = QLabel(f"\tLow: {ticker_info['dayLow']}", stockinfo_dialog.asset_info_groupbox)
+    close_price_label = QLabel(f"\tLast Close: {ticker_info['previousClose']}", stockinfo_dialog.asset_info_groupbox)
+    nav_price_label = QLabel(f"NAV Price: {ticker_info['navPrice']}", stockinfo_dialog.asset_info_groupbox)
+    
+    bid_label = QLabel(f"Bid: {ticker_info['bid']} ({ticker_info['bidSize']})", stockinfo_dialog.asset_info_groupbox)
+    ask_label = QLabel(f"Ask: {ticker_info['ask']} ({ticker_info['askSize']})", stockinfo_dialog.asset_info_groupbox)
+
+    volume_label = QLabel(f"Volume: {ticker_info['volume']}", stockinfo_dialog.asset_info_groupbox)
+    avg_volume_label = QLabel(f"Average Volume (10d): {ticker_info['averageVolume10days']}", stockinfo_dialog.asset_info_groupbox)
+    long_avg_volume_label = QLabel(f"Average Volume (1y): {ticker_info['averageVolume']} ", stockinfo_dialog.asset_info_groupbox)
+
+
+    year_high_label = QLabel(f"52 Week High: {ticker_info['fiftyTwoWeekHigh']}", stockinfo_dialog.asset_info_groupbox)
+    year_low_label = QLabel(f"52 Week Low: {ticker_info['fiftyTwoWeekLow']}", stockinfo_dialog.asset_info_groupbox)
+
+    averages_label = QLabel("Price Averages: ", stockinfo_dialog.asset_info_groupbox)
+    fifty_avg_label = QLabel(f"\t50d MA: {ticker_info['fiftyDayAverage']}", stockinfo_dialog.asset_info_groupbox)
+    twohundred_avg_label = QLabel(f"\t200d MA: {ticker_info['twoHundredDayAverage']}", stockinfo_dialog.asset_info_groupbox)
+
+    threeyear_return_label = QLabel(f"Three-Year CAGR: {ticker_info['threeYearAverageReturn'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
+    fiveyear_return_label = QLabel(f"Five-Year CAGR: {ticker_info['fiveYearAverageReturn'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
+    dividend_label = QLabel(f"Trailing Annual Dividend Yield: {ticker_info['trailingAnnualDividendYield'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
+    dividend_rate_label = QLabel(f"Trailing Annual Dividend Rate: ${ticker_info['trailingAnnualDividendRate']}", stockinfo_dialog.asset_info_groupbox)
+    current_div_label = QLabel(f"Current Dividend Yield: {ticker_info['yield']}", stockinfo_dialog.asset_info_groupbox)
+
+    beta_label = QLabel(f"Beta (Relative to SPY): {ticker_info['beta']}", stockinfo_dialog.asset_info_groupbox)
+    
+    stockinfo_dialog.about_groupbox.layout().addWidget(full_name_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(category_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(exchange_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(market_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(total_assets_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(inception_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(description_label)
+    stockinfo_dialog.about_groupbox.layout().addWidget(QChartView(weights_chart))
+
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(current_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(open_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(high_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(low_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(close_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(nav_price_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(bid_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(ask_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(volume_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(avg_volume_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(long_avg_volume_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(year_high_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(year_low_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(averages_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(fifty_avg_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(twohundred_avg_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(threeyear_return_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(fiveyear_return_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(dividend_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(dividend_rate_label)
+    stockinfo_dialog.asset_info_groupbox.layout().addWidget(current_div_label)
+    
+    
+
 def close_event(event):
     """Function that is called when the user exits the game. WIP"""
     print("closed")
@@ -327,9 +460,8 @@ progressBar.setGeometry(420, 500, 400, 50)
 
 splash.show()
 
-start = "2022-01-01"
-end = "2022-11-27"
-
+print(yf.Ticker("SPY").info)
+print(yf.download("SPY", ))
 
 progressBar.setValue(10)
 
@@ -554,6 +686,7 @@ chart.addSeries(asset_class_chart)
 chart.setTitle("Positions by Asset Class")
 chart.setVisible(True)
 
+
 etf_slice = asset_class_chart.slices()[0]
 etf_slice.setValue(etf_amount / nav * 100)
 
@@ -731,6 +864,35 @@ stockinfo_dialog.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: s
 stockinfo_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
 stockinfo_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
 
+stockinfo_dialog.search_bar_groupbox.search_button = QPushButton(stockinfo_dialog.search_bar_groupbox)
+stockinfo_dialog.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
+stockinfo_dialog.search_bar_groupbox.search_button.setText("Show Info")
+stockinfo_dialog.search_bar_groupbox.search_button.clicked.connect(lambda: stockinfo_searchbar_click(stockinfo_dialog))
+
+stockinfo_dialog.asset_info_groupbox = QGroupBox(stockinfo_dialog)
+stockinfo_dialog.asset_info_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog.asset_info_groupbox.setTitle("Asset Profile")
+stockinfo_dialog.asset_info_groupbox.setGeometry(10, 90, 400, 550)
+stockinfo_dialog.asset_info_groupbox.setVisible(False)
+stockinfo_dialog.asset_info_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog.about_groupbox = QGroupBox(stockinfo_dialog)
+stockinfo_dialog.about_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog.about_groupbox.setTitle("About the Asset")
+stockinfo_dialog.about_groupbox.setGeometry(420, 90, 400, 550)
+stockinfo_dialog.about_groupbox.setVisible(False)
+stockinfo_dialog.about_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog.weights_holdings_groupbox = QGroupBox(stockinfo_dialog)
+stockinfo_dialog.weights_holdings_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog.weights_holdings_groupbox.setTitle("ETF Weights and Holdings")
+stockinfo_dialog.weights_holdings_groupbox.setGeometry(830, 90, 400, 550)
+stockinfo_dialog.weights_holdings_groupbox.setVisible(False)
+stockinfo_dialog.weights_holdings_groupbox.setLayout(QVBoxLayout())
+
+
+
+
 
 ###################
 # settings dialog #
@@ -789,7 +951,7 @@ settings_dialog.apply_button.clicked.connect(lambda: applySettingsChanges())
 #################
 
 wallet_dialog = QDialog()
-wallet_dialog.setStyleSheet('background-color: goldenrod;')
+wallet_dialog.setStyleSheet('background-color: goldenrod')
 
 # user's crypto wallet NAV 
 wallet_dialog.currentNAV = QGroupBox(wallet_dialog)

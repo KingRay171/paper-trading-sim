@@ -24,11 +24,11 @@ class GRU(nn.Module):
 
 class ModelAccessor():
     def __init__(self):
-        scaler = MinMaxScaler(feature_range=(-1, 1))
-        input_dim = 1
-        hidden_dim = 32
-        num_layers = 2
-        output_dim = 1
+        self.scaler = MinMaxScaler(feature_range=(-1, 1))
+        self.input_dim = 1
+        self.hidden_dim = 32
+        self.num_layers = 2
+        self.output_dim = 1
     
     def runPredictions(filepath, length, lookback):
         

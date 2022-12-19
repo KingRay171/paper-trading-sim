@@ -42,11 +42,47 @@ def thread_func():
     while True:
         update_portfolio_tickers()
         update_watchlist_tickers()
+        
+
+def nav_piechart_update():
+    while True:
         update_nav()
         update_piechart()
 
+def update_piechart():
 
-def update_piechart
+    cash_amount = 0
+    etf_amount = 0
+    stock_amount = 0
+    option_amount = 0
+    futures_amount = 0
+
+    for i in range(len(amts)):
+        if(portfolio_asset_types[i].text == "ETF"):
+            etf_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        elif(portfolio_asset_types[i].text == "Liquidity"):
+            cash_amount += float(amts[i].text)
+        elif(portfolio_asset_types[i].text == "Stock"):
+            stock_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        elif(portfolio_asset_types[i].text == "Futures"):
+            futures_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        elif(portfolio_asset_types[i].text == "Option"):
+            option_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+
+    etf_slice = asset_class_chart.slices()[0]
+    etf_slice.setValue(etf_amount / nav * 100)
+
+    stock_slice = asset_class_chart.slices()[1]
+    stock_slice.setValue(stock_amount / nav * 100)
+
+    options_slice = asset_class_chart.slices()[2]
+    options_slice.setValue(stock_amount / nav * 100)
+
+    futures_slice = asset_class_chart.slices()[3]
+    futures_slice.setValue(futures_amount / nav * 100)
+
+    cash_slice = asset_class_chart.slices()[4]
+    cash_slice.setValue(cash_amount / nav * 100)
 
 
 def update_portfolio_tickers():
@@ -261,22 +297,21 @@ def updateWatchlist():
 def update_nav():
     """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
     (1.5 * value of all short positions)."""
-    while True:
-        update_portfolio_tickers()
-        # sets buying power to user's cash
-        newVal = float(amts[0].text)
+    update_portfolio_tickers()
+    # sets buying power to user's cash
+    newVal = float(amts[0].text)
 
-        for i in range(1, len(portfolio_tickers)):
-            price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
-            if int(amts[i].text) > 0:
-                newVal += float(price) * int(amts[i].text)
-            elif int(amts[i].text) < 0:
-                newVal -= float(price) * int(amts[i].text)
+    for i in range(1, len(portfolio_tickers)):
+        price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        if int(amts[i].text) > 0:
+            newVal += float(price) * int(amts[i].text)
+        elif int(amts[i].text) < 0:
+            newVal -= float(price) * int(amts[i].text)
 
-        buying_power = calculateBuyingPower() 
-        portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
-        portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
-        portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
+    buying_power = calculateBuyingPower() 
+    portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
+    portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
+    portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
         
 
 def calculateBuyingPower() -> float:
@@ -984,6 +1019,8 @@ widget.show()
 splash.close()
 
 # instantiate thread which runs the updateNav function in an infinite loop
-portfolio_background_thread = Thread(target=thread_func, daemon=True)
-portfolio_background_thread.start()
+t1 = Thread(target=nav_piechart_update, daemon=True)
+t1.start()
+t2 = Thread(target=thread_func, daemon=True)
+t2.start()
 sys.exit(app.exec())

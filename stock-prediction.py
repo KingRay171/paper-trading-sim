@@ -23,7 +23,7 @@ class GRU(nn.Module):
 
 
 class ModelAccessor():
-    def __init__():
+    def __init__(self):
         scaler = MinMaxScaler(feature_range=(-1, 1))
         input_dim = 1
         hidden_dim = 32

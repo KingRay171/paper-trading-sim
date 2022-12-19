@@ -3,14 +3,15 @@ import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import torch
 import torch.nn as nn
 from sklearn.preprocessing import MinMaxScaler
+import yfinance as yf
+
 
 
 def input_data(stock_name):
     stock_df = pd.DataFrame(yf.download(stock_name))
     stock_df = stock_df.reset_index(level=0)
     stock_df = stock_df.drop(['Adj Close', 'Open', 'High', 'Low', 'Volume'], axis=1)
-
-    return stock_df.to_csv(index=False)
+    stock_df.to_csv('out.csv', index=False)
 
 
 class GRU(nn.Module):
@@ -21,6 +22,8 @@ class GRU(nn.Module):
                 
         self.gru = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, output_dim)
+    def forward():
+        print("forward")
 
 
 
@@ -35,7 +38,7 @@ class ModelAccessor():
     
 
     
-    def runPredictions(filepath, length, lookback):
+    def runPredictions(self, filepath, length, lookback):
         
         def readData(filePath):
             data = pd.read_csv(filePath)
@@ -94,4 +97,6 @@ class ModelAccessor():
 
         return y_test_pred
 
-ModelAccessor().runPredictions()
+ma = ModelAccessor()
+input_data('SPY')
+ma.runPredictions("out.csv", 5, 30)

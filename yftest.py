@@ -38,12 +38,24 @@ def vix_button_clicked():
     searchButtonClicked()
 
 
+def thread_func():
+    while True:
+        update_portfolio_tickers()
+        update_watchlist_tickers()
+        update_nav()
+        update_piechart()
+
+
+def update_piechart
+
+
 def update_portfolio_tickers():
     for i in range(1, len(portfolio_tickers)):
     # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
-        ticker = yf.Ticker(portfolio_tickers[i].text)
-        ticker_current = ticker.info['regularMarketPrice']
-        ticker_last_close = ticker.history(period='5d', interval='1d')['Close'][3]
+
+        ticker = yf.download(tickers=portfolio_tickers[i].text, period='5d')
+        ticker_current = ticker.iloc[4][3]
+        ticker_last_close = ticker.iloc[3][3]
         total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)
         percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
 
@@ -64,9 +76,9 @@ def update_watchlist_tickers():
     for i in range(len(watchlist_tickers)):
             # sets the value of the current row in the price tab to reflect
             # the live price of the stock
-            ticker = yf.Ticker(watchlist_tickers[i].text)
-            ticker_current = ticker.info['regularMarketPrice']
-            ticker_last_close = ticker.history(period='5d', interval='1d')['Close'][3]
+            ticker = yf.download(tickers=watchlist_tickers[i].text, period='5d')
+            ticker_current = ticker.iloc[4][3]
+            ticker_last_close = ticker.iloc[3][3]
 
             portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 0, QTableWidgetItem(watchlist_tickers[i].text.upper()))
             portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 1, updateTickerIcon(ticker))
@@ -152,13 +164,13 @@ def searchButtonClicked():
                               ), ticker, include_volume, non_trading)
 
 
-def updateTickerIcon(ticker: yf.Ticker) -> QTableWidgetItem:
+def updateTickerIcon(ticker) -> QTableWidgetItem:
     """Updates the performance icon for the given stock"""
     # initializes new table widget item and gets the ticker's open, last close, and current prices
     w = QTableWidgetItem()
-    ticker_open = ticker.info['open']
-    ticker_current = ticker.info['regularMarketPrice']
-    ticker_last_close = ticker.history(period='5d', interval='1d')['Close'][3]
+    ticker_open = ticker.iloc[4][0]
+    ticker_current = ticker.iloc[4][3]
+    ticker_last_close = ticker.iloc[3][3]
 
     # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
@@ -202,7 +214,7 @@ def updateTickerIcon(ticker: yf.Ticker) -> QTableWidgetItem:
     return w
 
 
-def showGraph(ticker: str, title: str, volume: bool, non_trading: bool):
+def showGraph(ticker, title: str, volume: bool, non_trading: bool):
     """Plots a ticker from yfinance in a separate matplotfinance window."""
     # retrieves user's chart style preferences from settings.xml
     up_color = getXMLData('settings.xml', 'upcolor')
@@ -246,7 +258,7 @@ def updateWatchlist():
         update_watchlist_tickers()
 
 
-def updateNav():
+def update_nav():
     """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
     (1.5 * value of all short positions)."""
     while True:
@@ -339,9 +351,6 @@ def get_etf_weights(ticker_info: dict) -> list:
     weights_list.append( ["Healthcare", ticker_info['sectorWeightings'][10]['healthcare']])
     return weights_list
 
-
-def update_piechart():
-    while True:
 
 
 
@@ -460,11 +469,7 @@ progressBar.setGeometry(420, 500, 400, 50)
 
 splash.show()
 
-print(yf.Ticker("SPY").info)
-print(yf.download("SPY", ))
-
 progressBar.setValue(10)
-
 
 progressBar.setValue(20)
 
@@ -501,7 +506,7 @@ nav = float(amts[0].text)
 cash = nav
 
 for i in range(1, len(amts)):
-    price = yf.Ticker(portfolio_tickers[i].text).info['regularMarketPrice']
+    price = yf.download(tickers=watchlist_tickers[i].text, period='5d').iloc[4][3]
     nav += float(price) * int(amts[i].text)
 
 # add genius font to database
@@ -979,9 +984,6 @@ widget.show()
 splash.close()
 
 # instantiate thread which runs the updateNav function in an infinite loop
-portfolio_background_thread = Thread(target=updateNav, daemon=True)
+portfolio_background_thread = Thread(target=thread_func, daemon=True)
 portfolio_background_thread.start()
-
-watchlist_background_thread = Thread(target=updateWatchlist, daemon=True)
-watchlist_background_thread.start()
 sys.exit(app.exec())

@@ -6,6 +6,14 @@ from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 
 
+def input_data(stock_name):
+    stock_df = pd.DataFrame(yf.download(stock_name))
+    stock_df = stock_df.reset_index(level=0)
+    stock_df = stock_df.drop(['Adj Close', 'Open', 'High', 'Low', 'Volume'], axis=1)
+
+    return stock_df.to_csv(index=False)
+
+
 class GRU(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
         super(GRU, self).__init__()

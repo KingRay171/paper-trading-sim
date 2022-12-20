@@ -13,6 +13,8 @@ def input_data(stock_name):
     stock_df = stock_df.drop(['Adj Close', 'Open', 'High', 'Low', 'Volume'], axis=1)
     stock_df.to_csv('out.csv', index=False)
 
+    
+
 
 class GRU(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
@@ -22,8 +24,11 @@ class GRU(nn.Module):
                 
         self.gru = nn.GRU(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, output_dim)
-    def forward():
-        print("forward")
+    def forward(self, x):
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).requires_grad_()
+        out, (hn) = self.gru(x, (h0.detach()))
+        out = self.fc(out[:, -1, :]) 
+        return out
 
 
 
@@ -47,7 +52,7 @@ class ModelAccessor():
             scaler = MinMaxScaler(feature_range=(-1, 1))
             price['Close'] = scaler.fit_transform(price['Close'].values.reshape(-1,1))
 
-            return price
+            return [price, scaler]
     
         def make_prediction(x_test, model, size):
             X=x_test[-1:,...,...]
@@ -76,7 +81,7 @@ class ModelAccessor():
 
             return [x_test, y_test]
         
-        price = readData(filepath)
+        price, scaler = readData(filepath)
         x_test, y_test = split_data(price, lookback)
         print('x_test.shape = ',x_test.shape)
         print('y_test.shape = ',y_test.shape)
@@ -91,12 +96,13 @@ class ModelAccessor():
 
         # make predictions
         y_test_pred = make_prediction(x_test,model,length)
-
+        
         # invert predictions
-        y_test_pred = MinMaxScaler(feature_range=(-1, 1)).inverse_transform(y_test_pred.detach().numpy())
+        
+        y_test_pred = scaler.inverse_transform(y_test_pred.detach().numpy())
 
         return y_test_pred
 
 ma = ModelAccessor()
 input_data('SPY')
-ma.runPredictions("out.csv", 5, 30)
+print(ma.runPredictions("out.csv", 5, 30))

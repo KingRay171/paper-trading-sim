@@ -3,7 +3,7 @@
 from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries
 from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
                                 QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox
-                                , QApplication, QProgressBar, QVBoxLayout)
+                                , QApplication, QProgressBar, QVBoxLayout, QHeaderView, QTableView)
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon
 from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel
 import yfinance as yf
@@ -60,38 +60,38 @@ def update_piechart():
     option_amount = 0
     futures_amount = 0
 
-    for i in range(len(amts)):
+    for i in range(len(portfolio_amts)):
         if(portfolio_asset_types[i].text == "ETF"):
-            etf_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+            etf_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         elif(portfolio_asset_types[i].text == "Liquidity"):
-            cash_amount += float(amts[i].text)
+            cash_amount += float(portfolio_amts[i].text)
         elif(portfolio_asset_types[i].text == "Stock"):
-            stock_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+            stock_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         elif(portfolio_asset_types[i].text == "Futures"):
-            futures_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+            futures_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         elif(portfolio_asset_types[i].text == "Option"):
-            option_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+            option_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
 
-    asset_class_chart.slices()[0].setValue(round(etf_amount / nav * 100, 2))
+    asset_class_chart.slices()[0].setValue(round(etf_amount / portfolio_nav * 100, 2))
     if(etf_amount != 0):
-        asset_class_chart.slices()[0].setLabel(f"ETFs: {round(etf_amount / nav * 100, 2)}%")
+        asset_class_chart.slices()[0].setLabel(f"ETFs: {round(etf_amount / portfolio_nav * 100, 2)}%")
         asset_class_chart.slices()[0].setLabelVisible(True)
     
-    asset_class_chart.slices()[1].setValue(round(stock_amount / nav * 100, 2))
+    asset_class_chart.slices()[1].setValue(round(stock_amount / portfolio_nav * 100, 2))
     if(stock_amount != 0):
-        asset_class_chart.slices()[1].setLabel(f"Stocks: {round(stock_amount / nav * 100, 2)}%")
+        asset_class_chart.slices()[1].setLabel(f"Stocks: {round(stock_amount / portfolio_nav * 100, 2)}%")
 
-    asset_class_chart.slices()[2].setValue(option_amount / nav * 100)
+    asset_class_chart.slices()[2].setValue(option_amount / portfolio_nav * 100)
     if(option_amount != 0):
-        asset_class_chart.slices()[2].setLabel(f"Options: {round(option_amount / nav * 100, 2)}%")
+        asset_class_chart.slices()[2].setLabel(f"Options: {round(option_amount / portfolio_nav * 100, 2)}%")
 
-    asset_class_chart.slices()[3].setValue(futures_amount / nav * 100)
+    asset_class_chart.slices()[3].setValue(futures_amount / portfolio_nav * 100)
     if(futures_amount != 0):
-        asset_class_chart.slices()[3].setLabel(f"Futures: {round(futures_amount / nav * 100, 2)}%")
+        asset_class_chart.slices()[3].setLabel(f"Futures: {round(futures_amount / portfolio_nav * 100, 2)}%")
 
-    asset_class_chart.slices()[4].setValue(cash_amount / nav * 100)
+    asset_class_chart.slices()[4].setValue(cash_amount / portfolio_nav * 100)
     if(cash_amount != 0):
-        asset_class_chart.slices()[4].setLabel(f"Cash: {round(cash_amount / nav * 100, 2)}%")
+        asset_class_chart.slices()[4].setLabel(f"Cash: {round(cash_amount / portfolio_nav * 100, 2)}%")
         asset_class_chart.slices()[4].setLabelVisible(True)
     
     
@@ -100,15 +100,12 @@ def update_piechart():
 def update_portfolio_tickers():
     for i in range(1, len(portfolio_tickers)):
     # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
-        try:
-
-            
             ticker = yf.download(tickers=portfolio_tickers[i].text, period='5d')
 
             ticker_current = ticker.iloc[4][3]
             ticker_last_close = ticker.iloc[3][3]
-            total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)
-            percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(amts[i].text)) * 100, 2)
+            total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(portfolio_amts[i].text)
+            percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(portfolio_amts[i].text)) * 100, 2)
 
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(ticker))
@@ -116,22 +113,19 @@ def update_portfolio_tickers():
 
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(amts[i].text))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * int(amts[i].text))))
-            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(purchase_prices[i - 1].text)) * int(amts[i].text)))))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(portfolio_amts[i].text))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * int(portfolio_amts[i].text))))
+            portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(purchase_prices[i - 1].text)) * int(portfolio_amts[i].text)))))
 
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
-        except RuntimeError:
-            print("dict changed size")
-        except KeyError:
-            print("key error")
+        
 
 
 def update_watchlist_tickers():
     for i in range(len(watchlist_tickers)):
             # sets the value of the current row in the price tab to reflect
             # the live price of the stock
-            try:
+            
                 
                 ticker = yf.download(tickers=watchlist_tickers[i].text, period='5d')
 
@@ -143,12 +137,6 @@ def update_watchlist_tickers():
                 portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
             
                 portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
-            except RuntimeError:
-                print("dict changed size")
-            except KeyError:
-                print("key error")
-
-            
 
 
 def daterange_radiobutton_clicked():
@@ -331,14 +319,14 @@ def update_nav():
     (1.5 * value of all short positions)."""
     update_portfolio_tickers()
     # sets buying power to user's cash
-    newVal = float(amts[0].text)
+    newVal = float(portfolio_amts[0].text)
 
     for i in range(1, len(portfolio_tickers)):
         price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
-        if int(amts[i].text) > 0:
-            newVal += float(price) * int(amts[i].text)
-        elif int(amts[i].text) < 0:
-            newVal -= float(price) * int(amts[i].text)
+        if int(portfolio_amts[i].text) > 0:
+            newVal += float(price) * int(portfolio_amts[i].text)
+        elif int(portfolio_amts[i].text) < 0:
+            newVal -= float(price) * int(portfolio_amts[i].text)
 
     buying_power = calculateBuyingPower() 
     portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
@@ -347,16 +335,16 @@ def update_nav():
         
 
 def calculateBuyingPower() -> float:
-    buying_power = cash
+    buying_power = portfolio_cash
     total_long = 0
     total_short = 0
 
-    for i in range (1, len(amts)):
+    for i in range (1, len(portfolio_amts)):
         price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
-        if int(amts[i].text) > 0:
-            total_long += float(price) * int(amts[i].text)
-        elif int(amts[i].text) < 0:
-            total_short += float(price) * int(amts[i].text)
+        if int(portfolio_amts[i].text) > 0:
+            total_long += float(price) * int(portfolio_amts[i].text)
+        elif int(portfolio_amts[i].text) < 0:
+            total_short += float(price) * int(portfolio_amts[i].text)
     
     buying_power += .5 * total_long
     buying_power -= 1.5 * total_short
@@ -519,7 +507,6 @@ def setup_etf_info(ticker_info: dict):
     stockinfo_dialog.asset_info_groupbox.layout().addWidget(beta_3y_label)
     
     
-
 def close_event(event):
     """Function that is called when the user exits the game. WIP"""
     print("closed")
@@ -548,17 +535,27 @@ progressBar.setValue(30)
 # watchlist, and settings                           #
 #####################################################
 
-portfolio_tickers = getXMLData('portfolio.xml', 'name')
-portfolio_asset_types = getXMLData('portfolio.xml', 'type')
-watchlist_tickers = getXMLData('watchlist.xml', 'name')
-up_color = getXMLData('settings.xml', 'upcolor')
+
+
+
 
 progressBar.setValue(40)
 
+up_color = getXMLData('settings.xml', 'upcolor')
 down_color = getXMLData('settings.xml', 'downcolor')
 base_style = getXMLData('settings.xml', 'basestyle')
-amts = getXMLData('portfolio.xml', 'amount')
+
+portfolio_tickers = getXMLData('portfolio.xml', 'name')
+portfolio_asset_types = getXMLData('portfolio.xml', 'type')
+portfolio_amts = getXMLData('portfolio.xml', 'amount')
 purchase_prices = getXMLData('portfolio.xml', 'costbasis')
+
+wallet_tickers = getXMLData('wallet.xml', 'name')
+wallet_amts = getXMLData('wallet.xml', 'amount')
+wallet_costbases = getXMLData('wallet.xml', 'costbasis')
+
+watchlist_tickers = getXMLData('watchlist.xml', 'name')
+
 
 all_tickers_list = pd.read_csv("stock_list.csv")['Symbol'].tolist()
 all_names_list = pd.read_csv("stock_list.csv")['Name'].tolist()
@@ -568,12 +565,22 @@ for i in range(len(all_tickers_list)):
     all_tickers_list[i] += ' - ' + all_names_list[i]
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
-nav = float(amts[0].text)
-cash = nav
+portfolio_nav = float(portfolio_amts[0].text)
+portfolio_cash = portfolio_nav
 
-for i in range(1, len(amts)):
+for i in range(1, len(portfolio_amts)):
     price = yf.download(tickers=portfolio_tickers[i].text, period='5d').iloc[4][3]
-    nav += float(price) * int(amts[i].text)
+    portfolio_nav += float(price) * int(portfolio_amts[i].text)
+
+
+wallet_nav = float(wallet_amts[0].text)
+wallet_cash = wallet_nav
+
+for i in range(1, len(wallet_amts)):
+    price = yf.download(tickers=wallet_tickers[i].text, period='5d').iloc[4][3]
+    wallet_nav += float(price) * float(wallet_amts[i].text)
+
+
 
 # add genius font to database
 QFontDatabase.addApplicationFont('genius.ttf')
@@ -600,7 +607,7 @@ portfolio_dialog.positions_view_groupbox.setStyleSheet('background-color: white;
 portfolio_dialog.positions_view_groupbox.positions_view = QTableWidget(portfolio_dialog.positions_view_groupbox)
 portfolio_dialog.positions_view_groupbox.positions_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 portfolio_dialog.positions_view_groupbox.positions_view.setFont(QFont('arial', 10))
-portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(len(amts) - 1)
+portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(len(portfolio_amts) - 1)
 portfolio_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
 portfolio_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 850, 200)
 portfolio_dialog.positions_view_groupbox.positions_view.setStyleSheet('background-color: white;')
@@ -638,7 +645,7 @@ portfolio_dialog.currentNAV.netLiq.setText("Net Liq: ")
 portfolio_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
 portfolio_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
 portfolio_dialog.currentNAV.liq = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(nav))))
+portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(portfolio_nav))))
 portfolio_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
 portfolio_dialog.currentNAV.liq.setFont(QFont('genius', 20))
 
@@ -647,7 +654,7 @@ portfolio_dialog.currentNAV.cashLabel = QLabel(portfolio_dialog.currentNAV)
 portfolio_dialog.currentNAV.cashLabel.setText("Cash: ")
 portfolio_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
 portfolio_dialog.currentNAV.cash = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cash.setText('${:0,.2f}'.format(cash))
+portfolio_dialog.currentNAV.cash.setText('${:0,.2f}'.format(portfolio_cash))
 portfolio_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
 
 progressBar.setValue(70)
@@ -666,10 +673,10 @@ portfolio_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
 portfolio_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
 portfolio_dialog.currentNAV.assets = QLabel(portfolio_dialog.currentNAV)
 total_long = 0
-for i in range (1, len(amts)):
+for i in range (1, len(portfolio_amts)):
     price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
-    if int(amts[i].text) > 0:
-        total_long += float(price) * int(amts[i].text)
+    if int(portfolio_amts[i].text) > 0:
+        total_long += float(price) * int(portfolio_amts[i].text)
 
 portfolio_dialog.currentNAV.assets.setText('${:0,.2f}'.format(total_long))
 portfolio_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
@@ -680,10 +687,10 @@ portfolio_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
 portfolio_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
 portfolio_dialog.currentNAV.liabilities = QLabel(portfolio_dialog.currentNAV)
 total_short = 0
-for i in range (1, len(amts)):
+for i in range (1, len(portfolio_amts)):
     price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
-    if int(amts[i].text) < 0:
-        total_short -= float(price) * int(amts[i].text)
+    if int(portfolio_amts[i].text) < 0:
+        total_short -= float(price) * int(portfolio_amts[i].text)
 
 portfolio_dialog.currentNAV.liabilities.setText('${:0,.2f}'.format(total_short))
 portfolio_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
@@ -695,7 +702,7 @@ portfolio_dialog.currentNAV.returnSinceInceptionLabel.setText("Return Since Ince
 portfolio_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(10, 170, 120, 20)
 portfolio_dialog.currentNAV.returnSinceInception = QLabel(portfolio_dialog.currentNAV)
 portfolio_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
-portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((nav / 10000 - 1) * 100) + "%")
+portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((portfolio_nav / 10000 - 1) * 100) + "%")
 portfolio_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
 
 progressBar.setValue(80)
@@ -733,17 +740,17 @@ stock_amount = 0
 option_amount = 0
 futures_amount = 0
 
-for i in range(len(amts)):
+for i in range(len(portfolio_amts)):
     if(portfolio_asset_types[i].text == "ETF"):
-        etf_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        etf_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
     elif(portfolio_asset_types[i].text == "Liquidity"):
-        cash_amount += float(amts[i].text)
+        cash_amount += float(portfolio_amts[i].text)
     elif(portfolio_asset_types[i].text == "Stock"):
-        stock_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        stock_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
     elif(portfolio_asset_types[i].text == "Futures"):
-        futures_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        futures_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
     elif(portfolio_asset_types[i].text == "Option"):
-        option_amount += int(amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        option_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         
 asset_class_chart = QPieSeries()
 asset_class_chart.append("ETFs", 1)
@@ -759,27 +766,27 @@ chart.setVisible(True)
 
 
 etf_slice = asset_class_chart.slices()[0]
-etf_slice.setValue(etf_amount / nav * 100)
+etf_slice.setValue(etf_amount / portfolio_nav * 100)
 if(etf_amount != 0):
     asset_class_chart.slices()[0].setLabel(f"ETFs: {etf_amount * 100}%")
 
 stock_slice = asset_class_chart.slices()[1]
-stock_slice.setValue(stock_amount / nav * 100)
+stock_slice.setValue(stock_amount / portfolio_nav * 100)
 if(stock_amount != 0):
     asset_class_chart.slices()[1].setLabel(f"Stocks: {stock_amount * 100}%")
 
 options_slice = asset_class_chart.slices()[2]
-options_slice.setValue(option_amount / nav * 100)
+options_slice.setValue(option_amount / portfolio_nav * 100)
 if(option_amount != 0):
     asset_class_chart.slices()[2].setLabel(f"Options: {option_amount * 100}%")
 
 futures_slice = asset_class_chart.slices()[3]
-futures_slice.setValue(futures_amount / nav * 100)
+futures_slice.setValue(futures_amount / portfolio_nav * 100)
 if(futures_amount != 0):
     asset_class_chart.slices()[3].setLabel(f"Futures: {etf_amount * 100}%")
 
 cash_slice = asset_class_chart.slices()[4]
-cash_slice.setValue(cash_amount / nav * 100)
+cash_slice.setValue(cash_amount / portfolio_nav * 100)
 if(cash_amount != 0):
     asset_class_chart.slices()[4].setLabel(f"Cash: {cash_amount * 100}%")
 
@@ -898,6 +905,7 @@ chart_dialog.settings_groupbox.start_date = QCalendarWidget(chart_dialog.setting
 chart_dialog.settings_groupbox.start_date.setGeometry(10, 130, 600, 370)
 chart_dialog.settings_groupbox.start_date.setStyleSheet('background-color: deepskyblue; border: 3px solid black;')
 chart_dialog.settings_groupbox.start_date.setEnabled(False)
+
 
 chart_dialog.settings_groupbox.end_date = QCalendarWidget(chart_dialog.settings_groupbox)
 chart_dialog.settings_groupbox.end_date.setGeometry(620, 130, 600, 370)
@@ -1035,6 +1043,62 @@ wallet_dialog.currentNAV.setTitle("Your NAV")
 wallet_dialog.currentNAV.setGeometry(10, 10, 300, 200)
 wallet_dialog.currentNAV.setStyleSheet('background-color: black; color: white;')
 
+# net liquidation value labels
+wallet_dialog.currentNAV.netLiq = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.netLiq.setText("Net Liq: ")
+wallet_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
+wallet_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
+wallet_dialog.currentNAV.liq = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(wallet_nav))))
+wallet_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
+wallet_dialog.currentNAV.liq.setFont(QFont('genius', 20))
+
+# cash labels
+wallet_dialog.currentNAV.cashLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.cashLabel.setText("Cash: ")
+wallet_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
+wallet_dialog.currentNAV.cash = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.cash.setText('${:0,.2f}'.format(wallet_cash))
+wallet_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
+
+# positions table settings
+wallet_dialog.positions_view_groupbox = QGroupBox(wallet_dialog)
+
+wallet_dialog.positions_view_groupbox.setGeometry(10, 300, 900, 250)
+wallet_dialog.positions_view_groupbox.setTitle("Your Portfolio")
+wallet_dialog.positions_view_groupbox.setStyleSheet('background-color: black; color: white;')
+wallet_dialog.positions_view_groupbox.positions_view = QTableWidget(wallet_dialog.positions_view_groupbox)
+wallet_dialog.positions_view_groupbox.positions_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+wallet_dialog.positions_view_groupbox.positions_view.setFont(QFont('arial', 10))
+wallet_dialog.positions_view_groupbox.positions_view.setRowCount(len(wallet_amts) - 1)
+wallet_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
+wallet_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 850, 200)
+
+wallet_dialog.positions_view_groupbox.positions_view.setStyleSheet('background-color: black;')
+
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(4, QTableWidgetItem("Purchase Price"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(5, QTableWidgetItem("# of Shares"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(6, QTableWidgetItem("Total Value"))
+wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(7, QTableWidgetItem("Position Gain/Loss"))
+
+
+for i in range (8):
+    wallet_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(i).setFont(QFont('arial', 10))
+    
+
+for i in range (portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
+    wallet_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
+    wallet_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(i).setFont(QFont('arial', 10))
+    
+
+
+wallet_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
+
+
 
 ######################
 # end of dialog init #
@@ -1058,8 +1122,6 @@ splash.close()
 
 t2 = Thread(target=thread_func, daemon=True)
 t2.start()
-
-
 
 sys.exit(app.exec())
 

@@ -3,9 +3,10 @@
 from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries
 from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
                                 QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox
-                                , QApplication, QProgressBar, QVBoxLayout, QHeaderView, QTableView)
-from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon
+                                , QApplication, QProgressBar, QVBoxLayout, QHeaderView, QTableView, QAbstractButton )
+from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon 
 from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel
+from locale import atof, setlocale, LC_NUMERIC
 import yfinance as yf
 import sys
 import mplfinance as mpf
@@ -23,37 +24,51 @@ download_is_used = Event()
 download_is_used.clear()
 
 def spy_button_clicked():
-    chart_dialog.search_bar_groupbox.searchBar.setText("SPY ")
+    """Is called when the "Chart SPY" button is clicked. Charts SPY with the current user settings"""
+    chart_dialog.search_bar_groupbox.searchBar.setText("SPY - SPDR S&P 500 ETF Trust")
     searchButtonClicked()
 
 
 def qqq_button_clicked():
-    chart_dialog.search_bar_groupbox.searchBar.setText("QQQ ")
+    """Is called when the "Chart QQQ" button is clicked. Charts QQQ with the current user settings"""
+    chart_dialog.search_bar_groupbox.searchBar.setText("QQQ - Invesco QQQ Trust")
     searchButtonClicked()
 
 
 def dia_button_clicked():
-    chart_dialog.search_bar_groupbox.searchBar.setText("DIA ")
+    """Is called when the "Chart DIA" button is clicked. Charts DIA with the current user settings"""
+    chart_dialog.search_bar_groupbox.searchBar.setText("DIA - SPDR Dow Jones Industrial Average ETF Trust")
     searchButtonClicked()
 
 
 def vix_button_clicked():
+    """Is called when the "Chart VIX" button is clicked. Charts VIX with the current user settings"""
     chart_dialog.search_bar_groupbox.searchBar.setText("^VIX ")
     searchButtonClicked()
 
 
-def thread_func():
+def update_ui():
+    """
+    TO BE RUN BY THE UI UPDATE THREAD ONLY
+    Updates each element of the portfolio dialog 
+    if the user is on the portfolio dialog. Runs as 
+    long as the program is running
+    """
     while True:
         if widget.currentWidget() == portfolio_dialog:
-            update_portfolio_tickers()
+            update_portfolio_table()
             update_watchlist_tickers()
-            update_nav()
+            update_portfolio_nav()
             update_piechart()
+        elif widget.currentWidget() == wallet_dialog:
+            update_wallet_table()
+            time.sleep(5)
         
         
-
 def update_piechart():
-
+    """
+    Updates the asset class piechart on the portfolio dialog
+    """
     cash_amount = 0
     etf_amount = 0
     stock_amount = 0
@@ -94,49 +109,76 @@ def update_piechart():
         asset_class_chart.slices()[4].setLabel(f"Cash: {round(cash_amount / portfolio_nav * 100, 2)}%")
         asset_class_chart.slices()[4].setLabelVisible(True)
     
-    
 
+def update_wallet_table():
+    for i in range(1, len(wallet_tickers)):
 
-def update_portfolio_tickers():
-    for i in range(1, len(portfolio_tickers)):
-    # for each stock in the user's portfolio, populate its row with its ticker, current price, and purchase price
-            ticker = yf.download(tickers=portfolio_tickers[i].text, period='5d')
-
+            # get the current price and the price it last closed at
+            ticker = yf.download(tickers=wallet_tickers[i].text, period='5d')
             ticker_current = ticker.iloc[4][3]
             ticker_last_close = ticker.iloc[3][3]
+
+            # calculate the return since the position was opened in dollar and percent terms
+            total_return = (ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)
+            percent_change = round(total_return / (float(wallet_costbases[i - 1].text) * float(wallet_amts[i].text)) * 100, 2)
+            # update the table with the new information
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(wallet_tickers[i].text.upper()))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(ticker))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(wallet_costbases[i - 1].text))))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(portfolio_amts[i].text))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * float(wallet_amts[i].text))))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)))))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
+        
+    
+def update_portfolio_table():
+    """
+    Updates the table with all the user's positions in the portfolio dialog
+    """
+    # for each asset in the portfolio
+    for i in range(1, len(portfolio_tickers)):
+
+            # get the current price and the price it last closed at
+            ticker = yf.download(tickers=portfolio_tickers[i].text, period='5d')
+            ticker_current = ticker.iloc[4][3]
+            ticker_last_close = ticker.iloc[3][3]
+
+            # calculate the return since the position was opened in dollar and percent terms
             total_return = (ticker_current - float(purchase_prices[i - 1].text)) * int(portfolio_amts[i].text)
             percent_change = round(total_return / (float(purchase_prices[i - 1].text) * float(portfolio_amts[i].text)) * 100, 2)
 
+            # update the table with the new information
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(portfolio_tickers[i].text.upper()))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(ticker))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
-
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(purchase_prices[i - 1].text))))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(portfolio_amts[i].text))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * int(portfolio_amts[i].text))))
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(purchase_prices[i - 1].text)) * int(portfolio_amts[i].text)))))
-
             portfolio_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
         
 
-
 def update_watchlist_tickers():
+    """
+    Updates the table with all the tickers in the user's watchlist in the portfolio dialog
+    """
+
+    # for each ticker in the watchlist
     for i in range(len(watchlist_tickers)):
-            # sets the value of the current row in the price tab to reflect
-            # the live price of the stock
-            
-                
-                ticker = yf.download(tickers=watchlist_tickers[i].text, period='5d')
+        
+        
+        ticker = yf.download(tickers=watchlist_tickers[i].text, period='5d')
+        ticker_current = ticker.iloc[4][3]
+        ticker_last_close = ticker.iloc[3][3]
 
-                ticker_current = ticker.iloc[4][3]
-                ticker_last_close = ticker.iloc[3][3]
-
-                portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 0, QTableWidgetItem(watchlist_tickers[i].text.upper()))
-                portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 1, updateTickerIcon(ticker))
-                portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
-            
-                portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 0, QTableWidgetItem(watchlist_tickers[i].text.upper()))
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 1, updateTickerIcon(ticker))
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
+        
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(i, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
 
 
 def daterange_radiobutton_clicked():
@@ -200,7 +242,7 @@ def searchButtonClicked():
     if(chart_dialog.settings_groupbox.daterange_radiobutton.isChecked()):
         start_date = chart_dialog.settings_groupbox.start_date.selectedDate().toString("yyyy-MM-dd")
         end_date = chart_dialog.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
-        showGraph(yf.download(tickers=ticker,
+        show_graph(yf.download(tickers=ticker,
                               start=start_date,
                               end=end_date, 
                               interval=interval,
@@ -210,7 +252,7 @@ def searchButtonClicked():
                               ), ticker, include_volume, non_trading)
     else:
 
-        showGraph(yf.download(tickers=ticker,
+        show_graph(yf.download(tickers=ticker,
                               period=period,
                               interval=interval,
                               prepost=include_prepost,
@@ -218,7 +260,6 @@ def searchButtonClicked():
                               actions=split_dividend
                               ), ticker, include_volume, non_trading)
                               
-
 
 def updateTickerIcon(ticker) -> QTableWidgetItem:
     """Updates the performance icon for the given stock"""
@@ -270,8 +311,19 @@ def updateTickerIcon(ticker) -> QTableWidgetItem:
     return w
 
 
-def showGraph(ticker, title: str, volume: bool, non_trading: bool):
-    """Plots a ticker from yfinance in a separate matplotfinance window."""
+def show_graph(ticker, title: str, volume: bool, non_trading: bool):
+    """Plots a ticker from yfinance in a separate matplotfinance window.
+
+        ticker : pandas.DataFrame
+            A Pandas dataframe representing a ticker's price history. 
+            Obtained through a call to yf.download
+        title : str
+            The title of the chart
+        volume : bool
+            Include volume bars in the chart?
+        non_trading : bool
+            Include non-trading days in the chart? (I don't know why you'd do this)
+    """
     # retrieves user's chart style preferences from settings.xml
     up_color = getXMLData('settings.xml', 'upcolor')
     down_color = getXMLData('settings.xml', 'downcolor')
@@ -306,35 +358,59 @@ def retranslatePortfolioDialogUi(self):
     """required retranslation function for portfolio dialog"""
     _translate = QCoreApplication.translate
     self.setWindowTitle(_translate("Dialog", "Dialog"))
+        
 
-
-def updateWatchlist():
-    """Updates the user's watchlist"""
-    while True:
-        update_watchlist_tickers()
-
-
-def update_nav():
+def update_portfolio_nav():
     """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
     (1.5 * value of all short positions)."""
-    update_portfolio_tickers()
+    
     # sets buying power to user's cash
     newVal = float(portfolio_amts[0].text)
-
+    liabilities = 0
+    assets = 0
     for i in range(1, len(portfolio_tickers)):
         price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
         if int(portfolio_amts[i].text) > 0:
             newVal += float(price) * int(portfolio_amts[i].text)
+            assets += float(price) * float(portfolio_amts[i].text)
         elif int(portfolio_amts[i].text) < 0:
             newVal -= float(price) * int(portfolio_amts[i].text)
+            liabilites += float(price) * float(portfolio_amts[i].text)
 
-    buying_power = calculateBuyingPower() 
+    buying_power = get_portfolio_bp() 
     portfolio_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
     portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
+    portfolio_dialog.currentNAV.assets.setText('${:0,.2f}'.format(assets))
+    portfolio_dialog.currentNAV.liabilities.setText('${:0,.2f}'.format(liabilities))
     portfolio_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
         
 
-def calculateBuyingPower() -> float:
+def update_wallet_nav():
+    """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
+    (1.5 * value of all short positions)."""
+    
+    # sets buying power to user's cash
+    newVal = float(wallet_amts[0].text)
+    liabilities = 0
+    assets = 0
+    for i in range(1, len(wallet_tickers)):
+        price = float(wallet_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+        if float(wallet_amts[i].text) > 0:
+            newVal += float(price) * float(wallet_amts[i].text)
+            assets += float(price) * float(wallet_amts[i].text)
+        elif float(wallet_amts[i].text) < 0:
+            newVal -= float(price) * float(wallet_amts[i].text)
+            liabilites += float(price) * float(wallet_amts[i].text)
+
+    buying_power = get_wallet_bp() 
+    wallet_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(newVal))))
+    wallet_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(buying_power))
+    wallet_dialog.currentNAV.assets.setText('${:0,.2f}'.format(assets))
+    wallet_dialog.currentNAV.liabilities.setText('${:0,.2f}'.format(liabilities))
+    wallet_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
+
+
+def get_portfolio_bp() -> float:
     buying_power = portfolio_cash
     total_long = 0
     total_short = 0
@@ -349,6 +425,11 @@ def calculateBuyingPower() -> float:
     buying_power += .5 * total_long
     buying_power -= 1.5 * total_short
     return buying_power
+
+
+def get_wallet_bp() -> float:
+
+    return wallet_cash * 10
 
 
 def getXMLData(file, keyword):
@@ -526,6 +607,7 @@ progressBar.setValue(10)
 
 progressBar.setValue(20)
 
+setlocale(LC_NUMERIC, '')
 
 progressBar.setValue(30)
 
@@ -534,9 +616,6 @@ progressBar.setValue(30)
 # parse XML file data relating to user's portfolio, #
 # watchlist, and settings                           #
 #####################################################
-
-
-
 
 
 progressBar.setValue(40)
@@ -628,7 +707,7 @@ for i in range (portfolio_dialog.positions_view_groupbox.positions_view.rowCount
     portfolio_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
     portfolio_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(i).setFont(QFont('arial', 10))
 
-update_portfolio_tickers()
+update_portfolio_table()
     
 portfolio_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 progressBar.setValue(60)
@@ -664,7 +743,7 @@ portfolio_dialog.currentNAV.buyingPowerLabel = QLabel(portfolio_dialog.currentNA
 portfolio_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
 portfolio_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
 portfolio_dialog.currentNAV.buyingPower = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(calculateBuyingPower()))
+portfolio_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(get_portfolio_bp()))
 portfolio_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
 
 # assets labels
@@ -1040,7 +1119,7 @@ wallet_dialog.setStyleSheet('background-color: goldenrod')
 # user's crypto wallet NAV 
 wallet_dialog.currentNAV = QGroupBox(wallet_dialog)
 wallet_dialog.currentNAV.setTitle("Your NAV")
-wallet_dialog.currentNAV.setGeometry(10, 10, 300, 200)
+wallet_dialog.currentNAV.setGeometry(10, 10, 250, 250)
 wallet_dialog.currentNAV.setStyleSheet('background-color: black; color: white;')
 
 # net liquidation value labels
@@ -1052,14 +1131,6 @@ wallet_dialog.currentNAV.liq = QLabel(wallet_dialog.currentNAV)
 wallet_dialog.currentNAV.liq.setText('${:0,.2f}'.format(float(str(wallet_nav))))
 wallet_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
 wallet_dialog.currentNAV.liq.setFont(QFont('genius', 20))
-
-# cash labels
-wallet_dialog.currentNAV.cashLabel = QLabel(wallet_dialog.currentNAV)
-wallet_dialog.currentNAV.cashLabel.setText("Cash: ")
-wallet_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
-wallet_dialog.currentNAV.cash = QLabel(wallet_dialog.currentNAV)
-wallet_dialog.currentNAV.cash.setText('${:0,.2f}'.format(wallet_cash))
-wallet_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
 
 # positions table settings
 wallet_dialog.positions_view_groupbox = QGroupBox(wallet_dialog)
@@ -1074,8 +1145,11 @@ wallet_dialog.positions_view_groupbox.positions_view.setRowCount(len(wallet_amts
 wallet_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
 wallet_dialog.positions_view_groupbox.positions_view.setGeometry(10, 20, 850, 200)
 
+
 wallet_dialog.positions_view_groupbox.positions_view.setStyleSheet('background-color: black;')
 
+wallet_dialog.positions_view_groupbox.positions_view.horizontalHeader().setStyleSheet("::section{background-color: black; color: white}")
+btn = wallet_dialog.positions_view_groupbox.positions_view.cornerWidget()
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
@@ -1094,7 +1168,60 @@ for i in range (portfolio_dialog.positions_view_groupbox.positions_view.rowCount
     wallet_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
     wallet_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(i).setFont(QFont('arial', 10))
     
+update_wallet_table()
 
+# cash labels
+wallet_dialog.currentNAV.cashLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.cashLabel.setText("Cash: ")
+wallet_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
+wallet_dialog.currentNAV.cash = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.cash.setText('${:0,.2f}'.format(wallet_cash))
+wallet_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
+
+# buying power labels
+wallet_dialog.currentNAV.buyingPowerLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
+wallet_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
+wallet_dialog.currentNAV.buyingPower = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.buyingPower.setText('${:0,.2f}'.format(get_wallet_bp()))
+wallet_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
+
+# assets labels
+wallet_dialog.currentNAV.assetsLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
+wallet_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
+wallet_dialog.currentNAV.assets = QLabel(wallet_dialog.currentNAV)
+total_long = 0
+for i in range (1, len(wallet_amts)):
+    price = atof(wallet_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    if float(wallet_amts[i].text) > 0:
+        total_long += float(price) * float(wallet_amts[i].text)
+
+wallet_dialog.currentNAV.assets.setText('${:0,.2f}'.format(total_long))
+wallet_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
+
+# liabilities labels
+wallet_dialog.currentNAV.liabilitiesLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
+wallet_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
+wallet_dialog.currentNAV.liabilities = QLabel(wallet_dialog.currentNAV)
+total_short = 0
+for i in range (1, len(wallet_amts)):
+    price = atof(wallet_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+    if float(wallet_amts[i].text) < 0:
+        total_short -= float(price) * float(wallet_amts[i].text)
+
+wallet_dialog.currentNAV.liabilities.setText('${:0,.2f}'.format(total_short))
+wallet_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
+
+# return since inception labels
+wallet_dialog.currentNAV.returnSinceInceptionLabel = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.returnSinceInceptionLabel.setText("Return Since Inception: ")
+wallet_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(10, 170, 120, 20)
+wallet_dialog.currentNAV.returnSinceInception = QLabel(wallet_dialog.currentNAV)
+wallet_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
+wallet_dialog.currentNAV.returnSinceInception.setText('{:0.2f}'.format((wallet_nav / 10000 - 1) * 100) + "%")
+wallet_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
 
 wallet_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 
@@ -1120,7 +1247,7 @@ splash.close()
 
 # instantiate thread which runs the updateNav function in an infinite loop
 
-t2 = Thread(target=thread_func, daemon=True)
+t2 = Thread(target=update_ui, daemon=True)
 t2.start()
 
 sys.exit(app.exec())

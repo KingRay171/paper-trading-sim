@@ -15,13 +15,14 @@ import time
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 import pandas as pd
-import autocomplete as ac
-from enum import Enum
+from dependencies import autocomplete as ac
+import os
 
 
 
 download_is_used = Event()
 download_is_used.clear()
+currentdir = os.getcwd() + '\paper-trading-sim\\'
 
 def spy_button_clicked():
     """Is called when the "Chart SPY" button is clicked. Charts SPY with the current user settings"""
@@ -59,13 +60,13 @@ def update_ui():
             update_portfolio_table()
             update_watchlist_tickers()
             update_portfolio_nav()
-            update_piechart()
+            update_portfolio_piechart()
         elif widget.currentWidget() == wallet_dialog:
             update_wallet_table()
             time.sleep(5)
         
         
-def update_piechart():
+def update_portfolio_piechart():
     """
     Updates the asset class piechart on the portfolio dialog
     """
@@ -111,6 +112,9 @@ def update_piechart():
     
 
 def update_wallet_table():
+    """
+    Updates the positions table on the crypto wallet dialog.
+    """
     for i in range(1, len(wallet_tickers)):
 
             # get the current price and the price it last closed at
@@ -127,7 +131,7 @@ def update_wallet_table():
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(wallet_costbases[i - 1].text))))
-            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(portfolio_amts[i].text))
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(wallet_amts[i].text))
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * float(wallet_amts[i].text))))
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)))))
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
@@ -182,12 +186,22 @@ def update_watchlist_tickers():
 
 
 def daterange_radiobutton_clicked():
+    """
+    Should run only when the player clicks the "Chart by Date Range" radiobutton on the "Chart Stocks" dialog.
+    Disables the combobox that lets the user select a period to chart over and enables the calendars so that 
+    the user can pick a start and end date for the chart.
+    """
     chart_dialog.settings_groupbox.start_date.setEnabled(True)
     chart_dialog.settings_groupbox.end_date.setEnabled(True)
     chart_dialog.settings_groupbox.data_period_combobox.setEnabled(False)
 
 
 def period_radiobutton_clicked():
+    """
+    Should run only when the player clicks the "Chart by Period" radiobutton on the "Chart Stocks" dialog.
+    Disables the calendars that let the user select a start and end date for the chart and enables the period 
+    combobox so that the user can pick a start and end date for the chart.
+    """
     chart_dialog.settings_groupbox.start_date.setEnabled(False)
     chart_dialog.settings_groupbox.end_date.setEnabled(False)
     chart_dialog.settings_groupbox.data_period_combobox.setEnabled(True)
@@ -196,14 +210,14 @@ def period_radiobutton_clicked():
 def searchTextChanged(txt: str):
     """
     Executed when text is typed into the search bar on the "Chart Stocks" tab.
-    The function takes the entered text and appends it to the search bar
+    The function takes the entered text and appends it to the search bar.
     """
     chart_dialog.search_bar_groupbox.searchBar.setText(txt.upper())
 
 
 def searchButtonClicked():
     """
-    Shows graph for the selected ticker when the search button is pressed.
+    Shows graph for the ticker in the search bar when the search button is pressed.
     """
     # gets the stock ticker from the search bar
     ticker = ''
@@ -262,7 +276,13 @@ def searchButtonClicked():
                               
 
 def updateTickerIcon(ticker) -> QTableWidgetItem:
-    """Updates the performance icon for the given stock"""
+    """
+    Updates the performance icon for the given stock
+
+        ticker : pandas.DataFrame
+            A Pandas dataframe representing a ticker's price history. 
+            Obtained through a call to yf.download
+    """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
     w = QTableWidgetItem()
     ticker_open = ticker.iloc[4][0]
@@ -288,25 +308,25 @@ def updateTickerIcon(ticker) -> QTableWidgetItem:
 
     if open_pos == "UP":
         if close_pos == "UP":
-            w.setIcon(QIcon('greenarrowgreenbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/greenarrowgreenbox.png'))
         elif close_pos == "FLAT":
-            w.setIcon(QIcon('greenarrowflatbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/greenarrowflatbox.png'))
         elif close_pos == "DOWN":
-            w.setIcon(QIcon('greenarrowredbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/greenarrowredbox.png'))
     elif open_pos == "FLAT":
         if close_pos == "UP":
-            w.setIcon(QIcon('flatarrowgreenbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/flatarrowgreenbox.png'))
         elif close_pos == "FLAT":
-            w.setIcon(QIcon('flatarrowflatbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/flatarrowflatbox.png'))
         elif close_pos == "DOWN":
-            w.setIcon(QIcon('flatarrowredbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/flatarrowredbox.png'))
     elif open_pos == "DOWN":
         if close_pos == "UP":
-            w.setIcon(QIcon('redarrowgreenbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/redarrowgreenbox.png'))
         elif close_pos == "FLAT":
-            w.setIcon(QIcon('redarrowflatbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/redarrowflatbox.png'))
         elif close_pos == "DOWN":
-            w.setIcon(QIcon('redarrowredbox.png'))
+            w.setIcon(QIcon(currentdir + 'icons/redarrowredbox.png'))
     # returns a tablewidgetitem containing the new icon
     return w
 
@@ -324,10 +344,10 @@ def show_graph(ticker, title: str, volume: bool, non_trading: bool):
         non_trading : bool
             Include non-trading days in the chart? (I don't know why you'd do this)
     """
-    # retrieves user's chart style preferences from settings.xml
-    up_color = getXMLData('settings.xml', 'upcolor')
-    down_color = getXMLData('settings.xml', 'downcolor')
-    base_style = getXMLData('settings.xml', 'basestyle')
+    # retrieves user's chart style preferences from assets/settings.xml
+    up_color = getXMLData('assets/settings.xml', 'upcolor')
+    down_color = getXMLData('assets/settings.xml', 'downcolor')
+    base_style = getXMLData('assets/settings.xml', 'basestyle')
 
     # creates a chart style based on the user's settings
     mc = mpf.make_marketcolors(up=up_color[0].text.lower(), down=down_color[0].text.lower(),inherit=True)
@@ -361,19 +381,27 @@ def retranslatePortfolioDialogUi(self):
         
 
 def update_portfolio_nav():
-    """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) - 
-    (1.5 * value of all short positions)."""
+    """
+    Updates the user's NAV tab. Buying power is calculated as 
+    cash + (.5 * value of all long positions) - 
+    (1.5 * value of all short positions).
+    """
     
     # sets buying power to user's cash
     newVal = float(portfolio_amts[0].text)
     liabilities = 0
     assets = 0
+    
+    # for each stock in the portfolio, get its price and check if it's held long or sold short
     for i in range(1, len(portfolio_tickers)):
         price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
+
         if int(portfolio_amts[i].text) > 0:
+            # if it's long, add its value to the new value and to the assets tally
             newVal += float(price) * int(portfolio_amts[i].text)
             assets += float(price) * float(portfolio_amts[i].text)
         elif int(portfolio_amts[i].text) < 0:
+            # if it's short, subtract its value from the new value and add to the liabilities tally
             newVal -= float(price) * int(portfolio_amts[i].text)
             liabilites += float(price) * float(portfolio_amts[i].text)
 
@@ -434,18 +462,21 @@ def get_wallet_bp() -> float:
 
 def getXMLData(file, keyword):
     """Returns a ResultSet containing all instances of the given keyword in the given file"""
-    return BeautifulSoup(open(file, 'r').read(), "xml").find_all(keyword)
+    currentdir = os.getcwd() + '\paper-trading-sim\\'
+    
+    return BeautifulSoup(open(currentdir +  file, 'r').read(), "xml").find_all(keyword)
+    
 
 
 def applySettingsChanges():
-    """Updates settings.xml with the currently selected settings in the GUI"""
+    """Updates assets/settings.xml with the currently selected settings in the GUI"""
     # gets currently selected settings
     up = settings_dialog.up_color_combobox.currentText()
     down = settings_dialog.down_color_combobox.currentText()
     style = settings_dialog.chart_style_combobox.currentText()
 
     # parses XML file into an ElementTree
-    tree = et.parse('settings.xml')
+    tree = et.parse('assets/settings.xml')
 
     # replaces old data in the file with the current data
     for upcolor in tree.getroot().iter('upcolor'):
@@ -457,7 +488,7 @@ def applySettingsChanges():
     for basestyle in tree.getroot().iter('basestyle'):
         basestyle.text = style
 
-    tree.write('settings.xml')
+    tree.write('assets/settings.xml')
 
 
 def stockinfo_searchbar_click(dialog: QDialog):
@@ -597,7 +628,7 @@ app = QApplication(sys.argv)
 widget = QTabWidget()
 widget.setWindowTitle("Ray's Paper Trading Game")
 
-splash = QSplashScreen(QPixmap('splash.png'))
+splash = QSplashScreen(QPixmap(currentdir + 'splashscreen-images/splash.png'))
 progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
 
@@ -620,24 +651,24 @@ progressBar.setValue(30)
 
 progressBar.setValue(40)
 
-up_color = getXMLData('settings.xml', 'upcolor')
-down_color = getXMLData('settings.xml', 'downcolor')
-base_style = getXMLData('settings.xml', 'basestyle')
+up_color = getXMLData('assets\settings.xml', 'upcolor')
+down_color = getXMLData('assets\settings.xml', 'downcolor')
+base_style = getXMLData('assets\settings.xml', 'basestyle')
 
-portfolio_tickers = getXMLData('portfolio.xml', 'name')
-portfolio_asset_types = getXMLData('portfolio.xml', 'type')
-portfolio_amts = getXMLData('portfolio.xml', 'amount')
-purchase_prices = getXMLData('portfolio.xml', 'costbasis')
+portfolio_tickers = getXMLData('assets\portfolio.xml', 'name')
+portfolio_asset_types = getXMLData('assets\portfolio.xml', 'type')
+portfolio_amts = getXMLData('assets\portfolio.xml', 'amount')
+purchase_prices = getXMLData('assets\portfolio.xml', 'costbasis')
 
-wallet_tickers = getXMLData('wallet.xml', 'name')
-wallet_amts = getXMLData('wallet.xml', 'amount')
-wallet_costbases = getXMLData('wallet.xml', 'costbasis')
+wallet_tickers = getXMLData('assets\wallet.xml', 'name')
+wallet_amts = getXMLData('assets\wallet.xml', 'amount')
+wallet_costbases = getXMLData('assets\wallet.xml', 'costbasis')
 
-watchlist_tickers = getXMLData('watchlist.xml', 'name')
+watchlist_tickers = getXMLData('assets\watchlist.xml', 'name')
 
 
-all_tickers_list = pd.read_csv("stock_list.csv")['Symbol'].tolist()
-all_names_list = pd.read_csv("stock_list.csv")['Name'].tolist()
+all_tickers_list = pd.read_csv(currentdir + "assets\stock_list.csv")['Symbol'].tolist()
+all_names_list = pd.read_csv(currentdir + "assets\stock_list.csv")['Name'].tolist()
 all_tickers_list[5023] = 'NAN'
 
 for i in range(len(all_tickers_list)):
@@ -662,7 +693,7 @@ for i in range(1, len(wallet_amts)):
 
 
 # add genius font to database
-QFontDatabase.addApplicationFont('genius.ttf')
+QFontDatabase.addApplicationFont('fonts/genius.ttf')
 
 progressBar.setValue(50)
 

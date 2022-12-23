@@ -22,7 +22,7 @@ import os
 
 download_is_used = Event()
 download_is_used.clear()
-currentdir = os.getcwd() + '\paper-trading-sim\\'
+currentdir = os.getcwd() + '\\'
 
 def spy_button_clicked():
     """Is called when the "Chart SPY" button is clicked. Charts SPY with the current user settings"""
@@ -456,15 +456,14 @@ def get_portfolio_bp() -> float:
 
 
 def get_wallet_bp() -> float:
-
     return wallet_cash * 10
 
 
 def getXMLData(file, keyword):
     """Returns a ResultSet containing all instances of the given keyword in the given file"""
-    currentdir = os.getcwd() + '\paper-trading-sim\\'
+    currentdir = os.getcwd()
     
-    return BeautifulSoup(open(currentdir +  file, 'r').read(), "xml").find_all(keyword)
+    return BeautifulSoup(open(currentdir + '\\' +  file, 'r').read(), "xml").find_all(keyword)
     
 
 

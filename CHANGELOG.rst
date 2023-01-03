@@ -1,5 +1,14 @@
 Changelog
 =========
+0.10.0
+------
+- fixed slow load times for stock and ETF information
+- fixed bug that caused game to crash when downloading crypto prices
+- stock information tab is now implemented and includes equity and company information,
+  mutual fund holders, news, analyst recommendations, institutional holders, balance sheet
+  info, and revenue/earnings history & predictions
+- fixed bug that stopped stock and ETF information from clearing once a new equity was searched for
+- AI model now looks for CSV file containing stock price data in the right place
 
 0.9.0
 -----

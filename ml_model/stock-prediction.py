@@ -11,7 +11,7 @@ def input_data(stock_name):
     stock_df = pd.DataFrame(yf.download(stock_name))
     stock_df = stock_df.reset_index(level=0)
     stock_df = stock_df.drop(['Adj Close', 'Open', 'High', 'Low', 'Volume'], axis=1)
-    stock_df.to_csv('out.csv', index=False)
+    stock_df.to_csv('ml_model/out.csv', index=False)
 
     
 
@@ -91,7 +91,7 @@ class ModelAccessor():
         model = GRU(input_dim=1, hidden_dim=32, output_dim=1, num_layers=2)
 
         # THE MODEL HAS BEEN LOADED
-        model = torch.load('sussy.model')
+        model = torch.load('ml_model/sussy.model')
         model.eval()
 
         # make predictions
@@ -104,5 +104,5 @@ class ModelAccessor():
         return y_test_pred
 
 ma = ModelAccessor()
-input_data('UVXY')
-print(ma.runPredictions("out.csv", 5, 30))
+input_data('AAPL')
+print(ma.runPredictions("ml_model/out.csv", 5, 30))

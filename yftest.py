@@ -1,25 +1,28 @@
 # Started by Ray Ikome on 11/16/22
-
-from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries
-from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
-                                QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox
-                                , QApplication, QProgressBar, QVBoxLayout, QHeaderView, QTableView, QAbstractButton )
-from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon 
-from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel
-from locale import atof, setlocale, LC_NUMERIC
-import yfinance as yf
 import sys
-import mplfinance as mpf
+from locale import atof, setlocale, LC_NUMERIC
 from threading import Thread, Event
 import time
-from bs4 import BeautifulSoup
-import xml.etree.ElementTree as et
 import pandas as pd
-from dependencies import autocomplete as ac
 import os
 
+from PySide6.QtCharts import QChart, QChartView, QPieSlice, QPieSeries, QLineSeries, QDateTimeAxis, QValueAxis, QAbstractAxis, QBarSeries, QBarSet
+from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget, QTableWidgetItem, QAbstractItemView,
+                                QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox, QRadioButton, QCalendarWidget, QCheckBox, QSizePolicy
+                                , QApplication, QProgressBar, QVBoxLayout, QHeaderView, QTableView, QScrollArea, QButtonGroup )
+from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QPainter, QColor
+from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel, QDateTime, Qt, SIGNAL
+import yfinance as yf
+import mplfinance as mpf
+from bs4 import BeautifulSoup
+import xml.etree.ElementTree as et
+
+from dependencies import autocomplete as ac
 
 
+tab2_isloaded = False
+tab3_isloaded = False
+tab4_isloaded = False
 download_is_used = Event()
 download_is_used.clear()
 currentdir = os.getcwd() + '\\'
@@ -64,6 +67,8 @@ def update_ui():
         elif widget.currentWidget() == wallet_dialog:
             update_wallet_table()
             time.sleep(5)
+        else:
+            time.sleep(1)
         
         
 def update_portfolio_piechart():
@@ -119,8 +124,12 @@ def update_wallet_table():
 
             # get the current price and the price it last closed at
             ticker = yf.download(tickers=wallet_tickers[i].text, period='5d')
-            ticker_current = ticker.iloc[4][3]
-            ticker_last_close = ticker.iloc[3][3]
+            try:
+                ticker_current = ticker.iloc[4][3]
+                ticker_last_close = ticker.iloc[3][3]
+            except IndexError:
+                ticker_current = ticker.iloc[3][3]
+                ticker_last_close = ticker.iloc[2][3]
 
             # calculate the return since the position was opened in dollar and percent terms
             total_return = (ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)
@@ -285,9 +294,14 @@ def updateTickerIcon(ticker) -> QTableWidgetItem:
     """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
     w = QTableWidgetItem()
-    ticker_open = ticker.iloc[4][0]
-    ticker_current = ticker.iloc[4][3]
-    ticker_last_close = ticker.iloc[3][3]
+    try:
+        ticker_open = ticker.iloc[4][0]
+        ticker_current = ticker.iloc[4][3]
+        ticker_last_close = ticker.iloc[3][3]
+    except IndexError:
+        ticker_open = ticker.iloc[3][0]
+        ticker_current = ticker.iloc[3][3]
+        ticker_last_close = ticker.iloc[2][3]
 
     # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
@@ -466,7 +480,6 @@ def getXMLData(file, keyword):
     return BeautifulSoup(open(currentdir + '\\' +  file, 'r').read(), "xml").find_all(keyword)
     
 
-
 def applySettingsChanges():
     """Updates assets/settings.xml with the currently selected settings in the GUI"""
     # gets currently selected settings
@@ -491,15 +504,28 @@ def applySettingsChanges():
 
 
 def stockinfo_searchbar_click(dialog: QDialog):
+    global tab2_isloaded
+    global tab3_isloaded
+    tab2_isloaded = False
+    tab3_isloaded = False
     ticker = ''
     i = 0
-    while stockinfo_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
-        ticker += stockinfo_dialog.search_bar_groupbox.searchBar.text()[i]
+    while stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i] != ' ':
+        ticker += stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i]
         i += 1
     
-    ticker_info = yf.Ticker(ticker).info
+    yf_ticker = yf.Ticker(ticker)
+    ticker_info = yf.Ticker(ticker).get_info()
+    ticker_news = yf.Ticker(ticker).get_news()
+    
     if(ticker_info['quoteType'] == 'ETF'):
-        setup_etf_info(ticker_info)
+        stockinfo_dialog.setTabEnabled(1, False)
+        stockinfo_dialog.setTabEnabled(2, False)
+        setup_etf_info(ticker_info, ticker_news)
+    elif(ticker_info['quoteType'] == 'EQUITY'):
+        stockinfo_dialog.setTabEnabled(1, True)
+        stockinfo_dialog.setTabEnabled(2, True)
+        setup_stock_info(yf_ticker)
 
 
 def get_etf_weights(ticker_info: dict) -> list:
@@ -518,31 +544,53 @@ def get_etf_weights(ticker_info: dict) -> list:
     return weights_list
 
 
-def setup_etf_info(ticker_info: dict):
-    stockinfo_dialog.about_groupbox.setVisible(True)
-    stockinfo_dialog.asset_info_groupbox.setVisible(True)
-    stockinfo_dialog.weights_holdings_groupbox.setVisible(True)
+def clear_layout(layout: QVBoxLayout):
+    for i in reversed(range(layout.count())): 
+        layout.itemAt(i).widget().setParent(None)
 
+
+def setup_etf_info(ticker_info: dict, ticker_news: dict):
+    stockinfo_dialog_main.about_groupbox.setVisible(True)
+    stockinfo_dialog_main.asset_info_groupbox.setVisible(True)
+    stockinfo_dialog_main.news_groupbox.setVisible(True)
+
+    clear_layout(about_scrollarea_widget.layout())
+    clear_layout(assetinfo_scrollarea_widget.layout())
+    clear_layout(stockinfo_dialog_main.news_groupbox.layout())
     etf_weights = get_etf_weights(ticker_info)
 
+    full_name_label = QLabel(f"Full Name: {ticker_info['longName']}", about_scrollarea_widget)
+    full_name_label.adjustSize()
 
-    full_name_label = QLabel(f"Full Name: {ticker_info['longName']}", stockinfo_dialog.about_groupbox)
-    
-    category_label = QLabel(f"Category: {ticker_info['category']}", stockinfo_dialog.about_groupbox)
+    full_name_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
+    full_name_label.setStyleSheet("border:1px solid rgb(0, 255, 0);")
 
-    exchange_label = QLabel(f"Exchange: {ticker_info['exchange']}", stockinfo_dialog.about_groupbox)
-    
-    market_label = QLabel(f"Market: {ticker_info['market']}", stockinfo_dialog.about_groupbox)
+    category_label = QLabel(f"Category: {ticker_info['category']}", about_scrollarea_widget)
+    category_label.adjustSize()
+    category_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
+    category_label.setStyleSheet("border:1px solid rgb(0, 255, 0);")
+
+    exchange_label = QLabel(f"Exchange: {ticker_info['exchange']}", about_scrollarea_widget)
+    exchange_label.adjustSize()
+    exchange_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
+
+    market_label = QLabel(f"Market: {ticker_info['market']}", about_scrollarea_widget)
+    market_label.adjustSize()
+    market_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
 
     total_assets_label = QLabel(f"Total Assets: {ticker_info['totalAssets']}")
+    total_assets_label.adjustSize()
+    total_assets_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
 
-    description_label = QLabel(f"Description: " + ticker_info['longBusinessSummary'], stockinfo_dialog.about_groupbox)
+    description_label = QLabel(f"Description: " + ticker_info['longBusinessSummary'], about_scrollarea_widget)
     description_label.adjustSize()
     description_label.setWordWrap(True)
+    description_label.setStyleSheet("border:1px solid rgb(0, 255, 0);")
 
     date_inception = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ticker_info['fundInceptionDate']))
-    inception_label = QLabel(f"Date of Inception: " + date_inception, stockinfo_dialog.about_groupbox)
-
+    inception_label = QLabel(f"Date of Inception: " + date_inception, about_scrollarea_widget)
+    inception_label.adjustSize()
+    inception_label.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed))
     weights_piechart = QPieSeries()
     
     for i in range(len(etf_weights)):
@@ -555,69 +603,517 @@ def setup_etf_info(ticker_info: dict):
     weights_chart.setTitle(f"{ticker_info['symbol']} Holdings by Sector")
     weights_chart.setVisible(True)
 
-    current_price_label = QLabel(f"Current Price: {ticker_info['regularMarketPrice']}", stockinfo_dialog.asset_info_groupbox)
-    open_price_label = QLabel(f"\tOpen: {ticker_info['open']}", stockinfo_dialog.asset_info_groupbox)
-    high_price_label = QLabel(f"\tHigh: {ticker_info['dayHigh']}", stockinfo_dialog.asset_info_groupbox)
-    low_price_label = QLabel(f"\tLow: {ticker_info['dayLow']}", stockinfo_dialog.asset_info_groupbox)
-    close_price_label = QLabel(f"\tLast Close: {ticker_info['previousClose']}", stockinfo_dialog.asset_info_groupbox)
-    nav_price_label = QLabel(f"NAV Price: {ticker_info['navPrice']}", stockinfo_dialog.asset_info_groupbox)
+    weights_chartview = QChartView(weights_chart)
+    weights_chartview.adjustSize()
+    weights_chartview.setStyleSheet("border:1px solid rgb(0, 255, 0);")
+
+    current_price_label = QLabel(f"Current Price: {ticker_info['regularMarketPrice']}", assetinfo_scrollarea_widget)
+    open_price_label = QLabel(f"\tOpen: {ticker_info['open']}", assetinfo_scrollarea_widget)
+    high_price_label = QLabel(f"\tHigh: {ticker_info['dayHigh']}", assetinfo_scrollarea_widget)
+    low_price_label = QLabel(f"\tLow: {ticker_info['dayLow']}", assetinfo_scrollarea_widget)
+    close_price_label = QLabel(f"\tLast Close: {ticker_info['previousClose']}", assetinfo_scrollarea_widget)
+    nav_price_label = QLabel(f"NAV Price: {ticker_info['navPrice']}", assetinfo_scrollarea_widget)
+
+    bid_label = QLabel(f"Bid: {ticker_info['bid']} ({ticker_info['bidSize']})", assetinfo_scrollarea_widget)
+    ask_label = QLabel(f"Ask: {ticker_info['ask']} ({ticker_info['askSize']})", assetinfo_scrollarea_widget)
+
+    volume_label = QLabel(f"Volume: {ticker_info['volume']}", assetinfo_scrollarea_widget)
+    avg_volume_label = QLabel(f"Average Volume (10d): {ticker_info['averageVolume10days']}", assetinfo_scrollarea_widget)
+    long_avg_volume_label = QLabel(f"Average Volume (1y): {ticker_info['averageVolume']} ", assetinfo_scrollarea_widget)
+
+
+    year_high_label = QLabel(f"52 Week High: {ticker_info['fiftyTwoWeekHigh']}", assetinfo_scrollarea_widget)
+    year_low_label = QLabel(f"52 Week Low: {ticker_info['fiftyTwoWeekLow']}", assetinfo_scrollarea_widget)
+
+    averages_label = QLabel("Price Averages: ", assetinfo_scrollarea_widget)
+    fifty_avg_label = QLabel(f"\t50d MA: {ticker_info['fiftyDayAverage']}", assetinfo_scrollarea_widget)
+    twohundred_avg_label = QLabel(f"\t200d MA: {ticker_info['twoHundredDayAverage']}", assetinfo_scrollarea_widget)
+
+    threeyear_return_label = QLabel(f"Three-Year CAGR: {ticker_info['threeYearAverageReturn'] * 100}% per annum", assetinfo_scrollarea_widget)
+    fiveyear_return_label = QLabel(f"Five-Year CAGR: {ticker_info['fiveYearAverageReturn'] * 100}% per annum", assetinfo_scrollarea_widget)
+
+    try:
+        dividend_label = QLabel(f"Trailing Annual Dividend Yield: {ticker_info['trailingAnnualDividendYield'] * 100}% per annum", assetinfo_scrollarea_widget)
+    except TypeError: # ETF does not pay a dividend
+        dividend_label = QLabel(f"Trailing Annual Dividend Yield: 0% per annum", assetinfo_scrollarea_widget)
+
+    dividend_rate_label = QLabel(f"Trailing Annual Dividend Rate: ${ticker_info['trailingAnnualDividendRate']}", assetinfo_scrollarea_widget)
+    current_div_label = QLabel(f"Current Dividend Yield: {ticker_info['yield']}", assetinfo_scrollarea_widget)
+
+    beta_3y_label = QLabel(f"3-Year Beta (Relative to SPY): {ticker_info['beta3Year']}", assetinfo_scrollarea_widget)
+
+
+    for i in range(len(ticker_news)):
+
+        l = QLabel(f"<a href=\"{ticker_news[i]['link']}\"> <font face=verdana size=1 color=black> {ticker_news[i]['title']}</font> </a> <br> <a>{ticker_news[i]['relatedTickers']} <br> {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ticker_news[i]['providerPublishTime']))} </a>")
+        l.setOpenExternalLinks(True)
+        l.setStyleSheet("""QToolTip { 
+                           font-size: 12px
+                           }""")
+        l.setToolTip(ticker_news[i]['link'])
+        stockinfo_dialog_main.news_groupbox.layout().addWidget(l)
+        
+
+
+    about_scrollarea_widget.layout().addWidget(full_name_label)
+    about_scrollarea_widget.layout().addWidget(category_label)
+    about_scrollarea_widget.layout().addWidget(exchange_label)
+    about_scrollarea_widget.layout().addWidget(market_label)
+    about_scrollarea_widget.layout().addWidget(total_assets_label)
+    about_scrollarea_widget.layout().addWidget(inception_label)
+    about_scrollarea_widget.layout().addWidget(description_label)
+    about_scrollarea_widget.layout().addWidget(weights_chartview)
+    about_scrollarea_widget.adjustSize()
+
+    assetinfo_scrollarea_widget.layout().addWidget(current_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(open_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(high_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(low_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(close_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(nav_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(bid_label)
+    assetinfo_scrollarea_widget.layout().addWidget(ask_label)
+    assetinfo_scrollarea_widget.layout().addWidget(volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(avg_volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(long_avg_volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(year_high_label)
+    assetinfo_scrollarea_widget.layout().addWidget(year_low_label)
+    assetinfo_scrollarea_widget.layout().addWidget(averages_label)
+    assetinfo_scrollarea_widget.layout().addWidget(fifty_avg_label)
+    assetinfo_scrollarea_widget.layout().addWidget(twohundred_avg_label)
+    assetinfo_scrollarea_widget.layout().addWidget(threeyear_return_label)
+    assetinfo_scrollarea_widget.layout().addWidget(fiveyear_return_label)
+    assetinfo_scrollarea_widget.layout().addWidget(dividend_label)
+    assetinfo_scrollarea_widget.layout().addWidget(dividend_rate_label)
+    assetinfo_scrollarea_widget.layout().addWidget(current_div_label)
+    assetinfo_scrollarea_widget.layout().addWidget(beta_3y_label)
     
-    bid_label = QLabel(f"Bid: {ticker_info['bid']} ({ticker_info['bidSize']})", stockinfo_dialog.asset_info_groupbox)
-    ask_label = QLabel(f"Ask: {ticker_info['ask']} ({ticker_info['askSize']})", stockinfo_dialog.asset_info_groupbox)
 
-    volume_label = QLabel(f"Volume: {ticker_info['volume']}", stockinfo_dialog.asset_info_groupbox)
-    avg_volume_label = QLabel(f"Average Volume (10d): {ticker_info['averageVolume10days']}", stockinfo_dialog.asset_info_groupbox)
-    long_avg_volume_label = QLabel(f"Average Volume (1y): {ticker_info['averageVolume']} ", stockinfo_dialog.asset_info_groupbox)
+def setup_stock_info(ticker: yf.Ticker):
+    t1 = time.perf_counter()
+    ticker_info = ticker.info
+    ticker_news = ticker.news
+    t2 = time.perf_counter()
+    print(f"{t2 - t1} seconds")
+    stockinfo_dialog_main.about_groupbox.setVisible(True)
+    stockinfo_dialog_main.asset_info_groupbox.setVisible(True)
+    stockinfo_dialog_main.news_groupbox.setVisible(True)
+    stockinfo_dialog_recs.analyst_rec_groupbox.setVisible(True)
+    stockinfo_dialog_recs.iandi_groupbox.setVisible(True)
+    stockinfo_dialog_recs.mutfund_groupbox.setVisible(True)
 
+    clear_layout(about_scrollarea_widget.layout())
+    clear_layout(assetinfo_scrollarea_widget.layout())
+    clear_layout(stockinfo_dialog_main.news_groupbox.layout())
+    clear_layout(stockinfo_dialog_recs.analyst_rec_groupbox.layout())
+    clear_layout(stockinfo_dialog_recs.iandi_groupbox.layout())
+    clear_layout(stockinfo_dialog_recs.mutfund_groupbox.layout())
 
-    year_high_label = QLabel(f"52 Week High: {ticker_info['fiftyTwoWeekHigh']}", stockinfo_dialog.asset_info_groupbox)
-    year_low_label = QLabel(f"52 Week Low: {ticker_info['fiftyTwoWeekLow']}", stockinfo_dialog.asset_info_groupbox)
-
-    averages_label = QLabel("Price Averages: ", stockinfo_dialog.asset_info_groupbox)
-    fifty_avg_label = QLabel(f"\t50d MA: {ticker_info['fiftyDayAverage']}", stockinfo_dialog.asset_info_groupbox)
-    twohundred_avg_label = QLabel(f"\t200d MA: {ticker_info['twoHundredDayAverage']}", stockinfo_dialog.asset_info_groupbox)
-
-    threeyear_return_label = QLabel(f"Three-Year CAGR: {ticker_info['threeYearAverageReturn'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
-    fiveyear_return_label = QLabel(f"Five-Year CAGR: {ticker_info['fiveYearAverageReturn'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
-    dividend_label = QLabel(f"Trailing Annual Dividend Yield: {ticker_info['trailingAnnualDividendYield'] * 100}% per annum", stockinfo_dialog.asset_info_groupbox)
-    dividend_rate_label = QLabel(f"Trailing Annual Dividend Rate: ${ticker_info['trailingAnnualDividendRate']}", stockinfo_dialog.asset_info_groupbox)
-    current_div_label = QLabel(f"Current Dividend Yield: {ticker_info['yield']}", stockinfo_dialog.asset_info_groupbox)
-
-    beta_3y_label = QLabel(f"3-Year Beta (Relative to SPY): {ticker_info['beta3Year']}", stockinfo_dialog.asset_info_groupbox)
-
-    stockinfo_dialog.about_groupbox.layout().addWidget(full_name_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(category_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(exchange_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(market_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(total_assets_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(inception_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(description_label)
-    stockinfo_dialog.about_groupbox.layout().addWidget(QChartView(weights_chart))
-
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(current_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(open_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(high_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(low_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(close_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(nav_price_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(bid_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(ask_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(volume_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(avg_volume_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(long_avg_volume_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(year_high_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(year_low_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(averages_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(fifty_avg_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(twohundred_avg_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(threeyear_return_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(fiveyear_return_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(dividend_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(dividend_rate_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(current_div_label)
-    stockinfo_dialog.asset_info_groupbox.layout().addWidget(beta_3y_label)
+    full_name_label = QLabel(f"Full Name: {ticker_info['longName']}", about_scrollarea_widget)
     
+    sector_label = QLabel(f"Sector: {ticker_info['sector']}: {ticker_info['industry']}", about_scrollarea_widget)
     
+    country_label = QLabel(f"Country: {ticker_info['country']}", about_scrollarea_widget)
+
+    description_label = QLabel(f"Description: " + ticker_info['longBusinessSummary'], about_scrollarea_widget)
+    
+    description_label.setWordWrap(True)
+
+    location_label = QLabel(f"Location: {ticker_info['city']}, {ticker_info['state']}", about_scrollarea_widget)
+
+    website_label =  QLabel(f"Website: <a href=\"{ticker_info['website']}\"> {ticker_info['website']} </a>", about_scrollarea_widget)
+
+    current_price_label = QLabel(f"Current Price: {ticker_info['regularMarketPrice']}", assetinfo_scrollarea_widget)
+    open_price_label = QLabel(f"\tOpen: {ticker_info['open']}", assetinfo_scrollarea_widget)
+    high_price_label = QLabel(f"\tHigh: {ticker_info['dayHigh']}", assetinfo_scrollarea_widget)
+    low_price_label = QLabel(f"\tLow: {ticker_info['dayLow']}", assetinfo_scrollarea_widget)
+    close_price_label = QLabel(f"\tLast Close: {ticker_info['previousClose']}", assetinfo_scrollarea_widget)
+    
+    bid_label = QLabel(f"Bid: {ticker_info['bid']} ({ticker_info['bidSize']})", assetinfo_scrollarea_widget)
+    ask_label = QLabel(f"Ask: {ticker_info['ask']} ({ticker_info['askSize']})", assetinfo_scrollarea_widget)
+
+    volume_label = QLabel(f"Volume: {ticker_info['volume']}", assetinfo_scrollarea_widget)
+    avg_volume_label = QLabel(f"Average Volume (10d): {ticker_info['averageVolume10days']}", assetinfo_scrollarea_widget)
+    long_avg_volume_label = QLabel(f"Average Volume (1y): {ticker_info['averageVolume']} ", assetinfo_scrollarea_widget)
+
+
+    year_high_label = QLabel(f"52 Week High: {ticker_info['fiftyTwoWeekHigh']}", assetinfo_scrollarea_widget)
+    year_low_label = QLabel(f"52 Week Low: {ticker_info['fiftyTwoWeekLow']}", assetinfo_scrollarea_widget)
+
+    averages_label = QLabel("Price Averages: ", assetinfo_scrollarea_widget)
+    fifty_avg_label = QLabel(f"\t50d MA: {ticker_info['fiftyDayAverage']}", assetinfo_scrollarea_widget)
+    twohundred_avg_label = QLabel(f"\t200d MA: {ticker_info['twoHundredDayAverage']}", assetinfo_scrollarea_widget)
+
+
+    for news_item in ticker_news:
+
+        l = QLabel(f"<a href=\"{news_item['link']}\"> <font face=verdana size=1 color=black> {news_item['title']}</font> </a> <br> <a>{news_item['relatedTickers']} <br> {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(news_item['providerPublishTime']))} </a>")
+        l.setOpenExternalLinks(True)
+        l.setStyleSheet("""QToolTip { 
+                           font-size: 12px
+                           }""")
+        l.setToolTip(news_item['link'])
+        
+        stockinfo_dialog_main.news_groupbox.layout().addWidget(l)
+
+    about_scrollarea_widget.layout().addWidget(full_name_label)
+    about_scrollarea_widget.layout().addWidget(sector_label)
+    about_scrollarea_widget.layout().addWidget(country_label)
+    about_scrollarea_widget.layout().addWidget(description_label)
+    about_scrollarea_widget.layout().addWidget(location_label)
+    about_scrollarea_widget.layout().addWidget(website_label)
+
+    assetinfo_scrollarea_widget.layout().addWidget(current_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(open_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(high_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(low_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(close_price_label)
+    assetinfo_scrollarea_widget.layout().addWidget(bid_label)
+    assetinfo_scrollarea_widget.layout().addWidget(ask_label)
+    assetinfo_scrollarea_widget.layout().addWidget(volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(avg_volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(long_avg_volume_label)
+    assetinfo_scrollarea_widget.layout().addWidget(year_high_label)
+    assetinfo_scrollarea_widget.layout().addWidget(year_low_label)
+    assetinfo_scrollarea_widget.layout().addWidget(averages_label)
+    assetinfo_scrollarea_widget.layout().addWidget(fifty_avg_label)
+    assetinfo_scrollarea_widget.layout().addWidget(twohundred_avg_label)
+
+
+def stockinfo_dialog_changed(tab_id: int):
+    t = ''
+    i = 0
+    while stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i] != ' ':
+        t += stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i]
+        i += 1
+    
+    ticker = yf.Ticker(t)
+
+    global tab2_isloaded
+    global tab3_isloaded
+    global tab4_isloaded
+
+    if(tab_id == 1 and not tab2_isloaded):
+        ticker_recommendations = ticker.recommendations
+        ticker_instholders = ticker.institutional_holders
+        ticker_mutfundholders = ticker.mutualfund_holders
+
+        length = ticker_recommendations.count().iloc[0]
+        recs_number = min(10, length)
+        dates = list(ticker_recommendations.tail(10).index)
+
+        for i in range(recs_number):
+            date = dates[len(dates) - 1 - i].to_pydatetime()
+            firm = ticker_recommendations.iloc[length - 1 - i][0]
+            grade_to = ticker_recommendations.iloc[length - 1 - i][1]
+
+            l = QLabel(f"{firm}: {grade_to} <br> {date}")
+            stockinfo_dialog_recs.analyst_rec_groupbox.layout().addWidget(l)
+
+        for i in range(10):
+            holder = ticker_instholders.iloc[i][0]
+            shareno = ticker_instholders.iloc[i][1]
+            date_reported = ticker_instholders.iloc[i][2]
+            percent = ticker_instholders.iloc[i][3]
+            value = ticker_instholders.iloc[i][4]
+
+            l = QLabel(f"{holder}: {shareno} shares ({percent * 100}%) <br> {date_reported}")
+            stockinfo_dialog_recs.iandi_groupbox.layout().addWidget(l)
+
+        for i in range(10):
+            holder = ticker_mutfundholders.iloc[i][0]
+            shareno = ticker_mutfundholders.iloc[i][1]
+            date_reported = ticker_mutfundholders.iloc[i][2]
+            percent = ticker_mutfundholders.iloc[i][3]
+            value = ticker_mutfundholders.iloc[i][4]
+
+            l = QLabel(f"{holder}: {shareno} shares ({percent * 100}%) <br> {date_reported}")
+            stockinfo_dialog_recs.mutfund_groupbox.layout().addWidget(l)
+            
+            
+            tab2_isloaded = True
+
+    elif(tab_id == 2 and not tab3_isloaded):
+        t1 = time.perf_counter()
+        ticker_pts = ticker.get_analyst_price_target()
+        ticker_hist = ticker.history(period="2y", interval="1wk")
+        ticker_earnings_dates = ticker.get_earnings_dates()
+        ticker_qtr_earnings = ticker.get_earnings(freq="quarterly")
+        ticker_yr_earnings = ticker.get_earnings(freq="yearly")
+        ticker_yr_eps = ticker.get_financials().loc["BasicEPS"]
+        ticker_eps_forecast = ticker.get_earnings_forecast()
+        ticker_rev_forecast = ticker.get_rev_forecast()
+
+        ptchart.removeAxis(ptchart.axes(Qt.Orientation.Horizontal)[0])
+        ptchart.removeAxis(ptchart.axes(Qt.Orientation.Vertical)[0])
+
+        ptchart.removeAllSeries()
+
+        series = QLineSeries()
+        
+        series2 = QLineSeries()
+        
+        series3 = QLineSeries()
+
+        series4 = QLineSeries()
+
+        date_format = "yyyy-MM-dd hh:mm:ss"
+        for i in range(ticker_hist.count().iloc[0]):
+            series.append(float(QDateTime().fromString(str(ticker_hist.index[i])[0:19], date_format).toMSecsSinceEpoch()), ticker_hist.iloc[i][3])
+        series.append(float(QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()), ticker_pts.iloc[1][0])
+        series.setName("Current Price")
+        series.setColor(QColor("blue"))
+        
+        series2.setName("Worst Case")
+        series2.setColor(QColor("red"))
+
+        series3.setName("Mean Target Price")
+        series3.setColor(QColor("black"))
+        
+        series4.setName("Best Case")
+        series4.setColor(QColor("green"))
+
+        series2.append(float(QDateTime().currentDateTime().toMSecsSinceEpoch()), ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series2.append(float(QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()), ticker_pts.iloc[0][0])
+
+        series3.append(float(QDateTime().currentDateTime().toMSecsSinceEpoch()), ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series3.append(float(QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()), ticker_pts.iloc[2][0])
+
+        series4.append(float(QDateTime().currentDateTime().toMSecsSinceEpoch()), ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series4.append(float(QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()), ticker_pts.iloc[3][0])
+
+        ptchart.addSeries(series)
+        ptchart.addSeries(series2)
+        ptchart.addSeries(series3)
+        ptchart.addSeries(series4)
+        
+
+        ptchart.createDefaultAxes()
+        ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
+
+        x_axis = QDateTimeAxis()
+        x_axis.setTickCount(7)
+        x_axis.setFormat("MM-dd-yyyy")
+        x_axis.setTitleText("Date")
+        x_axis.setVisible(True)
+
+        ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
+        series.attachAxis(x_axis)
+
+        clear_layout(pt_label_container.layout())
+        pt_label_container.layout().addWidget(QLabel(f"Current Price: {ticker_pts.iloc[1][0]}"))
+        pt_label_container.layout().addWidget(QLabel(f"Target Low Price: {ticker_pts.iloc[0][0]}"))
+        pt_label_container.layout().addWidget(QLabel(f"Target Mean Price: {ticker_pts.iloc[2][0]}"))
+        pt_label_container.layout().addWidget(QLabel(f"Target High Price: {ticker_pts.iloc[3][0]}"))
+        pt_label_container.layout().addWidget(QLabel(f"Number of Analyst Opinions: {ticker_pts.iloc[4][0]}"))
+        t2 = time.perf_counter()
+        print(f"{t2 - t1} seconds")
+
+        qtr_earnings_chart.removeAllSeries()
+        series = QBarSeries()
+
+        set1 = QBarSet("Actual")
+        set2 = QBarSet("Estimate")
+        earnings_trend_max = 0
+        earnings_trend_min = 0
+
+        qtr_earnings_table.setRowCount(6)
+        qtr_earnings_table.setColumnCount(3)
+        qtr_earnings_table.setHorizontalHeaderItem(0, QTableWidgetItem("Actual"))
+        qtr_earnings_table.setHorizontalHeaderItem(1, QTableWidgetItem("Expected"))
+        qtr_earnings_table.setHorizontalHeaderItem(2, QTableWidgetItem("Surprise"))
+        for i in range (qtr_earnings_table.columnCount()):
+            
+            qtr_earnings_table.horizontalHeaderItem(i).setFont(QFont('arial', 10))
+            
+
+        for i in range (qtr_earnings_table.rowCount()):
+            qtr_earnings_table.setVerticalHeaderItem(i, QTableWidgetItem(str(i + 1)))
+            qtr_earnings_table.verticalHeaderItem(i).setFont(QFont('arial', 10))
+
+        set_number = ticker_earnings_dates.count()[0]
+        for i in range(set_number):
+            reported = ticker_earnings_dates.iloc[ticker_earnings_dates.index.size - 1 - i][1]
+            set1.append(reported)
+            if(reported > earnings_trend_max):
+                earnings_trend_max = reported
+            if(reported < earnings_trend_min):
+                earnings_trend_min = reported
+
+            estimate = ticker_earnings_dates.iloc[ticker_earnings_dates.index.size - 1 - i][0]
+            if(estimate > earnings_trend_max):
+                earnings_trend_max = estimate
+            if(estimate < earnings_trend_min):
+                earnings_trend_min = estimate
+            set2.append(estimate)
+
+            qtr_earnings_table.setItem(i, 0, QTableWidgetItem(str(reported)))
+            qtr_earnings_table.setItem(i, 1, QTableWidgetItem(str(estimate)))
+            qtr_earnings_table.setItem(i, 2, QTableWidgetItem(str(reported - estimate)))
+
+        
+
+        series.append(set1)
+        series.append(set2)
+        qtr_earnings_chart.addSeries(series)
+        qtr_earnings_chart.createDefaultAxes()
+        qtr_earnings_chart.axes(Qt.Orientation.Vertical)[0].setRange(earnings_trend_min * 1.1, earnings_trend_max * 1.1)
+
+        
+
+        
+        qtr_revtrend_chart.removeAllSeries()
+        s = QBarSeries()
+        set = QBarSet("Revenue")
+        number = ticker_qtr_earnings.count()[0]
+        qtr_revtrend_max = 0
+        qtr_revtrend_min = 0
+        for i in range(number):
+            set.append(ticker_qtr_earnings.iloc[i][0])
+            if(ticker_qtr_earnings.iloc[i][0] > qtr_revtrend_max):
+                qtr_revtrend_max = ticker_qtr_earnings.iloc[i][0]
+            if(ticker_qtr_earnings.iloc[i][0] < qtr_revtrend_min):
+                qtr_revtrend_min = ticker_qtr_earnings.iloc[i][0]
+            qtr_revtrend_label_container.layout().addWidget(QLabel(f"{ticker_qtr_earnings.index[i]}: {ticker_qtr_earnings.iloc[i][0]}"))
+
+        set.setPen(QColor("green"))
+        set.append(ticker_rev_forecast.iloc[0][0])
+        qtr_revtrend_label_container.layout().addWidget(QLabel(f"{str(ticker_rev_forecast.iloc[0][7])}: {ticker_rev_forecast.iloc[0][0]}"))
+
+        set.append(ticker_rev_forecast.iloc[1][0])
+        qtr_revtrend_label_container.layout().addWidget(QLabel(f"{str(ticker_rev_forecast.iloc[1][7])}: {ticker_rev_forecast.iloc[1][0]}"))
+
+        s.append(set)
+        
+        qtr_revtrend_chart.addSeries(s)
+        qtr_revtrend_chart.createDefaultAxes()
+        qtr_revtrend_chart.axes(Qt.Orientation.Vertical)[0].setRange(qtr_revtrend_min * 1.1, qtr_revtrend_max * 1.1)
+
+        yr_earnings_chart.removeAllSeries()
+        clear_layout(yr_earnings_label_container.layout())
+        s = QBarSeries()
+        set = QBarSet("Earnings")
+        number = ticker_yr_eps.index.size
+        yr_eps_max = 0
+        yr_eps_min = 0
+
+        for i in range(number):
+            eps = ticker_yr_eps[number - 1 - i]
+            if(eps > yr_eps_max):
+                yr_eps_max = eps
+            if(eps < yr_eps_min):
+                yr_eps_min = eps
+            set.append(eps)
+            yr_earnings_label_container.layout().addWidget(QLabel(f"{str(ticker_yr_eps.index[number - 1 - i])[0:4]}: {eps}"))
+
+        set.append(ticker_eps_forecast.iloc[2][0])
+        if(ticker_eps_forecast.iloc[2][0] > yr_eps_max):
+            yr_eps_max = ticker_eps_forecast.iloc[2][0]
+        if(ticker_eps_forecast.iloc[2][0] < yr_eps_min):
+            yr_eps_min = ticker_eps_forecast.iloc[2][0]
+        yr_earnings_label_container.layout().addWidget(QLabel(f"{str(ticker_eps_forecast.iloc[2][7])[0:4]}: {ticker_eps_forecast.iloc[2][0]}"))
+
+        set.append(ticker_eps_forecast.iloc[3][0])
+        if(ticker_eps_forecast.iloc[3][0] > yr_eps_max):
+            yr_eps_max = ticker_eps_forecast.iloc[3][0]
+        if(ticker_eps_forecast.iloc[3][0] < yr_eps_min):
+            yr_eps_min = ticker_eps_forecast.iloc[3][0]
+        yr_earnings_label_container.layout().addWidget(QLabel(f"{str(ticker_eps_forecast.iloc[3][7])[0:4]}: {ticker_eps_forecast.iloc[3][0]}"))
+
+        s.append(set)
+        yr_earnings_chart.addSeries(s)
+        yr_earnings_chart.createDefaultAxes()
+        yr_earnings_chart.axes(Qt.Orientation.Vertical)[0].setRange(yr_eps_min * 1.1, yr_eps_max * 1.1)
+
+
+
+        yr_revtrend_chart.removeAllSeries()
+        clear_layout(yr_revtrend_label_container.layout())
+        s = QBarSeries()
+        set = QBarSet("Revenue")
+        number = ticker_yr_earnings.count()[0]
+
+        yr_revtrend_max = 0
+        yr_revtrend_min = 0
+        for i in range(number):
+            set.append(ticker_yr_earnings.iloc[i][0])
+            if(ticker_yr_earnings.iloc[i][0] > yr_revtrend_max):
+                yr_revtrend_max = ticker_yr_earnings.iloc[i][0]
+            if(ticker_yr_earnings.iloc[i][0] < yr_revtrend_min):
+                yr_revtrend_min = ticker_yr_earnings.iloc[i][0]
+            yr_revtrend_label_container.layout().addWidget(QLabel(f"{ticker_yr_earnings.index[i]}: {ticker_yr_earnings.iloc[i][0]}"))
+
+        set.setPen(QColor("green"))
+
+        set.append(ticker_rev_forecast.iloc[2][0])
+        yr_revtrend_label_container.layout().addWidget(QLabel(f"{str(ticker_rev_forecast.iloc[2][7])[0:4]}: {ticker_rev_forecast.iloc[2][0]}"))
+        if(ticker_rev_forecast.iloc[2][0] > yr_revtrend_max):
+            yr_revtrend_max = ticker_rev_forecast.iloc[2][0]
+        if(ticker_rev_forecast.iloc[2][0] < yr_revtrend_min):
+            yr_revtrend_min = ticker_rev_forecast.iloc[2][0]
+
+        set.append(ticker_rev_forecast.iloc[3][0])
+        yr_revtrend_label_container.layout().addWidget(QLabel(f"{str(ticker_rev_forecast.iloc[3][7])[0:4]}: {ticker_rev_forecast.iloc[3][0]}"))
+
+        if(ticker_rev_forecast.iloc[3][0] > yr_revtrend_max):
+            yr_revtrend_max = ticker_rev_forecast.iloc[3][0]
+        if(ticker_rev_forecast.iloc[3][0] < yr_revtrend_min):
+            yr_revtrend_min = ticker_rev_forecast.iloc[3][0]
+
+        s.append(set)
+        
+        yr_revtrend_chart.addSeries(s)
+        yr_revtrend_chart.createDefaultAxes()
+        yr_revtrend_chart.axes(Qt.Orientation.Vertical)[0].setRange(yr_revtrend_min * 1.1, yr_revtrend_max * 1.1)
+        
+    
+        tab3_isloaded = True
+    elif(tab_id == 3 and not tab4_isloaded):
+        t1 = time.perf_counter()
+        ticker_financials = ticker.get_financials()
+        financials_table.setRowCount(ticker_financials.index.size)
+        financials_table.setColumnCount(5)
+
+        for i in range(ticker_financials.index.size):
+            financials_table.setVerticalHeaderItem(i, QTableWidgetItem(ticker_financials.index[i]))
+            financials_table.verticalHeaderItem(i).setFont(QFont('arial', 10))
+
+        for i in range(4):
+            for j in range(ticker_financials.index.size):
+                financials_table.setItem(j, i, QTableWidgetItem(str(ticker_financials.iloc[j][3 - i])))
+
+        checkboxes = QButtonGroup()
+
+        for i in range(ticker_financials.index.size):
+            checkbox = QCheckBox()
+            checkboxes.addButton(checkbox)
+            
+            checkbox.clicked.connect(on_financials_checkbox_click)
+            
+            financials_table.setCellWidget(i, 4, checkbox)
+            
+
+        t2 = time.perf_counter()
+        print(f"{t2 - t1} seconds")
+        tab4_isloaded = True
+
+
+def on_financials_checkbox_click():
+    financials_chart.removeAllSeries()
+    series = QBarSeries()
+    for i in range(financials_table.rowCount()):
+        box = financials_table.cellWidget(i, 4)
+        if box.isChecked():
+            set = QBarSet(financials_table.verticalHeaderItem(i).text())
+            for j in range(4):
+                
+                val = float(financials_table.item(i, j).text())
+                set.append(val)
+            series.append(set)
+    financials_chart.addSeries(series)
+    financials_chart.createDefaultAxes()
+
+
 def close_event(event):
     """Function that is called when the user exits the game. WIP"""
     print("closed")
@@ -686,7 +1182,10 @@ wallet_nav = float(wallet_amts[0].text)
 wallet_cash = wallet_nav
 
 for i in range(1, len(wallet_amts)):
-    price = yf.download(tickers=wallet_tickers[i].text, period='5d').iloc[4][3]
+    try:
+        price = yf.download(tickers=wallet_tickers[i].text, period='5d').iloc[4][3]
+    except IndexError:
+        price = yf.download(tickers=wallet_tickers[i].text, period='5d').iloc[3][3]
     wallet_nav += float(price) * float(wallet_amts[i].text)
 
 
@@ -829,6 +1328,7 @@ portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(0, QT
 portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
 portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
 portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
+
 for i in range (4):
     portfolio_dialog.watchlist_groupbox.watchlist_view.horizontalHeaderItem(i).setFont(QFont('arial', 10))
 for i in range (portfolio_dialog.watchlist_groupbox.watchlist_view.rowCount()):
@@ -901,7 +1401,7 @@ if(cash_amount != 0):
 
 portfolio_dialog.chart_view = QChartView(chart)
 portfolio_dialog.chart_view.setParent(portfolio_dialog)
-portfolio_dialog.chart_view.setGeometry(800, 5, 400, 250)
+portfolio_dialog.chart_view.setGeometry(780, 2, 500, 270)
 portfolio_dialog.chart_view.setVisible(True)
 
 retranslatePortfolioDialogUi(portfolio_dialog)
@@ -1046,47 +1546,267 @@ trade_dialog.setStyleSheet('background-color: deepskyblue;')
 # stock info dialog #
 #####################
 
-stockinfo_dialog = QDialog()
+stockinfo_dialog = QTabWidget()
 stockinfo_dialog.setStyleSheet('background-color: deepskyblue;')
 
-stockinfo_dialog.search_bar_groupbox = QGroupBox(stockinfo_dialog)
-stockinfo_dialog.search_bar_groupbox.setStyleSheet('background-color: white;')
-stockinfo_dialog.search_bar_groupbox.setTitle("Find a Stock")
-stockinfo_dialog.search_bar_groupbox.setGeometry(10, 10, 960, 70)
+stockinfo_dialog_main = QDialog()
+stockinfo_dialog_main.setStyleSheet('background-color: deepskyblue')
+stockinfo_dialog_main.search_bar_groupbox = QGroupBox(stockinfo_dialog_main)
+stockinfo_dialog_main.search_bar_groupbox.setStyleSheet('background-color: white;')
+stockinfo_dialog_main.search_bar_groupbox.setTitle("Find a Stock")
+stockinfo_dialog_main.search_bar_groupbox.setGeometry(10, 10, 960, 70)
 
-stockinfo_dialog.search_bar_groupbox.searchBar = QLineEdit(stockinfo_dialog.search_bar_groupbox)
-stockinfo_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
-stockinfo_dialog.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: searchTextChanged(txt))
-stockinfo_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
-stockinfo_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
+stockinfo_dialog_main.search_bar_groupbox.searchBar = QLineEdit(stockinfo_dialog_main.search_bar_groupbox)
+stockinfo_dialog_main.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
+stockinfo_dialog_main.search_bar_groupbox.searchBar.textChanged.connect(lambda txt: searchTextChanged(txt))
+stockinfo_dialog_main.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
+stockinfo_dialog_main.search_bar_groupbox.searchBar.setCompleter(completer)
 
-stockinfo_dialog.search_bar_groupbox.search_button = QPushButton(stockinfo_dialog.search_bar_groupbox)
-stockinfo_dialog.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
-stockinfo_dialog.search_bar_groupbox.search_button.setText("Show Info")
-stockinfo_dialog.search_bar_groupbox.search_button.clicked.connect(lambda: stockinfo_searchbar_click(stockinfo_dialog))
+stockinfo_dialog_main.search_bar_groupbox.search_button = QPushButton(stockinfo_dialog_main.search_bar_groupbox)
+stockinfo_dialog_main.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
+stockinfo_dialog_main.search_bar_groupbox.search_button.setText("Show Info")
+stockinfo_dialog_main.search_bar_groupbox.search_button.clicked.connect(lambda: stockinfo_searchbar_click(stockinfo_dialog_main))
 
-stockinfo_dialog.asset_info_groupbox = QGroupBox(stockinfo_dialog)
-stockinfo_dialog.asset_info_groupbox.setStyleSheet('background-color: white')
-stockinfo_dialog.asset_info_groupbox.setTitle("Asset Profile")
-stockinfo_dialog.asset_info_groupbox.setGeometry(10, 90, 400, 550)
-stockinfo_dialog.asset_info_groupbox.setVisible(False)
-stockinfo_dialog.asset_info_groupbox.setLayout(QVBoxLayout())
+stockinfo_dialog_main.asset_info_groupbox = QGroupBox(stockinfo_dialog_main)
+stockinfo_dialog_main.asset_info_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_main.asset_info_groupbox.setTitle("Asset Profile")
+stockinfo_dialog_main.asset_info_groupbox.setGeometry(10, 90, 310, 550)
+stockinfo_dialog_main.asset_info_groupbox.setVisible(False)
+stockinfo_dialog_main.asset_info_groupbox.content_container = QScrollArea(stockinfo_dialog_main.asset_info_groupbox)
 
-stockinfo_dialog.about_groupbox = QGroupBox(stockinfo_dialog)
-stockinfo_dialog.about_groupbox.setStyleSheet('background-color: white')
-stockinfo_dialog.about_groupbox.setTitle("About the Asset")
-stockinfo_dialog.about_groupbox.setGeometry(420, 90, 400, 550)
-stockinfo_dialog.about_groupbox.setVisible(False)
-stockinfo_dialog.about_groupbox.setLayout(QVBoxLayout())
+assetinfo_scrollarea_widget = QWidget()
+assetinfo_scrollarea_widget.resize(300, 800)
+assetinfo_scrollarea_widget.setLayout(QVBoxLayout())
 
-stockinfo_dialog.weights_holdings_groupbox = QGroupBox(stockinfo_dialog)
-stockinfo_dialog.weights_holdings_groupbox.setStyleSheet('background-color: white')
-stockinfo_dialog.weights_holdings_groupbox.setTitle("ETF Weights and Holdings")
-stockinfo_dialog.weights_holdings_groupbox.setGeometry(830, 90, 400, 550)
-stockinfo_dialog.weights_holdings_groupbox.setVisible(False)
-stockinfo_dialog.weights_holdings_groupbox.setLayout(QVBoxLayout())
+stockinfo_dialog_main.asset_info_groupbox.content_container.setWidget(assetinfo_scrollarea_widget)
+stockinfo_dialog_main.asset_info_groupbox.content_container.setGeometry(5, 15, 305, 520)
+stockinfo_dialog_main.asset_info_groupbox.content_container.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
+stockinfo_dialog_main.about_groupbox = QGroupBox(stockinfo_dialog_main)
+stockinfo_dialog_main.about_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_main.about_groupbox.setTitle("About the Asset")
+stockinfo_dialog_main.about_groupbox.setGeometry(330, 90, 470, 550)
+stockinfo_dialog_main.about_groupbox.setVisible(False)
+stockinfo_dialog_main.about_groupbox.content_container = QScrollArea(stockinfo_dialog_main.about_groupbox)
+
+about_scrollarea_widget = QWidget()
+about_scrollarea_widget.resize(400, 800)
+about_scrollarea_widget.setLayout(QVBoxLayout())
+stockinfo_dialog_main.about_groupbox.content_container.setWidget(about_scrollarea_widget)
+stockinfo_dialog_main.about_groupbox.content_container.setGeometry(5, 15, 420, 520)
+stockinfo_dialog_main.about_groupbox.content_container.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
+stockinfo_dialog_main.news_groupbox = QGroupBox(stockinfo_dialog_main)
+stockinfo_dialog_main.news_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_main.news_groupbox.setTitle("News")
+stockinfo_dialog_main.news_groupbox.setGeometry(810, 90, 470, 550)
+stockinfo_dialog_main.news_groupbox.setVisible(False)
+stockinfo_dialog_main.news_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog_recs = QDialog()
+stockinfo_dialog_recs.setStyleSheet('background-color: deepskyblue')
+
+stockinfo_dialog_recs.analyst_rec_groupbox = QGroupBox(stockinfo_dialog_recs)
+stockinfo_dialog_recs.analyst_rec_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_recs.analyst_rec_groupbox.setTitle("Analyst Recommendations")
+stockinfo_dialog_recs.analyst_rec_groupbox.setGeometry(10, 10, 310, 630)
+stockinfo_dialog_recs.analyst_rec_groupbox.setVisible(False)
+stockinfo_dialog_recs.analyst_rec_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog_recs.iandi_groupbox = QGroupBox(stockinfo_dialog_recs)
+stockinfo_dialog_recs.iandi_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_recs.iandi_groupbox.setTitle("Insiders and Institutions")
+stockinfo_dialog_recs.iandi_groupbox.setGeometry(330, 10, 470, 630)
+stockinfo_dialog_recs.iandi_groupbox.setVisible(False)
+stockinfo_dialog_recs.iandi_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog_recs.mutfund_groupbox = QGroupBox(stockinfo_dialog_recs)
+stockinfo_dialog_recs.mutfund_groupbox.setStyleSheet('background-color: white')
+stockinfo_dialog_recs.mutfund_groupbox.setTitle("Mutual Fund Holders")
+stockinfo_dialog_recs.mutfund_groupbox.setGeometry(810, 10, 470, 630)
+stockinfo_dialog_recs.mutfund_groupbox.setVisible(False)
+stockinfo_dialog_recs.mutfund_groupbox.setLayout(QVBoxLayout())
+
+stockinfo_dialog_forecasts = QDialog()
+stockinfo_dialog_forecasts.setStyleSheet('background-color: deepskyblue')
+
+stockinfo_dialog_forecasts.chart_groupbox = QGroupBox(stockinfo_dialog_forecasts)
+stockinfo_dialog_forecasts.chart_groupbox.setTitle("Charts and Graphs")
+stockinfo_dialog_forecasts.chart_groupbox.setGeometry(0, 0, 1300, 600)
+
+stockinfo_dialog_forecasts.chart_groupbox.content_container = QScrollArea(stockinfo_dialog_forecasts)
+
+prediction_chart_widget = QWidget()
+prediction_chart_widget.resize(1300, 2000)
+prediction_chart_widget.setLayout(QVBoxLayout())
+
+stockinfo_dialog_forecasts.chart_groupbox.content_container.setWidget(prediction_chart_widget)
+stockinfo_dialog_forecasts.chart_groupbox.content_container.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+stockinfo_dialog_forecasts.chart_groupbox.content_container.setGeometry(5, 15, 1290, 650)
 
 
+ptchart = QChart()
+
+
+ptlineseries = QLineSeries()
+ptlineseries.setName("stock")
+ptchart.addSeries(ptlineseries)
+
+x_axis = QDateTimeAxis()
+x_axis.setTickCount(7)
+x_axis.setFormat("MM-dd-yyyy")
+x_axis.setTitleText("Date")
+x_axis.setVisible(True)
+
+ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
+ptlineseries.attachAxis(x_axis)
+y_axis = QValueAxis()
+
+ptchart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
+ptlineseries.attachAxis(y_axis)
+
+ptchartview = QChartView(ptchart)
+
+pt_groupbox = QGroupBox(prediction_chart_widget)
+pt_groupbox.setTitle("Analyst Price Targets")
+pt_groupbox.setGeometry(10, 10, 1200, 350)
+
+ptchartview.setParent(pt_groupbox)
+ptchartview.setGeometry(10, 15, 800, 300)
+
+ptchartview.setVisible(True)
+
+pt_label_container = QWidget(pt_groupbox)
+pt_label_container.setStyleSheet('background-color: white')
+pt_label_container.setGeometry(820, 22, 350, 285)
+pt_label_container.setLayout(QVBoxLayout())
+
+qtr_earnings_chart = QChart()
+qtr_earnings_chart.setTitle("Quarterly EPS")
+
+qtr_earnings_barseries = QBarSeries()
+qtr_earnings_barseries.setName("Earnings")
+
+qtr_earnings_chart.addSeries(qtr_earnings_barseries)
+
+qtr_earnings_groupbox = QGroupBox(prediction_chart_widget)
+qtr_earnings_groupbox.setTitle("Earnings History and Projections")
+qtr_earnings_groupbox.setGeometry(10, 370, 1200, 350)
+
+qtr_earnings_chartview = QChartView(qtr_earnings_chart)
+qtr_earnings_chartview.setParent(qtr_earnings_groupbox)
+qtr_earnings_chartview.setVisible(True)
+qtr_earnings_chartview.setGeometry(10, 15, 800, 300)
+
+qtr_earnings_table = QTableWidget(qtr_earnings_groupbox)
+qtr_earnings_table.setGeometry(820, 20, 350, 290)
+qtr_earnings_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+qtr_earnings_table.setFont(QFont('arial', 10))
+qtr_earnings_table.setStyleSheet('background-color: white;')
+
+qtr_revtrend_chart = QChart()
+qtr_revtrend_chart.setTitle("Quarterly Revenue Trend")
+
+qtr_revtrend_barseries = QBarSeries()
+qtr_revtrend_chart.addSeries(qtr_revtrend_barseries)
+
+qtr_revtrend_groupbox = QGroupBox(prediction_chart_widget)
+qtr_revtrend_groupbox.setTitle("Revenue History and Projections")
+qtr_revtrend_groupbox.setGeometry(10, 730, 1200, 350)
+
+qtr_revtrend_chartview = QChartView(qtr_revtrend_chart)
+qtr_revtrend_chartview.setParent(qtr_revtrend_groupbox)
+qtr_revtrend_chartview.setVisible(True)
+qtr_revtrend_chartview.setGeometry(10, 15, 800, 300)
+
+qtr_revtrend_label_container = QWidget(qtr_revtrend_groupbox)
+qtr_revtrend_label_container.setGeometry(820, 20, 350, 290)
+qtr_revtrend_label_container.setStyleSheet('background-color: white;')
+qtr_revtrend_label_container.setLayout(QVBoxLayout())
+
+yr_earnings_chart = QChart()
+yr_earnings_chart.setTitle("Yearly EPS")
+
+yr_earnings_barseries = QBarSeries()
+yr_earnings_barseries.setName("Earnings")
+
+yr_earnings_chart.addSeries(yr_earnings_barseries)
+
+yr_earnings_groupbox = QGroupBox(prediction_chart_widget)
+yr_earnings_groupbox.setTitle("Earnings History and Projections")
+yr_earnings_groupbox.setGeometry(10, 1090, 1200, 350)
+
+yr_earnings_chartview = QChartView(yr_earnings_chart)
+yr_earnings_chartview.setParent(yr_earnings_groupbox)
+yr_earnings_chartview.setVisible(True)
+yr_earnings_chartview.setGeometry(10, 15, 800, 300)
+
+yr_earnings_label_container = QWidget(yr_earnings_groupbox)
+yr_earnings_label_container.setGeometry(820, 20, 350, 290)
+yr_earnings_label_container.setStyleSheet('background-color: white;')
+yr_earnings_label_container.setLayout(QVBoxLayout())
+
+yr_revtrend_chart = QChart()
+yr_revtrend_chart.setTitle("Yearly Revenue Trend")
+
+yr_revtrend_barseries = QBarSeries()
+yr_revtrend_chart.addSeries(yr_revtrend_barseries)
+
+yr_revtrend_groupbox = QGroupBox(prediction_chart_widget)
+yr_revtrend_groupbox.setTitle("Revenue History and Projections")
+yr_revtrend_groupbox.setGeometry(10, 1450, 1200, 360)
+
+yr_revtrend_chartview = QChartView(yr_revtrend_chart)
+yr_revtrend_chartview.setParent(yr_revtrend_groupbox)
+yr_revtrend_chartview.setVisible(True)
+yr_revtrend_chartview.setGeometry(10, 15, 800, 300)
+
+yr_revtrend_label_container = QWidget(yr_revtrend_groupbox)
+yr_revtrend_label_container.setGeometry(820, 20, 350, 290)
+yr_revtrend_label_container.setStyleSheet('background-color: white;')
+yr_revtrend_label_container.setLayout(QVBoxLayout())
+
+stockinfo_dialog_financials = QDialog()
+stockinfo_dialog_financials.setStyleSheet('background-color: deepskyblue')
+
+stockinfo_dialog_financials.content_container = QScrollArea(stockinfo_dialog_financials)
+
+financials_chart_widget = QWidget()
+financials_chart_widget.resize(1300, 2000)
+financials_chart_widget.setLayout(QVBoxLayout())
+
+stockinfo_dialog_financials.content_container.setWidget(financials_chart_widget)
+stockinfo_dialog_financials.content_container.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+stockinfo_dialog_financials.content_container.setGeometry(5, 15, 1290, 650)
+
+financials_chart = QChart()
+financials_chart.setTitle("Financial Statements")
+
+financials_barseries = QBarSeries()
+financials_chart.addSeries(financials_barseries)
+
+financials_groupbox = QGroupBox(financials_chart_widget)
+financials_groupbox.setTitle("Fundamentals")
+financials_groupbox.setGeometry(10, 10, 1250, 1950)
+
+financials_chartview = QChartView(financials_chart)
+financials_chartview.setParent(financials_groupbox)
+financials_chartview.setVisible(True)
+financials_chartview.setGeometry(10, 15, 1200, 300)
+
+financials_table = QTableWidget(financials_groupbox)
+financials_table.setGeometry(10, 325, 1200, 1500)
+financials_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+financials_table.setFont(QFont('arial', 10))
+financials_table.setStyleSheet('background-color: white;')
+
+stockinfo_dialog.addTab(stockinfo_dialog_main, "Overview")
+stockinfo_dialog.addTab(stockinfo_dialog_recs, "Insiders and Institutions")
+stockinfo_dialog.addTab(stockinfo_dialog_forecasts, "Forecasts")
+stockinfo_dialog.addTab(stockinfo_dialog_financials, "Financials")
+
+
+stockinfo_dialog.connect(stockinfo_dialog, SIGNAL('currentChanged(int)'), lambda: stockinfo_dialog_changed(stockinfo_dialog.currentIndex()))
 ###################
 # settings dialog #
 ###################

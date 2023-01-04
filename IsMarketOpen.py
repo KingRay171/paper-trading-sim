@@ -13,14 +13,14 @@ def isMarketOpen(now=None):
   
         # Check if the current time is a holiday
         if now.strftime('%Y-%m-%d') in us_holidays:
-            return True
+            return False
 
         # Check if the current time is within open and close time 
         if (now.time()<openTime) or (now.time()>closeTime):
-            return True
+            return False
 
         # Check if it's a weekday
         if now.date().weekday()>4:
-            return True
+            return False
 
-        return False
+        return True

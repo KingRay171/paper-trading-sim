@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QPainter, QColor
 from PySide6.QtCore import QRect, QCoreApplication, QStringListModel, QAbstractItemModel, QDateTime, Qt, SIGNAL
 import yfinance as yf
+import talib
 import mplfinance as mpf
+import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 
@@ -55,8 +57,10 @@ def update_ui():
     """
     TO BE RUN BY THE UI UPDATE THREAD ONLY
     Updates each element of the portfolio dialog 
-    if the user is on the portfolio dialog. Runs as 
-    long as the program is running
+    if the user is on the portfolio dialog, updates
+    each element of the wallet dialog if the user
+    is on the wallet dialog. Runs as long as the
+    program is running
     """
     while True:
         if widget.currentWidget() == portfolio_dialog:
@@ -75,12 +79,15 @@ def update_portfolio_piechart():
     """
     Updates the asset class piechart on the portfolio dialog
     """
+
+    # gets the present value of the portfolio broken down by asset type
     cash_amount = 0
     etf_amount = 0
     stock_amount = 0
     option_amount = 0
     futures_amount = 0
 
+    # can't use enumerate, index is useful here
     for i in range(len(portfolio_amts)):
         if(portfolio_asset_types[i].text == "ETF"):
             etf_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
@@ -93,6 +100,7 @@ def update_portfolio_piechart():
         elif(portfolio_asset_types[i].text == "Option"):
             option_amount += int(portfolio_amts[i].text) * float(portfolio_dialog.positions_view_groupbox.positions_view.item(i - 1, 2).text()[1:])
 
+    # loads values into pie chart and displays them
     asset_class_chart.slices()[0].setValue(round(etf_amount / portfolio_nav * 100, 2))
     if(etf_amount != 0):
         asset_class_chart.slices()[0].setLabel(f"ETFs: {round(etf_amount / portfolio_nav * 100, 2)}%")
@@ -101,14 +109,17 @@ def update_portfolio_piechart():
     asset_class_chart.slices()[1].setValue(round(stock_amount / portfolio_nav * 100, 2))
     if(stock_amount != 0):
         asset_class_chart.slices()[1].setLabel(f"Stocks: {round(stock_amount / portfolio_nav * 100, 2)}%")
+        asset_class_chart.slices()[1].setLabelVisible(True)
 
     asset_class_chart.slices()[2].setValue(option_amount / portfolio_nav * 100)
     if(option_amount != 0):
         asset_class_chart.slices()[2].setLabel(f"Options: {round(option_amount / portfolio_nav * 100, 2)}%")
+        asset_class_chart.slices()[2].setLabelVisible(True)
 
     asset_class_chart.slices()[3].setValue(futures_amount / portfolio_nav * 100)
     if(futures_amount != 0):
         asset_class_chart.slices()[3].setLabel(f"Futures: {round(futures_amount / portfolio_nav * 100, 2)}%")
+        asset_class_chart.slices()[3].setLabelVisible(True)
 
     asset_class_chart.slices()[4].setValue(cash_amount / portfolio_nav * 100)
     if(cash_amount != 0):
@@ -120,10 +131,13 @@ def update_wallet_table():
     """
     Updates the positions table on the crypto wallet dialog.
     """
+    # can't use enumerate, index is useful here
     for i in range(1, len(wallet_tickers)):
 
             # get the current price and the price it last closed at
             ticker = yf.download(tickers=wallet_tickers[i].text, period='5d')
+
+            # edge case where yf.download returns a dataframe of size 4
             try:
                 ticker_current = ticker.iloc[4][3]
                 ticker_last_close = ticker.iloc[3][3]
@@ -134,16 +148,35 @@ def update_wallet_table():
             # calculate the return since the position was opened in dollar and percent terms
             total_return = (ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)
             percent_change = round(total_return / (float(wallet_costbases[i - 1].text) * float(wallet_amts[i].text)) * 100, 2)
+
             # update the table with the new information
+
+            # first cell in the row is the coin symbol
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 0, QTableWidgetItem(wallet_tickers[i].text.upper()))
+
+            # second cell is the coin's performance icon
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 1, updateTickerIcon(ticker))
+
+            # third cell is the coin's current price
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
+
+            # fourth cell is the change in the coin's price from it's last close, in dollar and percent terms
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 3, QTableWidgetItem('${:0,.2f}'.format(ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+            
+            # fifth cell is the user's costbasis for the token
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 4, QTableWidgetItem('${:0,.2f}'.format(float(wallet_costbases[i - 1].text))))
+
+            # sixth cell is the amount of the coin the user has (or is short)
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 5, QTableWidgetItem(wallet_amts[i].text))
+
+            # seventh cell is the NLV the user has in the coin
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 6, QTableWidgetItem('${:0,.2f}'.format(ticker_current * float(wallet_amts[i].text))))
+
+            # eighth cell is the user's net P/L on the position from when it was opened
             wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(((ticker_current - float(wallet_costbases[i - 1].text)) * float(wallet_amts[i].text)))))
-            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 7, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
+
+            # ninth cell is the total return on the position in % terms
+            wallet_dialog.positions_view_groupbox.positions_view.setItem(i - 1, 8, QTableWidgetItem('${:0,.2f}'.format(total_return) + " (" + str(percent_change) + "%)"))
         
     
 def update_portfolio_table():
@@ -235,9 +268,10 @@ def searchButtonClicked():
         ticker += chart_dialog.search_bar_groupbox.searchBar.text()[i]
         i += 1
 
-    period = chart_dialog.settings_groupbox.data_period_combobox.currentText()
+    # get the interval the user selected
     interval = chart_dialog.settings_groupbox.data_timeframe_combobox.currentText()
 
+    # get all chart settings the user selected on the chart menu
     include_prepost = False
     if(chart_dialog.settings_groupbox.prepost_checkbox.isChecked()):
         include_prepost = True
@@ -245,7 +279,7 @@ def searchButtonClicked():
     adjust_ohlc = False
     if(chart_dialog.settings_groupbox.adjust_ohlc_checkbox.isChecked()):
         adjust_ohlc = True
-    # shows the requested ticker's chart
+    
     split_dividend = False
     if(chart_dialog.settings_groupbox.split_dividend_checkbox.isChecked()):
         split_dividend = True
@@ -261,7 +295,7 @@ def searchButtonClicked():
     start_date = None
     end_date = None
 
-   
+   # shows the requested ticker's chart
     if(chart_dialog.settings_groupbox.daterange_radiobutton.isChecked()):
         start_date = chart_dialog.settings_groupbox.start_date.selectedDate().toString("yyyy-MM-dd")
         end_date = chart_dialog.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
@@ -274,7 +308,8 @@ def searchButtonClicked():
                               actions=split_dividend
                               ), ticker, include_volume, non_trading)
     else:
-
+        # only get period if user chose to chart by period
+        period = chart_dialog.settings_groupbox.data_period_combobox.currentText()
         show_graph(yf.download(tickers=ticker,
                               period=period,
                               interval=interval,
@@ -367,15 +402,32 @@ def show_graph(ticker, title: str, volume: bool, non_trading: bool):
     mc = mpf.make_marketcolors(up=up_color[0].text.lower(), down=down_color[0].text.lower(),inherit=True)
     s  = mpf.make_mpf_style(base_mpf_style=base_style[0].text,marketcolors=mc)
     # plots chart
+    fig = mpf.figure()
+    ax1 = fig.add_subplot(1,1,1)
 
+
+    upper, middle, lower = talib.BBANDS(ticker["Close"], timeperiod=20)
+    bbands_talib = pd.DataFrame(index=ticker.index,
+                            data={"bb_low": lower,
+                                  "bb_ma": middle,
+                                  "bb_high": upper})
+    plot = [
+        mpf.make_addplot((bbands_talib["bb_low"]), color='#606060', panel=0),
+        mpf.make_addplot((bbands_talib["bb_ma"]), color='#1f77b4', panel=0),
+        mpf.make_addplot((bbands_talib["bb_high"]), color='#1f77b4', panel=0),
+    ]
+    
     mpf.plot(ticker, 
              show_nontrading = non_trading,
              type='candle', 
              style = s, 
-             title = title, 
+             title = title,
              volume = volume, 
-             tight_layout = True
+             tight_layout = True,
+             addplot=plot, 
+             block=False
              )
+    
 
 
 def retranslateChartDialogUi(self):

@@ -1,13 +1,17 @@
 import os
 import yfinance as yf
+import mplfinance as mpf
+import matplotlib.pyplot as plt
 import json
 
-ticker = yf.Ticker('msft')
+data = yf.download(tickers="BTC-USD", period="1d", interval="5m")
 
-rev = ticker.info
-rev = ticker.get_analyst_price_target()
+fig = mpf.figure()
+axes = fig.add_subplot(1, 1, 1)
 
-rev2 = ticker.get_financials()
-rev3 = ticker.get_rev_forecast()
-print(rev2)
+while True:
+    axes.clear()
+    data = yf.download(tickers="BTC-USD", period="1d", interval="5m")
+    mpf.plot(data, ax=axes, type='candle', block=False)
+    plt.pause(5)
 

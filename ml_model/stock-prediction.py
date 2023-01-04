@@ -104,5 +104,5 @@ class ModelAccessor():
         return y_test_pred
 
 ma = ModelAccessor()
-input_data('AAPL')
+input_data('AFRM')
 print(ma.runPredictions("ml_model/out.csv", 5, 30))

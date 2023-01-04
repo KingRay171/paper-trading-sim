@@ -16,7 +16,7 @@ def isMarketOpen(now=None):
             return True
 
         # Check if the current time is within open and close time 
-        if (now.time()<openTime) or (now.time()>closeTime):
+        if (now.time()>openTime) and (now.time()<closeTime):
             return True
 
         # Check if it's a weekday

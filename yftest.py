@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 import xml.etree.ElementTree as et
 
 from dependencies import autocomplete as ac
+from dependencies import IsMarketOpen as mktopen
 
 
 tab2_isloaded = False
@@ -1859,6 +1860,16 @@ stockinfo_dialog.addTab(stockinfo_dialog_financials, "Financials")
 
 
 stockinfo_dialog.connect(stockinfo_dialog, SIGNAL('currentChanged(int)'), lambda: stockinfo_dialog_changed(stockinfo_dialog.currentIndex()))
+
+####################
+# DCF model dialog #
+####################
+
+dcf_dialog = QDialog()
+dcf_dialog.setStyleSheet('background-color: deepskyblue;')
+
+
+
 ###################
 # settings dialog #
 ###################
@@ -2038,6 +2049,7 @@ widget.addTab(portfolio_dialog, "Your Portfolio")
 widget.addTab(chart_dialog, "Chart Stocks")
 widget.addTab(trade_dialog, "Trade Stocks")
 widget.addTab(stockinfo_dialog, "Get Stock Info")
+widget.addTab(dcf_dialog, "DCF Modelling")
 widget.addTab(wallet_dialog, "Your Crypto Wallet")
 widget.addTab(settings_dialog, "Settings")
 

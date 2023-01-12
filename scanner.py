@@ -10,7 +10,7 @@ def Volitility(stockNameList):
   topname = []
   
   for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], period = '1mo', interval = '1d')
+    stockData = yf.download(tickers = [stockName], period = '1mo', interval = '1d', prepost = True)
     
     closePrices = stockData['Close']
     a = np.array(closePrices)
@@ -27,7 +27,7 @@ def Growth(stockNameList):
   topname = []
 
   for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], start = yesterday, end = today, interval = '1d')
+    stockData = yf.download(tickers = [stockName], start = yesterday, end = today, interval = '1d', prepost = True)
     
     start = stockData['Close'][0]
     end = stockData['Close'][-1]
@@ -43,7 +43,7 @@ def Volume(stockNameList):
   topname = []
 
   for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], period = '1d')
+    stockData = yf.download(tickers = [stockName], period = '1d', interval = '1d', prepost = True)
     
     volume = stockData['Volume'][-1]
     

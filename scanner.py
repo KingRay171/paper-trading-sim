@@ -43,7 +43,7 @@ def Volume(stockNameList):
   topname = []
 
   for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], interval = '1d')
+    stockData = yf.download(tickers = [stockName], period = '1d')
     
     volume = stockData['Volume'][-1]
     

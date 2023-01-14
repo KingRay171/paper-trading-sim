@@ -104,5 +104,5 @@ class ModelAccessor():
         return y_test_pred
 
 ma = ModelAccessor()
-input_data('AFRM')
+input_data('MSFT')
 print(ma.runPredictions("ml_model/out.csv", 5, 30))

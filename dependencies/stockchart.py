@@ -12,9 +12,9 @@ import math
 import talib
 
 isclosed = False
-data = yf.download(tickers="BTC-USD", period="1d", interval="30m", ignore_tz=False)
+data = yf.download(tickers="SPY", period="1d", interval="5m")
 xlims = (0, data['Close'].size)
-scaled_xlims = (0, 0)
+scaled_xlims = xlims
 default_xlims = (0, 0)
 
 upper, middle, lower = talib.BBANDS(data["Close"], timeperiod=20)
@@ -28,8 +28,11 @@ plot = [
     mpf.make_addplot((bbands_talib["bb_high"]), color='#1f77b4', panel=0),
     
 ]
-fig, axes = mpf.plot(data, volume=True, volume_panel=1, returnfig=True, addplot=plot, type='candle')
 
+if(data['Close'].size > 20):
+    fig, axes = mpf.plot(data, volume=True, volume_panel=1, returnfig=True, addplot=plot, type='candle')
+else:
+    fig, axes = mpf.plot(data, volume=True, volume_panel=1, returnfig=True, type='candle')
 
 def onclose(fig):
     global isclosed
@@ -49,39 +52,32 @@ def update_data(ival):
     global default_xlims
 
     ax_main = axes[0]
-    ax_main.callbacks.connect('xlim_changed', on_xlims_change)
-    ax_bb = ax_main
-    ax_bb.callbacks.connect('xlim_changed', on_xlims_change)
     ax_vol = axes[2]
-    ax_vol.callbacks.connect('xlim_changed', on_xlims_change)
 
     
-    data = yf.download(tickers="BTC-USD", period="1d", interval="30m", ignore_tz=False)
+    data = yf.download(tickers="SPY", period="1d", interval="5m")
     upper, middle, lower = talib.BBANDS(data["Close"], timeperiod=20)
     
+    bbands_talib = pd.DataFrame(index=data.index,
+                        data={"bb_low": lower,
+                              "bb_ma": middle,
+                              "bb_high": upper})
     
-    
-    if(xlims[0]) > 0 and xlims[1] < data['Close'].size:
-        bbands_talib = pd.DataFrame(index=data.index,
-                            data={"bb_low": lower,
-                                  "bb_ma": middle,
-                                  "bb_high": upper}).iloc[slice(xlims[0], xlims[1])]
-        data = data.iloc[slice(xlims[0], xlims[1])]
-    else:
-        bbands_talib = pd.DataFrame(index=data.index,
-                            data={"bb_low": lower,
-                                  "bb_ma": middle,
-                                  "bb_high": upper})
     plot = [
-        mpf.make_addplot((bbands_talib["bb_low"]), color='#606060', ax=ax_bb),
-        mpf.make_addplot((bbands_talib["bb_ma"]), color='#1f77b4', ax=ax_bb),
-        mpf.make_addplot((bbands_talib["bb_high"]), color='#1f77b4', ax=ax_bb),
+        mpf.make_addplot((bbands_talib["bb_low"]), color='#606060', ax=ax_main),
+        mpf.make_addplot((bbands_talib["bb_ma"]), color='#1f77b4', ax=ax_main),
+        mpf.make_addplot((bbands_talib["bb_high"]), color='#1f77b4', ax=ax_main),
     ]
-    for ax in axes:
-        ax.clear()
-    mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol)
 
-
+    ax_main.clear()
+    ax_vol.clear()
+    ax_main.set_xlim(scaled_xlims)
+    ax_vol.set_xlim(scaled_xlims)
+    ax_main.callbacks.connect('xlim_changed', on_xlims_change)
+    if(data['Close'].size > 20):
+        mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol)
+    else:
+        mpf.plot(data,type='candle',ax=ax_main,volume=ax_vol)
     
 
 
@@ -105,7 +101,7 @@ def on_xlims_change(event_ax):
 
     xlims = (int(event_ax.get_xlim()[0]), int(event_ax.get_xlim()[1]) )
 
-    xlims = scaled_xlims
+    scaled_xlims = xlims
     
 axes[0].callbacks.connect('xlim_changed', on_xlims_change)
 

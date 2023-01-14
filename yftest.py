@@ -21,13 +21,16 @@ import xml.etree.ElementTree as et
 
 from dependencies import autocomplete as ac
 from dependencies import IsMarketOpen as mktopen
+from dependencies import dcfmodel as dcf
+from dependencies import numberformat as nf
 
 tab2_isloaded = False
 tab3_isloaded = False
 tab4_isloaded = False
-download_is_used = Event()
-download_is_used.clear()
+
 currentdir = os.getcwd() + '\\'
+
+current_ticker = ''
 
 def spy_button_clicked():
     """Is called when the "Chart SPY" button is clicked. Charts SPY with the current user settings"""
@@ -1005,9 +1008,6 @@ def stockinfo_dialog_changed(tab_id: int):
         qtr_earnings_chart.createDefaultAxes()
         qtr_earnings_chart.axes(Qt.Orientation.Vertical)[0].setRange(earnings_trend_min * 1.1, earnings_trend_max * 1.1)
 
-        
-
-        
         qtr_revtrend_chart.removeAllSeries()
         s = QBarSeries()
         set = QBarSet("Revenue")
@@ -1126,7 +1126,11 @@ def stockinfo_dialog_changed(tab_id: int):
 
         for i in range(4):
             for j in range(ticker_financials.index.size):
-                financials_table.setItem(j, i, QTableWidgetItem(str(ticker_financials.iloc[j][3 - i])))
+                if(ticker_financials.iloc[j][3 - i] > 1000):
+                    formatted_data = nf.simplify(ticker_financials.iloc[j][3 - i])
+                    financials_table.setItem(j, i, QTableWidgetItem(formatted_data))
+                else:
+                    financials_table.setItem(j, i, QTableWidgetItem(str(ticker_financials.iloc[j][3 - i])))
 
         checkboxes = QButtonGroup()
 
@@ -1161,7 +1165,78 @@ def on_financials_checkbox_click():
 
 
 def dcf_findstock_button_click():
+    global current_ticker
+    ticker = ''
+    i = 0
+    while dcf_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
+        ticker += dcf_dialog.search_bar_groupbox.searchBar.text()[i]
+        i += 1
+    current_ticker = ticker
+
+    input_info = dcf.parse(ticker)
     dcf_dialog.inputs_groupbox.setVisible(True)
+    dcf_dialog.inputs_groupbox.company_label.setText(f"Company: {input_info['company_name']}")
+    dcf_dialog.inputs_groupbox.mkt_price.setText('${:0,.2f}'.format(input_info['mp']))
+    dcf_dialog.inputs_groupbox.eps.setText(str(input_info['eps']))
+    dcf_dialog.inputs_groupbox.growth.setText(str(input_info['ge']) + "% per annum")
+    dcf_dialog.inputs_groupbox.growth_slider.setValue(input_info['ge'] * 100)
+    dcf_dialog.inputs_groupbox.discount_rate.setText(str(dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0) + "%")
+    dcf_dialog.inputs_groupbox.perpetual_rate.setText(str(dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0) + "%")
+    dcf_dialog.inputs_groupbox.last_fcf.setText(nf.simplify(input_info['fcf']))
+    dcf_dialog.inputs_groupbox.shares.setText(nf.simplify(input_info['shares']))
+
+def growth_slider_moved():
+    dcf_dialog.inputs_groupbox.growth.setText(str(dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0) + "%")
+
+def term_slider_moved():
+    dcf_dialog.inputs_groupbox.term.setText(str(dcf_dialog.inputs_groupbox.term_slider.value()) + " years")
+
+def discount_slider_moved():
+    dcf_dialog.inputs_groupbox.discount_rate.setText(str(dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0) + "%")
+
+def perpetual_slider_moved():
+    dcf_dialog.inputs_groupbox.perpetual_rate.setText(str(dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0) + "%")
+
+def dcf_getanalysis_button_click():
+    global current_ticker
+    discount_rate = dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0
+    perpetual_rate = dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0
+    growth_estimate = dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0
+    term = dcf_dialog.inputs_groupbox.term_slider.value()
+    eps = float(dcf_dialog.inputs_groupbox.eps.text())
+
+    dcf_analysis = dcf.get_fairval(current_ticker, discount_rate, perpetual_rate, growth_estimate, term, eps)
+    future_cashflows_chartview.setVisible(True)
+
+    future_cashflows_chart.removeAllSeries()
+    future_cashflows_lineseries = QLineSeries()
+    future_cashflows_lineseries.setName("Forecasted Cash Flows")
+    future_cashflows_pv_lineseries = QLineSeries()
+    future_cashflows_pv_lineseries.setName("Present Value of Forecasted Cash Flows")
+    current_year = QDateTime().currentDateTime().date().year()
+
+    for i in range(term):
+        future_cashflows_lineseries.append(current_year + i, dcf_analysis['forecasted_cash_flows'][i])
+        future_cashflows_pv_lineseries.append(current_year + i, dcf_analysis['cashflow_present_values'][i])
+
+    future_cashflows_chart.addSeries(future_cashflows_lineseries)
+    future_cashflows_chart.addSeries(future_cashflows_pv_lineseries)
+    
+    future_cashflows_chart.createDefaultAxes()
+    future_cashflows_chart.axes(Qt.Orientation.Horizontal)[0].setTickCount(term)
+
+    upside = round((dcf_analysis['fair_value'] / dcf_analysis['mp'] - 1) * 100, 2)
+    dcf_dialog.outputs_groupbox.basic_model_output.fair_value.setText(f"${round(dcf_analysis['fair_value'], 2)} ({upside}%)")
+
+    upside = round((dcf_analysis['graham_expected_value'] / dcf_analysis['mp'] - 1) * 100, 2)
+    dcf_dialog.outputs_groupbox.graham_model_output.ev.setText(f"${round(dcf_analysis['graham_expected_value'], 2)} ({upside}%)")
+
+    dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate.setText(f"{round(dcf_analysis['graham_growth_estimate'], 2)}% per annum")
+
+
+
+
+
 
 
 def close_event(event):
@@ -1841,20 +1916,154 @@ dcf_dialog.inputs_groupbox.company_label.setGeometry(10, 20, 100, 50)
 
 dcf_dialog.inputs_groupbox.mkt_price_label = QLabel(dcf_dialog.inputs_groupbox)
 dcf_dialog.inputs_groupbox.mkt_price_label.setText("Market Price:")
-dcf_dialog.inputs_groupbox.mkt_price_label.setGeometry(10, 100, 100, 50)
+dcf_dialog.inputs_groupbox.mkt_price_label.setGeometry(10, 70, 100, 50)
 
 dcf_dialog.inputs_groupbox.mkt_price = QLabel(dcf_dialog.inputs_groupbox)
-dcf_dialog.inputs_groupbox.mkt_price.setGeometry(1100, 100, 100, 50)
+dcf_dialog.inputs_groupbox.mkt_price.setGeometry(570, 70, 100, 50)
 
 dcf_dialog.inputs_groupbox.eps_label = QLabel(dcf_dialog.inputs_groupbox)
 dcf_dialog.inputs_groupbox.eps_label.setText("Earnings per Share:")
-dcf_dialog.inputs_groupbox.eps_label.setGeometry(10, 200, 100, 50)
+dcf_dialog.inputs_groupbox.eps_label.setGeometry(10, 120, 100, 50)
+
+dcf_dialog.inputs_groupbox.eps = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.eps.setGeometry(570, 120, 100, 50)
+
+dcf_dialog.inputs_groupbox.growth_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.growth_label.setText("Growth Estimate:")
+dcf_dialog.inputs_groupbox.growth_label.setGeometry(10, 170, 100, 50)
+
+dcf_dialog.inputs_groupbox.growth_slider = QSlider(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.growth_slider.setOrientation(Qt.Orientation.Horizontal)
+dcf_dialog.inputs_groupbox.growth_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
+dcf_dialog.inputs_groupbox.growth_slider.setGeometry(110, 170, 450, 50)
+dcf_dialog.inputs_groupbox.growth_slider.setTickInterval(10)
+dcf_dialog.inputs_groupbox.growth_slider.setRange(-500, 4000)
+dcf_dialog.inputs_groupbox.growth_slider.setSliderPosition(0)
+dcf_dialog.inputs_groupbox.growth_slider.valueChanged.connect(growth_slider_moved)
+
+dcf_dialog.inputs_groupbox.growth = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.growth.setGeometry(570, 170, 100, 50)
+
+dcf_dialog.inputs_groupbox.def_growth_button = QCheckBox(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.def_growth_button.setText("Use Analyst 5-Year Growth Estimate")
+dcf_dialog.inputs_groupbox.def_growth_button.setGeometry(1100, 170, 100, 50)
+
+dcf_dialog.inputs_groupbox.term_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.term_label.setText("Term:")
+dcf_dialog.inputs_groupbox.term_label.setGeometry(10, 220, 100, 50)
+
+dcf_dialog.inputs_groupbox.term_slider = QSlider(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.term_slider.setOrientation(Qt.Orientation.Horizontal)
+dcf_dialog.inputs_groupbox.term_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
+dcf_dialog.inputs_groupbox.term_slider.setGeometry(110, 220, 450, 50)
+dcf_dialog.inputs_groupbox.term_slider.setTickInterval(1)
+dcf_dialog.inputs_groupbox.term_slider.setRange(1, 10)
+dcf_dialog.inputs_groupbox.term_slider.setSliderPosition(5)
+dcf_dialog.inputs_groupbox.term_slider.valueChanged.connect(term_slider_moved)
+
+dcf_dialog.inputs_groupbox.term = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.term.setText("5 years")
+dcf_dialog.inputs_groupbox.term.setGeometry(570, 220, 100, 50)
+
+dcf_dialog.inputs_groupbox.discount_rate_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.discount_rate_label.setText("Discount Rate: ")
+dcf_dialog.inputs_groupbox.discount_rate_label.setGeometry(10, 270, 100, 50)
+
+dcf_dialog.inputs_groupbox.discount_rate_slider = QSlider(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setOrientation(Qt.Orientation.Horizontal)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setGeometry(110, 270, 450, 50)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setTickInterval(10)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setRange(-500, 2000)
+dcf_dialog.inputs_groupbox.discount_rate_slider.setSliderPosition(1000)
+dcf_dialog.inputs_groupbox.discount_rate_slider.valueChanged.connect(discount_slider_moved)
+
+
+dcf_dialog.inputs_groupbox.discount_rate = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.discount_rate.setGeometry(570, 270, 100, 50)
+
+dcf_dialog.inputs_groupbox.perpetual_rate_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.perpetual_rate_label.setText("Perpetual Rate:")
+dcf_dialog.inputs_groupbox.perpetual_rate_label.setGeometry(10, 320, 100, 50)
+
+dcf_dialog.inputs_groupbox.perpetual_rate_slider = QSlider(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setOrientation(Qt.Orientation.Horizontal)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setGeometry(110, 320, 450, 50)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setTickInterval(10)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setTickPosition(QSlider.TickPosition.TicksBothSides)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setRange(-500, 1000)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.setSliderPosition(250)
+dcf_dialog.inputs_groupbox.perpetual_rate_slider.valueChanged.connect(perpetual_slider_moved)
+
+dcf_dialog.inputs_groupbox.perpetual_rate = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.perpetual_rate.setGeometry(570, 320, 100, 50)
+
+dcf_dialog.inputs_groupbox.last_fcf_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.last_fcf_label.setText("Last Free Cash Flow:")
+dcf_dialog.inputs_groupbox.last_fcf_label.setGeometry(10, 370, 100, 50)
+
+dcf_dialog.inputs_groupbox.last_fcf = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.last_fcf.setGeometry(570, 370, 100, 50)
+
+dcf_dialog.inputs_groupbox.shares_label = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.shares_label.setText("Shares in Circulation:")
+dcf_dialog.inputs_groupbox.shares_label.setGeometry(10, 420, 100, 50)
+
+dcf_dialog.inputs_groupbox.shares = QLabel(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.shares.setGeometry(570, 420, 100, 50)
+
+dcf_dialog.inputs_groupbox.get_analysis_button = QPushButton(dcf_dialog.inputs_groupbox)
+dcf_dialog.inputs_groupbox.get_analysis_button.setGeometry(210, 480, 200, 100)
+dcf_dialog.inputs_groupbox.get_analysis_button.setText("Get Fair Value")
+dcf_dialog.inputs_groupbox.get_analysis_button.clicked.connect(dcf_getanalysis_button_click)
 
 
 dcf_dialog.outputs_groupbox = QGroupBox(dcf_dialog)
 dcf_dialog.outputs_groupbox.setStyleSheet('background-color: white;')
 dcf_dialog.outputs_groupbox.setTitle("Model Outputs")
 dcf_dialog.outputs_groupbox.setGeometry(650, 90, 630, 570)
+
+dcf_dialog.outputs_groupbox.verdict_label = QLabel(dcf_dialog.outputs_groupbox)
+dcf_dialog.outputs_groupbox.verdict_label.setGeometry(200, 10, 200, 50)
+
+dcf_dialog.outputs_groupbox.basic_model_output = QGroupBox(dcf_dialog.outputs_groupbox)
+dcf_dialog.outputs_groupbox.basic_model_output.setGeometry(10, 20, 610, 350)
+dcf_dialog.outputs_groupbox.basic_model_output.setTitle("Basic Model")
+
+future_cashflows_chart = QChart()
+future_cashflows_lineseries = QLineSeries()
+future_cashflows_lineseries.setName("Future Cashflows")
+future_cashflows_chart.addSeries(future_cashflows_lineseries)
+
+
+future_cashflows_chartview = QChartView(future_cashflows_chart)
+future_cashflows_chartview.setParent(dcf_dialog.outputs_groupbox.basic_model_output)
+future_cashflows_chartview.setGeometry(10, 20, 590, 200)
+
+dcf_dialog.outputs_groupbox.basic_model_output.fair_value_label = QLabel(dcf_dialog.outputs_groupbox.basic_model_output)
+dcf_dialog.outputs_groupbox.basic_model_output.fair_value_label.setText("Fair Value:")
+dcf_dialog.outputs_groupbox.basic_model_output.fair_value_label.setGeometry(250, 230, 100, 50)
+
+dcf_dialog.outputs_groupbox.basic_model_output.fair_value = QLabel(dcf_dialog.outputs_groupbox.basic_model_output)
+dcf_dialog.outputs_groupbox.basic_model_output.fair_value.setGeometry(200, 280, 100, 50)
+
+dcf_dialog.outputs_groupbox.graham_model_output = QGroupBox(dcf_dialog.outputs_groupbox)
+dcf_dialog.outputs_groupbox.graham_model_output.setGeometry(10, 380, 610, 150)
+dcf_dialog.outputs_groupbox.graham_model_output.setTitle("Graham Model")
+
+dcf_dialog.outputs_groupbox.graham_model_output.ev_label = QLabel(dcf_dialog.outputs_groupbox.graham_model_output)
+dcf_dialog.outputs_groupbox.graham_model_output.ev_label.setText("Expected value implied by growth rate:")
+dcf_dialog.outputs_groupbox.graham_model_output.ev_label.setGeometry(10, 20, 200, 50)
+
+dcf_dialog.outputs_groupbox.graham_model_output.ev = QLabel(dcf_dialog.outputs_groupbox.graham_model_output)
+dcf_dialog.outputs_groupbox.graham_model_output.ev.setGeometry(490, 20, 100, 50)
+
+dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate_label = QLabel(dcf_dialog.outputs_groupbox.graham_model_output)
+dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate_label.setText("Growth rate implied by stock price:")
+dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate_label.setGeometry(10, 80, 200, 50)
+
+dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate = QLabel(dcf_dialog.outputs_groupbox.graham_model_output)
+dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate.setGeometry(490, 80, 100, 50)
 
 ###################
 # settings dialog #
@@ -2025,7 +2234,6 @@ wallet_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
 wallet_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 
 
-
 ######################
 # end of dialog init #
 ######################
@@ -2051,4 +2259,3 @@ t2 = Thread(target=update_ui, daemon=True)
 t2.start()
 
 sys.exit(app.exec())
-

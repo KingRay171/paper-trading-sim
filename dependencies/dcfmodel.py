@@ -1,16 +1,14 @@
 from lxml import html
 import requests
-import json
-import argparse
-from collections import OrderedDict
-from bs4 import BeautifulSoup
 import yfinance as yf
-
+import math
 import warnings
 warnings.filterwarnings('ignore')
 
-def parse(ticker):
+def parse(ticker: str) -> dict:
     yf_ticker = yf.Ticker(ticker)
+
+    company_name = yf_ticker.info['longName']
 
     last_fcf = yf_ticker.get_cash_flow().iloc[-1][0]
     
@@ -27,18 +25,23 @@ def parse(ticker):
             except:
                 ge = []
             break
-
-    shares = yf_ticker.shares.iloc[-1]
-
-    factor = 1000 if 'B' in shares else 1 
-    shares = float(shares.replace('B', '').replace('M', '')) * factor
+    print(yf_ticker.shares.iloc[-1])
+    shares = yf_ticker.shares.iloc[-1][0]
     
     eps = yf_ticker.get_financials().loc['DilutedEPS'].iloc[0]
+    # in case current yearly eps cell isn't populated yet
+    if math.isnan(eps):
+        quarterly_earnings = yf_ticker.get_financials(freq='quarterly').loc['DilutedEPS']
+        eps = 0
+        for i in range(quarterly_earnings.size):
+            eps += quarterly_earnings.iloc[i]
+        eps = round(eps, 2)
+        print(quarterly_earnings)
 
     market_price = yf_ticker.get_info()['regularMarketPrice']
-    return {'fcf': last_fcf, 'ge': ge, 'yr': 5, 'dr': 10, 'pr': 2.5, 'shares': shares, 'eps': eps, 'mp': market_price}
+    return {'company_name' : company_name, 'fcf': last_fcf, 'ge': ge, 'shares': shares, 'eps': eps, 'mp': market_price}
 
-def dcf(data):
+def dcf(data: dict) -> dict:
     forecast = [data['fcf']]
 
     if data['ge'] == []:
@@ -53,50 +56,68 @@ def dcf(data):
     pvs = [round(f * d, 2) for f, d in zip(forecast[:-1], discount_factors)]
     pvs.append(round(discount_factors[-1] * forecast[-1], 2)) # discounted terminal value
     
+    result = {}
+
     print("Forecasted cash flows: {}".format(", ".join(map(str, forecast))))
+
+    result['forecasted_cash_flows'] = forecast
+
     print("PV of cash flows: {}".format(", ".join(map(str, pvs))))
 
+    result['cashflow_present_values'] = pvs
+
     dcf = sum(pvs)
+
     print("Fair value: {}\n".format(dcf / data['shares']))
+
+    result['fair_value'] = dcf / data['shares']
+
+    return result
 
 def reverse_dcf(data):
     pass
 
-def graham(data):
+def graham(data: dict) -> dict:
+
+    result = {}
+
     if data['eps'] > 0:
         expected_value = data['eps'] * (8.5 + 2 * (data['ge']))
         ge_priced_in = (data['mp'] / data['eps'] - 8.5) / 2
 
         print("Expected value based on growth rate: {}".format(expected_value))
+
+        result['graham_expected_value'] = expected_value
+
         print("Growth rate priced in for next 7-10 years: {}\n".format(ge_priced_in))
+
+        result['graham_growth_estimate'] = ge_priced_in
+
     else:
         print("Not applicable since EPS is negative.")
+    return result
 
-if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    
-    argparser.add_argument('--discount_rate', help='Discount rate in %. Default: 10', default=10)
-    argparser.add_argument('--growth_estimate', help='Estimated yoy growth rate. Default: Fetched from Yahoo Finance')
-    argparser.add_argument('--terminal_rate', help='Terminal growth rate. Default: 2.5')
-    argparser.add_argument('--period', help='Time period in years. Default: 5')
-    args = argparser.parse_args()
-    
-    ticker = "SOFI"
+
+def get_fairval(ticker: str, discount_rate: float, perpetual_rate: float, ge: float = None, term: int = 5, eps: float = None) -> dict:
 
     print("Fetching data for %s...\n" % (ticker))
+
     data = parse(ticker)
+    result = data.copy()
+
+    if ge is not None:
+        data['ge'] = ge
+    if eps is not None:
+        data['eps'] = eps
+
+    data['dr'] = discount_rate
+    data['pr'] = perpetual_rate
+    data['yr'] = term
+
     print("=" * 80)
     print("DCF model (basic)")
     print("=" * 80 + "\n")
 
-    if args.period is not None:
-        data['yr'] = int(args.period)
-    if args.growth_estimate is not None:
-        data['ge'] = float(args.growth_estimate)
-    if args.discount_rate is not None:
-        data['dr'] = float(args.discount_rate)
-    if args.terminal_rate is not None:
-        data['pr'] = float(args.terminal_rate)
 
     print("Market price: {}".format(data['mp']))
     print("EPS: {}".format(data['eps']))
@@ -105,10 +126,12 @@ if __name__ == "__main__":
     print("Discount Rate: {}%".format(data['dr']))
     print("Perpetual Rate: {}%\n".format(data['pr']))
 
-    dcf(data)
+    result.update(dcf(data))
 
     print("=" * 80)
     print("Graham style valuation basic (Page 295, The Intelligent Investor)")
     print("=" * 80 + "\n")
 
-    graham(data)
+    result.update(graham(data))
+    return result
+    

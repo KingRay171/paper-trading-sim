@@ -24,4 +24,4 @@ def simplify(num):
     return str(num) + 'k'
 
 
-print(simplify(420000343))
+print(simplify(-420000343))

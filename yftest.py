@@ -1157,9 +1157,21 @@ def on_financials_checkbox_click():
             set = QBarSet(financials_table.verticalHeaderItem(i).text())
             for j in range(4):
                 
-                val = float(financials_table.item(i, j).text())
-                set.append(val)
+                val = financials_table.item(i, j).text()
+                last_char = val[-1]
+                match last_char:
+                    case 'k':
+                        set.append(float(val[:-1]) * 10**3)
+                    case 'M':
+                        set.append(float(val[:-1]) * 10**6)
+                    case 'B':
+                        set.append(float(val[:-1]) * 10**9)
+                    case 'T':
+                        set.append(float(val[:-1]) * 10**12)
+                    case _:
+                        set.append(float(val))
             series.append(set)
+
     financials_chart.addSeries(series)
     financials_chart.createDefaultAxes()
 

@@ -1116,7 +1116,7 @@ def stockinfo_dialog_changed(tab_id: int):
         tab3_isloaded = True
     elif(tab_id == 3 and not tab4_isloaded):
         t1 = time.perf_counter()
-        ticker_financials = ticker.get_financials()
+        ticker_financials = ticker.get_financials(pretty=True)
         financials_table.setRowCount(ticker_financials.index.size)
         financials_table.setColumnCount(5)
 
@@ -1127,7 +1127,7 @@ def stockinfo_dialog_changed(tab_id: int):
         for i in range(4):
             for j in range(ticker_financials.index.size):
                 if(ticker_financials.iloc[j][3 - i] > 1000):
-                    formatted_data = nf.simplify(ticker_financials.iloc[j][3 - i])
+                    formatted_data = nf.simplify(ticker_financials.iloc[j][3 - i], True)
                     financials_table.setItem(j, i, QTableWidgetItem(formatted_data))
                 else:
                     financials_table.setItem(j, i, QTableWidgetItem(str(ticker_financials.iloc[j][3 - i])))
@@ -1194,8 +1194,8 @@ def dcf_findstock_button_click():
     dcf_dialog.inputs_groupbox.growth_slider.setValue(input_info['ge'] * 100)
     dcf_dialog.inputs_groupbox.discount_rate.setText(str(dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0) + "%")
     dcf_dialog.inputs_groupbox.perpetual_rate.setText(str(dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0) + "%")
-    dcf_dialog.inputs_groupbox.last_fcf.setText(nf.simplify(input_info['fcf']))
-    dcf_dialog.inputs_groupbox.shares.setText(nf.simplify(input_info['shares']))
+    dcf_dialog.inputs_groupbox.last_fcf.setText(nf.simplify(input_info['fcf'], True))
+    dcf_dialog.inputs_groupbox.shares.setText(nf.simplify(input_info['shares'], True))
 
 def growth_slider_moved():
     dcf_dialog.inputs_groupbox.growth.setText(str(dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0) + "%")

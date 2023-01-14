@@ -3,12 +3,11 @@ paper-trading-sim will be a game where the goal is to generate the highest retur
 
 [Changelog »](https://github.com/KingRay171/paper-trading-sim/blob/main/CHANGELOG.rst)
 
-What's new in version 0.10
+What's new in version 0.11
 -------------------------
-- fixed slow load times for stock and ETF information
-- fixed bug that caused game to crash when downloading crypto prices
-- stock information tab is now implemented and includes equity and company information,
-  mutual fund holders, news, analyst recommendations, institutional holders, balance sheet
-  info, and revenue/earnings history & predictions
-- fixed bug that stopped stock and ETF information from clearing once a new equity was searched for
-- AI model now looks for CSV file containing stock price data in the right place
+- ui update thread now checks if the market is open and if the user is on the portfolio or wallet tab
+- added dcf model tool
+- made numbers in financials dialog in stock info tool look nicer
+- made chart legend look nicer
+- financials chart now properly shows the data that is being charted
+- misc. optimizations and readability fixes

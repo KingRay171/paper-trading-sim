@@ -1,5 +1,15 @@
 Changelog
 =========
+
+0.11.0
+------
+- ui update thread now checks if the market is open and if the user is on the portfolio or wallet tab
+- added dcf model tool
+- made numbers in financials dialog in stock info tool look nicer
+- made chart legend look nicer
+- financials chart now properly shows the data that is being charted
+- misc. optimizations and readability fixes
+
 0.10.0
 ------
 - fixed slow load times for stock and ETF information

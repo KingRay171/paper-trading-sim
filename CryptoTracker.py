@@ -27,4 +27,4 @@ for row in rows:
 # Convert the list into an easily accessible Pandas dataframe
 df = pd.DataFrame(stock_list)
 
-print(df)# WallStreetBets quiverquant tracker. Stocks from the last 24 hours is provided by quiverquant.
+print(df)

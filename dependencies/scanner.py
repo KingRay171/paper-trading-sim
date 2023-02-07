@@ -30,7 +30,7 @@ def highestVolitility():
   return stock_list
 
 def Volume():
-  stock_list = Screener(filters=filters, table='Performance', order='volume')  # Get the performance table and sort it by change ascending
+  stock_list = Screener(filters=filters, table='Performance', order='-volume')  # Get the performance table and sort it by change ascending
   return stock_list
   
 main()

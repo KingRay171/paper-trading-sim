@@ -8,13 +8,13 @@ def main():
   # EXPORTING RESULTS IS OPTIONAL
   # Export the screener results to .csv
   stock_list.to_csv("stock.csv")
-  
+
   # Create a SQLite database
   stock_list.to_sqlite("stock.sqlite3")
-  # 
+  #
   for stock in stock_list[0:19]:  # Loop through 10th - 20th stocks
     print(stock['Ticker'], stock['Volume']) # Print symbol
-  
+
 
 def highestGrowth():
   stock_list = Screener(filters=filters, table='Performance', order='-change')  # Get the performance table and sort it by change ascending
@@ -31,5 +31,5 @@ def highestVolitility():
 def Volume():
   stock_list = Screener(filters=filters, table='Performance', order='volume')  # Get the performance table and sort it by change ascending
   return stock_list
-  
+
 main()

@@ -27,4 +27,8 @@ for row in rows:
 # Convert the list into an easily accessible Pandas dataframe
 df = pd.DataFrame(stock_list)
 
+<<<<<<< HEAD
 print(df)
+=======
+print(df)
+>>>>>>> 82942c1d51440900629bfef30c994ba69f40db7d

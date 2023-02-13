@@ -1,6 +1,15 @@
 Changelog
 =========
 
+0.12.0
+------
+- stock charts are now interactive, update automatically, and are zoomable
+- added support for several technical indicators to charting dialog
+- stock information for the information dialog is retrieved using the yahooquery library instead of yfinance
+- stock info dialog is now much faster
+- technical indicators now have customizable settings
+- general code quality improvements
+
 0.11.0
 ------
 - ui update thread now checks if the market is open and if the user is on the portfolio or wallet tab

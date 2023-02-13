@@ -1,55 +1,35 @@
-import yfinance as yf
-from datetime import date
-from datetime import timedelta
-import numpy as np
+# from https://github.com/mariostoev/finviz
+from finviz.screener import Screener
 
-#most growth, most loss, most volume, most volitality, most realized volitility
+filters = ['exch_nasd', 'idx_sp500']  # Shows companies in NASDAQ which are in the S&P500
 
-#All of the bellow accept a list of stock names and returns them sorted by the name of the method. i.e. if you use 'Volitilitiy' it will output a 2d list organized by its volitility. The name will be the first colomn will be the names and the second will show the volitility
-def Volitility(stockNameList):
-  topname = []
+def main():
+  stock_list = Volume()
+  # EXPORTING RESULTS IS OPTIONAL
+  # Export the screener results to .csv
+  stock_list.to_csv("stock.csv")
   
-  for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], period = '1mo', interval = '1d')
-    
-    closePrices = stockData['Close']
-    a = np.array(closePrices)
-    standard = np.std(a)
-    
-    topname.append([stockName, standard])
+  # Create a SQLite database
+  stock_list.to_sqlite("stock.sqlite3")
+  # 
+  for stock in stock_list[0:19]:  # Loop through 10th - 20th stocks
+    print(stock['Ticker'], stock['Volume']) # Print symbol
+  
 
-  topname = sorted(topname,key=lambda l:l[1], reverse=True)
-  return topname
+def highestGrowth():
+  stock_list = Screener(filters=filters, table='Performance', order='-change')  # Get the performance table and sort it by change ascending
+  return stock_list
 
-def Growth(stockNameList):
-  today = date.today() + timedelta(days = 1)
-  yesterday = today - timedelta(days = 3)
-  topname = []
+def highestLoss():
+  stock_list = Screener(filters=filters, table='Performance', order='change')  # Get the performance table and sort it by change ascending
+  return stock_list
 
-  for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], start = yesterday, end = today, interval = '1d')
-    
-    start = stockData['Close'][0]
-    end = stockData['Close'][-1]
+def highestVolitility():
+  stock_list = Screener(filters=filters, table='Performance', order='-volatility1w')  # Get the performance table and sort it by change ascending
+  return stock_list
 
-    growth = end/start - 1
-    
-    topname.append([stockName, growth])
-
-  topname = sorted(topname,key=lambda l:l[1], reverse=True)
-  return topname
-
-def Volume(stockNameList):
-  topname = []
-
-  for stockName in stockNameList:
-    stockData = yf.download(tickers = [stockName], interval = '1d', period="1d")
-    
-    volume = stockData['Volume'][-1]
-    
-    topname.append([stockName, volume])
-
-  topname = sorted(topname,key=lambda l:l[1], reverse=True)
-  return topname
-
-print(Volume(["MSFT", "AAPL", "GOOG"]))
+def Volume():
+  stock_list = Screener(filters=filters, table='Performance', order='volume')  # Get the performance table and sort it by change ascending
+  return stock_list
+  
+main()

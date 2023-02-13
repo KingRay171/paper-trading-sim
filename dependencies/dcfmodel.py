@@ -38,7 +38,7 @@ def parse(ticker: str) -> dict:
         eps = round(eps, 2)
         print(quarterly_earnings)
 
-    market_price = yf_ticker.get_info()['regularMarketPrice']
+    market_price = yf_ticker.basic_info['last_price']
     return {'company_name' : company_name, 'fcf': last_fcf, 'ge': ge, 'shares': shares, 'eps': eps, 'mp': market_price}
 
 def dcf(data: dict) -> dict:

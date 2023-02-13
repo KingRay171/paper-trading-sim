@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false,
+            "args": ["MSFT", "1m", "[('ta.trend.VortexIndicator', 2, [14])]", "1d"]
         }
     ]
 }

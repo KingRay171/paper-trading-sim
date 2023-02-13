@@ -1,11 +1,27 @@
+import sys
+import numpy as np
+import talib
+import ta
+from ta.volatility import BollingerBands
+from ta.momentum import tsi
+from matplotlib.backends.qt_compat import QtWidgets
+from matplotlib.backends.backend_qt5agg import (
+        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+from bs4 import BeautifulSoup
+from matplotlib.figure import Figure
+from matplotlib import animation
+import pandas as pd
 import yfinance as yf
+import yahooquery as yq
 import time
+from yahooquery import Ticker
+
 
 t1 = time.perf_counter()
-yf.download("AAPL", period="5d")
+print(yq.Ticker('MSFT').all_financial_data().iloc[1][0])
 t2 = time.perf_counter()
-yf.download("AAPL", period="5d", interval="5d")
+
 t3 = time.perf_counter()
 
-print(f"original method: {t2 - t1} seconds")
-print(f"new method: {t3 - t2} seconds")
+
+print(f"yfinance: {t2 - t1}")

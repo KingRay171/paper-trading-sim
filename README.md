@@ -9,5 +9,5 @@ What's new in version 0.12
 - added support for several technical indicators to charting dialog
 - stock information for the information dialog is retrieved using the yahooquery library instead of yfinance
 - stock info dialog is now much faster
-- technical indicators now have customizable settings
+- technical indicators now have customizable setting
 - general code quality improvements

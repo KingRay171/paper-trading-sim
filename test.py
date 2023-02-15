@@ -15,13 +15,15 @@ import yfinance as yf
 import yahooquery as yq
 import time
 from yahooquery import Ticker
+import dis
 
 
 t1 = time.perf_counter()
-print(yq.Ticker('MSFT').all_financial_data().iloc[1][0])
+print(yq.Ticker('SPY').history('5d').iloc[4][3])
+
 t2 = time.perf_counter()
-
+print(yf.download(tickers='BTC-USD', period='5d', interval='1d'))
 t3 = time.perf_counter()
-
+print(dis.dis("yq.Ticker('SPY').history('5d')"))
 
 print(f"yfinance: {t2 - t1}")

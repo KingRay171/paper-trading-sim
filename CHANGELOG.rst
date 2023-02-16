@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.12.1
+------
+- misc. bug fixes and optimizations
+- general code quality improvements
+
 0.12.0
 ------
 - stock charts are now interactive, update automatically, and are zoomable

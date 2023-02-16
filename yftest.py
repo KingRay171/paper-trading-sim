@@ -3021,7 +3021,7 @@ ichimoku_widget.layout().addWidget(ichimoku_settings_button)
 ichimoku_checkbox = QCheckBox()
 ichimoku_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.IchimokuIndicator", ichimoku_panel_combobox.currentIndex(
-    ), [])) if ichimoku_checkbox.isChecked() else removeIndicator("ta.trend.IchimokuIndicator")
+    ), [9, 26, 52, False])) if ichimoku_checkbox.isChecked() else removeIndicator("ta.trend.IchimokuIndicator")
 )
 ichimoku_widget.layout().addWidget(ichimoku_checkbox)
 trend_widget.layout().addWidget(ichimoku_widget)

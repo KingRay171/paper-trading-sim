@@ -22,7 +22,7 @@ class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, hp):
         super(Enemy, self).__init__()
 
-        self.surf = pygame.image.load("Resources/coin.webp").convert_alpha()
+        self.surf = pygame.image.load("Resources/coin.png").convert_alpha()
 
         self.surf = pygame.transform.scale(self.surf, (40, 40))
         self.rect = self.surf.get_rect(center=(

@@ -50,7 +50,7 @@ def spy_button_clicked():
     chart_configurations.search_bar_groupbox.searchBar.setText(
         "SPY - SPDR S&P 500 ETF Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def qqq_button_clicked():
@@ -61,7 +61,7 @@ def qqq_button_clicked():
     chart_configurations.search_bar_groupbox.searchBar.setText(
         "QQQ - Invesco QQQ Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def dia_button_clicked():
@@ -72,7 +72,7 @@ def dia_button_clicked():
     chart_configurations.search_bar_groupbox.searchBar.setText(
         "DIA - SPDR Dow Jones Industrial Average ETF Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def vix_button_clicked():
@@ -81,7 +81,7 @@ def vix_button_clicked():
     Charts VIX with the current user settings
     """
     chart_configurations.search_bar_groupbox.searchBar.setText("^VIX ")
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def update_ui():
@@ -206,22 +206,25 @@ def update_wallet_table():
 
         # first cell in the row is the coin symbol
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 0, QTableWidgetItem(ticker.text.upper()))
+            idx, 0, QTableWidgetItem(ticker.text.upper())
+        )
 
         # second cell is the coin's performance icon
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 1, updateTickerIcon(ticker_data))
+            idx, 1, updateTickerIcon(ticker_data)
+        )
 
         # third cell is the coin's current price
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}'))
+            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}')
+        )
 
         # fourth cell is the change in the coin's price from it's last close,
         # in dollar and percent terms
         last_close_change = ticker_current - ticker_last_close
         wallet_dialog.positions_view_groupbox.positions_view.setItem(idx, 3, QTableWidgetItem(
-            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
-        ))
+            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)')
+        )
 
 
         # fifth cell is the user's costbasis for the token
@@ -312,21 +315,31 @@ def update_watchlist_tickers():
         ticker_last_close = ticker.iloc[3][3]
 
         portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 0, QTableWidgetItem(item.text.upper()))
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 1, updateTickerIcon(ticker))
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
+            idx, 0, QTableWidgetItem(item.text.upper())
+        )
 
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(idx, 3, QTableWidgetItem('${:0,.2f}'.format(
-            ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
+            idx, 1, updateTickerIcon(ticker)
+        )
+
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
+            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}')
+        )
+
+        last_close_change = ticker_current - ticker_last_close
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(idx, 3, QTableWidgetItem(
+            f'{last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+            )
+        )
+
 
 
 def daterange_radiobutton_clicked():
     """
-    Should run only when the player clicks the "Chart by Date Range" radiobutton on the "Chart Stocks"
-    dialog. Disables the combobox that lets the user select a period to chart over and enables the
-    calendars so that the user can pick a start and end date for the chart.
+    Should run only when the player clicks the "Chart by Date Range" radiobutton on the
+    "Chart Stocks" dialog. Disables the combobox that lets the user select a period to
+    chart over and enables the calendars so that the user can pick a start and end date
+    for the chart.
     """
     chart_configurations.settings_groupbox.start_date.setEnabled(True)
     chart_configurations.settings_groupbox.end_date.setEnabled(True)
@@ -347,7 +360,7 @@ def period_radiobutton_clicked():
         True)
 
 
-def searchTextChanged(txt: str):
+def search_text_changed(txt: str):
     """
     Executed when text is typed into the search bar on the "Chart Stocks" tab.
     The function takes the entered text and appends it to the search bar.
@@ -355,7 +368,7 @@ def searchTextChanged(txt: str):
     chart_configurations.search_bar_groupbox.searchBar.setText(txt.upper())
 
 
-def searchButtonClicked():
+def search_button_clicked():
     """Plots a ticker from yfinance in a separate matplotfinance window.
 
         ticker : pandas.DataFrame
@@ -379,28 +392,16 @@ def searchButtonClicked():
     interval = chart_configurations.settings_groupbox.data_timeframe_combobox.currentText()
 
     # get all chart settings the user selected on the chart menu
-    include_prepost = False
-    if (chart_configurations.settings_groupbox.prepost_checkbox.isChecked()):
-        include_prepost = True
+    include_prepost = chart_configurations.settings_groupbox.prepost_checkbox.isChecked()
 
-    adjust_ohlc = False
-    if (chart_configurations.settings_groupbox.adjust_ohlc_checkbox.isChecked()):
-        adjust_ohlc = True
+    adjust_ohlc = chart_configurations.settings_groupbox.adjust_ohlc_checkbox.isChecked()
 
-    split_dividend = False
-    if (chart_configurations.settings_groupbox.split_dividend_checkbox.isChecked()):
-        split_dividend = True
+    split_dividend = chart_configurations.settings_groupbox.split_dividend_checkbox.isChecked()
 
-    include_volume = False
-    if (chart_configurations.settings_groupbox.volume_checkbox.isChecked()):
-        include_volume = True
+    include_volume = chart_configurations.settings_groupbox.volume_checkbox.isChecked()
 
-    non_trading = False
-    if (chart_configurations.settings_groupbox.nontrading_checkbox.isChecked()):
-        non_trading = True
+    non_trading = chart_configurations.settings_groupbox.nontrading_checkbox.isChecked()
 
-    start_date = None
-    end_date = None
 
     up_color = getXMLData('assets/settings.xml', 'upcolor')
     down_color = getXMLData('assets/settings.xml', 'downcolor')
@@ -412,7 +413,7 @@ def searchButtonClicked():
     s = mpf.make_mpf_style(base_mpf_style=base_style[0].text, marketcolors=mc)
 
    # shows the requested ticker's chart
-    if (chart_configurations.settings_groupbox.daterange_radiobutton.isChecked()):
+    if chart_configurations.settings_groupbox.daterange_radiobutton.isChecked():
 
         def thread_worker(title, start_date, end_date, interval):
             os.system(
@@ -422,19 +423,20 @@ def searchButtonClicked():
         ).toString("yyyy-MM-dd")
         end_date = chart_configurations.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
 
-        t1 = Thread(daemon=True, target=thread_worker, args=(
+        Thread(daemon=True, target=thread_worker, args=(
             ticker, start_date, end_date, interval)).start()
     else:
         # only get period if user chose to chart by period
 
         def thread_worker(title, period, interval):
             os.system(
-                f'python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {period}')
+                rf'python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {period}')
 
         period = chart_configurations.settings_groupbox.data_period_combobox.currentText()
 
-        t1 = Thread(daemon=True, target=thread_worker,
-                    args=(ticker, period, interval)).start()
+        Thread(daemon=True, target=thread_worker,
+            args=(ticker, period, interval)
+        ).start()
 
 
 def updateTickerIcon(ticker) -> QTableWidgetItem:
@@ -1697,7 +1699,7 @@ chart_configurations.search_bar_groupbox.searchBar = QLineEdit(
 chart_configurations.search_bar_groupbox.searchBar.setGeometry(
     10, 20, 850, 40)
 chart_configurations.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
+    lambda txt: search_text_changed(txt))
 chart_configurations.search_bar_groupbox.searchBar.setFont(
     QFont('arial', 10))
 chart_configurations.search_bar_groupbox.search_button = QPushButton(
@@ -1707,7 +1709,7 @@ chart_configurations.search_bar_groupbox.search_button.setGeometry(
 chart_configurations.search_bar_groupbox.search_button.setText("Chart")
 chart_configurations.search_bar_groupbox.search_button.setEnabled(False)
 chart_configurations.search_bar_groupbox.search_button.clicked.connect(
-    searchButtonClicked)
+    search_button_clicked)
 chart_configurations.settings_groupbox = QGroupBox(chart_configurations)
 chart_configurations.settings_groupbox.setStyleSheet(
     'background-color: white;')
@@ -2917,7 +2919,7 @@ kst_widget.layout().addWidget(kst_settings_button)
 kst_checkbox = QCheckBox()
 kst_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.KSTIndicator", kst_panel_combobox.currentIndex(
-    ))) if kst_checkbox.isChecked() else removeIndicator("ta.trend.KSTIndicator")
+    ), [10, 15, 20, 30, 10, 10, 10, 15, 9])) if kst_checkbox.isChecked() else removeIndicator("ta.trend.KSTIndicator")
 )
 kst_widget.layout().addWidget(kst_checkbox)
 trend_widget.layout().addWidget(kst_widget)
@@ -3019,7 +3021,7 @@ ichimoku_widget.layout().addWidget(ichimoku_settings_button)
 ichimoku_checkbox = QCheckBox()
 ichimoku_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.IchimokuIndicator", ichimoku_panel_combobox.currentIndex(
-    ))) if ichimoku_checkbox.isChecked() else removeIndicator("ta.trend.IchimokuIndicator")
+    ), [])) if ichimoku_checkbox.isChecked() else removeIndicator("ta.trend.IchimokuIndicator")
 )
 ichimoku_widget.layout().addWidget(ichimoku_checkbox)
 trend_widget.layout().addWidget(ichimoku_widget)
@@ -3101,7 +3103,7 @@ mi_widget.layout().addWidget(mi_settings_button)
 mi_checkbox = QCheckBox()
 mi_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.mass_index", mi_panel_combobox.currentIndex(
-    ))) if mi_checkbox.isChecked() else removeIndicator("ta.trend.mass_index")
+    ), [9, 25])) if mi_checkbox.isChecked() else removeIndicator("ta.trend.mass_index")
 )
 mi_widget.layout().addWidget(mi_checkbox)
 trend_widget.layout().addWidget(mi_widget)
@@ -3213,7 +3215,7 @@ schaff_widget.layout().addWidget(schaff_settings_button)
 schaff_checkbox = QCheckBox()
 schaff_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.stc", schaff_panel_combobox.currentIndex(
-    ))) if schaff_checkbox.isChecked() else removeIndicator("ta.trend.stc")
+    ), [50, 23, 10, 3, 3])) if schaff_checkbox.isChecked() else removeIndicator("ta.trend.stc")
 )
 schaff_widget.layout().addWidget(schaff_checkbox)
 trend_widget.layout().addWidget(schaff_widget)
@@ -3283,7 +3285,7 @@ trix_widget.layout().addWidget(trix_settings_button)
 trix_checkbox = QCheckBox()
 trix_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.trix", trix_panel_combobox.currentIndex(
-    ), 15)) if trix_checkbox.isChecked() else removeIndicator("ta.trend.trix")
+    ), [15])) if trix_checkbox.isChecked() else removeIndicator("ta.trend.trix")
 )
 trix_widget.layout().addWidget(trix_checkbox)
 trend_widget.layout().addWidget(trix_widget)
@@ -3481,7 +3483,7 @@ stockinfo_dialog_main.search_bar_groupbox.searchBar = QLineEdit(
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setGeometry(
     10, 20, 850, 40)
 stockinfo_dialog_main.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
+    lambda txt: search_text_changed(txt))
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setFont(
     QFont('arial', 10))
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setCompleter(completer)
@@ -3715,7 +3717,7 @@ dcf_dialog.search_bar_groupbox.searchBar = QLineEdit(
     dcf_dialog.search_bar_groupbox)
 dcf_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
 dcf_dialog.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
+    lambda txt: search_text_changed(txt))
 dcf_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
 dcf_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
 dcf_dialog.search_bar_groupbox.search_button = QPushButton(

@@ -11,8 +11,8 @@ import random
 import time
 
 # Define constants for the screen width and height
-file = open('sett.txt')
-  
+file = open('minigame/sett.txt')
+
 # read the content of the file opened
 content = file.readlines()
 
@@ -51,32 +51,32 @@ def show_game_over():
     screen.blit(line2, ((SCREEN_WIDTH/2)- 100, (SCREEN_HEIGHT/2)))
 
 #create buttons
-resume_img = pygame.image.load("Resources/block.png").convert_alpha()
+resume_img = pygame.image.load("minigame/Resources/block.png").convert_alpha()
 resume_img = pygame.transform.scale(resume_img, (200, 240))
 resume_img = pygame.transform.flip(resume_img, True, False)
 resume_button = button.Button(420, 200, resume_img, 1)
 
-pierce_img = pygame.image.load("Resources/Pierce.webp").convert_alpha()
+pierce_img = pygame.image.load("minigame/Resources/Pierce.webp").convert_alpha()
 pierce_button = button.Button(0, 80, pierce_img, 1)
 
-faster_img = pygame.image.load("Resources/Faster.webp").convert_alpha()
+faster_img = pygame.image.load("minigame/Resources/Faster.webp").convert_alpha()
 faster_button = button.Button(125, 80, faster_img, 1)
 
-damage_img = pygame.image.load("Resources/Damage.webp").convert_alpha()
+damage_img = pygame.image.load("minigame/Resources/Damage.webp").convert_alpha()
 damage_button = button.Button(250, 80, damage_img, 1)
 
-speed_img = pygame.image.load("Resources/Speed.webp").convert_alpha()
+speed_img = pygame.image.load("minigame/Resources/Speed.webp").convert_alpha()
 speed_button = button.Button(375, 80, speed_img, 1)
 
 def rewrite_line(line, text):
-  with open('sett.txt', 'r') as file:
+  with open('minigame/sett.txt', 'r') as file:
     # read a list of lines into data
     data = file.readlines()
   # now change the 2nd line, note that you have to add a newline
   data[line] = str(text) + '\n'
 
   # and write everything back
-  with open('sett.txt', 'w') as file:
+  with open('minigame/sett.txt', 'w') as file:
       file.writelines( data )
 
 
@@ -93,15 +93,15 @@ def update_price(game, player):
   priceList.append(round(base * pow(rate, player.FIRE_RATE-1)))
   priceList.append(round(base * pow(rate, game.DART_DAMAGE-1)))
   priceList.append(round(base * pow(rate, player.DART_SPEED-3)))
-  
-  
-  
+
+
+
   return priceList
 
 
 def draw_shop(game, player):
     screen.fill((52, 78, 91))
-    
+
     line3 = fontsmall.render(f"Money:   {game.MONEY}", True, (255, 255, 255))
 
     lineUps = []
@@ -120,20 +120,20 @@ def draw_shop(game, player):
     price_text = []
     for price in prices:
       price_text.append(fontsmall.render(f"Cost: {price}", True, (255, 255, 255)))
-      
-    
+
+
     i = 0
     for price in prices:
         screen.blit(price_text[i], (125*i, 180))
         i+=1
-      
-  
+
+
     screen.blit(line1, (10, 10))
     screen.blit(line2, (10, SCREEN_HEIGHT-30))
     screen.blit(line3, (10, SCREEN_HEIGHT-60))
 
     if pierce_button.draw(screen):
-      
+
         if(game.buy(prices[0])):
           p = player.DART_PIERCE
           p+=1
@@ -147,25 +147,25 @@ def draw_shop(game, player):
           p+=1
           rewrite_line(3, p)
           player.update_fire(p)
-          
+
     if damage_button.draw(screen):
         if(game.buy(prices[2])):
           game.DART_DAMAGE +=1
           rewrite_line(9, game.DART_DAMAGE)
-          
+
     if speed_button.draw(screen):
         if(game.buy(prices[3])):
           p = player.DART_SPEED
           p+=1
           rewrite_line(7, p)
           player.update_speed(p)
-          
-  
+
+
     if resume_button.draw(screen):
         return True
 
-    
-      
+
+
     return False
 
 def render_background():
@@ -180,7 +180,7 @@ def render_background():
 class Game():
     def end_wave(self):
       pygame.time.set_timer(ADDENEMY, 10000)
-      
+
       self.inWave = False
       if(self.ENEMY_WAVE <=0):
         pygame.time.set_timer(WAVE_LENGTH, 0)
@@ -191,39 +191,39 @@ class Game():
         print("waiting for wave to stop")
         print(self.ENEMY_WAVE)
         pygame.time.set_timer(WAVE_LENGTH, 1000)
-        
+
       if(game_over):
           print("OVER")
           self.WAVE = int(content[15])
           self.inWave = False
           pygame.time.set_timer(WAVE_LENGTH, 0)
           game.ENEMY_WAVE = 0
-          
+
           if(paused):
             pygame.time.set_timer(ADDENEMY, 0)
           else:
             pygame.time.set_timer(ADDENEMY, 1000)
-        
-        
-      
+
+
+
     def start_wave(self):
       print("wave start")
-      
+
       pygame.time.set_timer(WAVE_LENGTH, self.WAVE*1000)
       pygame.time.set_timer(ADDENEMY, 200)
       self.inWave = True
       self.ENEMY_HP = 1+math.floor(self.WAVE /10)
       self.WAVE +=1
-      
-      
+
+
     def spawn(self, enemyGroup, allGroup):
         if(self.inWave):
           self.ENEMY_WAVE +=1
-        
+
         ex = 0
         ey = 0
 
-        
+
         r = random.randint(0, 3)
         if r == 0:
           ey = -20
@@ -241,14 +241,14 @@ class Game():
         new_enemy = Enemy(ex, ey, game.ENEMY_HP)
         enemyGroup.add(new_enemy)
         allGroup.add(new_enemy)
-  
+
     def buy(self, cost):
       if self.MONEY >= cost:
           self.MONEY -= cost
           rewrite_line(13, self.MONEY)
           return True
       return False
-      
+
    # Create the new enemy and add it to sprite groups
     def __init__(self):
       self.time = 0
@@ -269,10 +269,10 @@ class Game():
       if (self.time - self.lastSpawn)>SPAWN_DELAY:
         self.spawn(enemyGroup, allGroup)
         self.lastSpawn = self.time
-        
+
         for projectileGroup in bullets:
           projectileGroup.clear()
-      
+
 
 
 
@@ -308,7 +308,7 @@ pygame.time.set_timer(WAVE_LENGTH, 0)
 
 while running:
     deltaTime = clock.get_time()/20
-    
+
     # Look at every event in the queue
     for event in pygame.event.get():
         # Did the user hit a key?
@@ -317,12 +317,12 @@ while running:
             if event.key == pygame.K_SPACE:
               if(not game.inWave):
                 paused = not paused
-                
+
                 if paused:
                   pygame.time.set_timer(ADDENEMY, 0)
                 else:
                   pygame.time.set_timer(ADDENEMY, 10000)
-      
+
             if event.key == K_ESCAPE:
                 running = False
 
@@ -332,13 +332,13 @@ while running:
                 game_over = False
                 for entity in all_sprites:
                   entity.kill()
-                  
+
                 player = Player()
                 all_sprites.add(player)
-                
+
               elif (not game.inWave) and (not paused):
                 game.start_wave()
-  
+
         # Did the user click the window close button? If so, stop the loop.
         elif event.type == QUIT:
             running = False
@@ -357,49 +357,49 @@ while running:
     if paused:
         if(draw_shop(game, player)):
             paused = False
-          
+
 
     # Get the set of keys pressed and check for user input
     if game_over == False and paused == False:
         pressed_keys = pygame.key.get_pressed()
-    
+
         game.tickTimer(deltaTime)
         player.update(pressed_keys, deltaTime)
         mouse = pygame.mouse.get_pressed()
         player.process_mouse(mouse, player, deltaTime, bullets, all_sprites)
-    
+
         # spawn
         game.spawn_time(enemies, bullets, all_sprites)
-        
+
         # Update enemy position
         bullets.update(deltaTime)
-    
-      
+
+
         target = player.x, player.y
         # Update enemy position
         enemies.update(deltaTime, target)
-    
+
         # Fill the screen with black
         # screen.fill((0, 0, 0))
         render_background()
-    
+
         # Draw all sprites
         for entity in all_sprites:
             entity.render(screen)
-    
+
         # KILL Check if any enemies have collided with the player
         if pygame.sprite.spritecollideany(player, enemies):
             # If so, then remove the player and stop the loop
-          
+
             game_over = True
             render_background()
             player.render(screen)
             player.kill()
-            show_game_over() 
-    
+            show_game_over()
+
         for proj in bullets:
             enemyhit = pygame.sprite.spritecollide(proj, enemies, False)
-            
+
             if enemyhit:
                 game.ENEMY_WAVE = max(game.ENEMY_WAVE-1, 0)
                 proj.check_hit(enemyhit, game.DART_DAMAGE)
@@ -413,10 +413,10 @@ while running:
 
         screen.blit(line2, (10, 10))
         screen.blit(line, (10,40))
-          
+
       # Draw the player on the screen
       #screen.blit(player.surf, player.rect)
-  
+
     # Update the display
     pygame.display.flip()
     clock.tick(FRAME_COUNT)

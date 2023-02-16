@@ -2752,7 +2752,7 @@ dpo_widget.layout().addWidget(dpo_settings_button)
 dpo_checkbox = QCheckBox()
 dpo_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.trend.dpo", dpo_panel_combobox.currentIndex(
-    ))) if dpo_checkbox.isChecked() else removeIndicator("ta.trend.dpo")
+    ), [20])) if dpo_checkbox.isChecked() else removeIndicator("ta.trend.dpo")
 )
 dpo_widget.layout().addWidget(dpo_checkbox)
 trend_widget.layout().addWidget(dpo_widget)

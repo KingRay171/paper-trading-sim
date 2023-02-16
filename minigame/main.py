@@ -20,7 +20,7 @@ SCREEN_WIDTH = int(content[0])
 SCREEN_HEIGHT = int(content[1])
 
 
-FRAME_COUNT = 30
+FRAME_COUNT = 60
 SPAWN_DELAY = 100
 
 # Initialize pygame
@@ -167,9 +167,9 @@ def draw_shop(game, player):
 
 
     return False
-
+bg = pygame.image.load("minigame/Resources/background.jpeg")
 def render_background():
-    bg = pygame.image.load("Resources/background.jpeg")
+
     screen.blit(bg, (0, 0))
     screen.blit(bg, (0, 220))
     screen.blit(bg, (220, 220))

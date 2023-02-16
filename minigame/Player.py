@@ -35,7 +35,7 @@ class Player(pygame.sprite.Sprite):
 
     def __init__(self):
         super(Player, self).__init__()
-        self.surf = pygame.image.load("Resources/block.png").convert_alpha()
+        self.surf = pygame.image.load("minigame/Resources/block.png").convert_alpha()
 
         self.surf = pygame.transform.scale(self.surf, (50, 60))
 

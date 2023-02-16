@@ -56,16 +56,16 @@ resume_img = pygame.transform.scale(resume_img, (200, 240))
 resume_img = pygame.transform.flip(resume_img, True, False)
 resume_button = button.Button(420, 200, resume_img, 1)
 
-pierce_img = pygame.image.load("minigame/Resources/Pierce.webp").convert_alpha()
+pierce_img = pygame.image.load("minigame/Resources/Pierce.png").convert_alpha()
 pierce_button = button.Button(0, 80, pierce_img, 1)
 
-faster_img = pygame.image.load("minigame/Resources/Faster.webp").convert_alpha()
+faster_img = pygame.image.load("minigame/Resources/Faster.png").convert_alpha()
 faster_button = button.Button(125, 80, faster_img, 1)
 
-damage_img = pygame.image.load("minigame/Resources/Damage.webp").convert_alpha()
+damage_img = pygame.image.load("minigame/Resources/Damage.png").convert_alpha()
 damage_button = button.Button(250, 80, damage_img, 1)
 
-speed_img = pygame.image.load("minigame/Resources/Speed.webp").convert_alpha()
+speed_img = pygame.image.load("minigame/Resources/Speed.png").convert_alpha()
 speed_button = button.Button(375, 80, speed_img, 1)
 
 def rewrite_line(line, text):

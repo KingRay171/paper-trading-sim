@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.12.2
+------
+- minigame now looks for files in the right locations
+- minigame can now run 60fps
+
 0.12.1
 ------
 - misc. bug fixes and optimizations

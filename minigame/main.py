@@ -19,9 +19,9 @@ SCREEN_HEIGHT = int(content[1])
 
 FRAME_COUNT = 60
 SPAWN_DELAY = 5000
-WAVE_SPAWN_DELAY = 100
+WAVE_SPAWN_DELAY = 200
 WAVE_BASE = 1000
-WAVE_RATE = 1.3
+WAVE_RATE = 1.1
 
 # Initialize pygame
 pygame.init()

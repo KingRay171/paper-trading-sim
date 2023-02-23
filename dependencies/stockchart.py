@@ -1,3 +1,4 @@
+
 import yfinance as yf
 import pandas as pd
 pd.options.mode.chained_assignment = None
@@ -9,10 +10,12 @@ from matplotlib import axes
 import argparse
 import sys
 import ta_addplot
-
+import yahooquery as yq
 import math
 import talib
 import ta
+
+import readassets as ra
 
 isclosed = False
 data = None
@@ -20,6 +23,7 @@ xlims = None
 scaled_xlims = None
 default_xlims = (0, 0)
 
+# pylint: disable-msg=E0611
 func_map = {
     talib.ADX : ta_addplot.adx_addplot,
     talib.ADXR : ta_addplot.adxr_addplot,
@@ -74,7 +78,7 @@ def on_xlims_change(event_ax):
     global plot
     print(f"xlims changed: {event_ax.get_xlim()}")
 
-    
+
     # if user is zooming in
     if(event_ax.get_xlim()[0] > default_xlims[0] and event_ax.get_xlim()[1] < default_xlims[1]):
 
@@ -89,8 +93,8 @@ def on_xlims_change(event_ax):
 
     scaled_xlims = xlims
 
-def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: list, period=None, start_date=None, end_date=None):
-    
+def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: bool, adjust_ohlc: bool, split_dividend: bool, volume: bool, period=None, start_date=None, end_date=None):
+
     global axes
     global data
     global xlims
@@ -99,7 +103,14 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
     plot = []
     additional_args = []
 
-    s  = mpf.make_mpf_style(base_mpf_style='yahoo', rc={'font.size':5})
+    up_color = ra.get_xml_data('assets/settings.xml', 'upcolor')
+    down_color = ra.get_xml_data('assets/settings.xml', 'downcolor')
+    base_style = ra.get_xml_data('assets/settings.xml', 'basestyle')
+    colors = mpf.make_marketcolors(
+        up=up_color[0].text.lower(), down=down_color[0].text.lower(), inherit=True
+    )
+
+    s = mpf.make_mpf_style(base_mpf_style=base_style[0].text, marketcolors=colors)
 
 
     def update_data(ival):
@@ -108,13 +119,19 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
         global axes
         global scaled_xlims
         global default_xlims
-        
+
         ax_main = axes[0]
-        ax_vol = axes[2]
+
+        ax_vol = axes[2] if volume else None
 
         old_data_size = data['Close'].size
 
-        data = yf.download(tickers=ticker_symbol, period=period, interval=interval)
+
+        if period is not None:
+            data = yf.download(tickers=ticker_symbol, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+        else:
+            data = yf.download(tickers=ticker_symbol, start=start_date, end=end_date, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+
         if(data['Close'].size > old_data_size):
             scaled_xlims = (scaled_xlims[0], scaled_xlims[1] + 1)
 
@@ -122,7 +139,7 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
             scaled_xlims = (scaled_xlims[0], scaled_xlims[1] - 1)
 
         plot = []
-        
+
         for indicator in ta_indicators:
             indicator = (eval(indicator[0]), indicator[1], indicator[2])
             indicator_plot = func_map[indicator[0]](data=data, settings=indicator[2], ax=axes[indicator[1] * 2])
@@ -143,21 +160,29 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
 
         ax_main.callbacks.connect('xlim_changed', on_xlims_change)
 
-        mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol, style=s)
+        if volume:
+            mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol,style=s)
+            print('vol')
+        else:
+            mpf.plot(data,type='candle',addplot=plot,ax=ax_main,style=s)
+            print('no vol')
         return axes
 
 
+    if period is not None:
+        data = yf.download(tickers=ticker_symbol, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+    else:
+        data = yf.download(tickers=ticker_symbol, start=start_date, end=end_date, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
 
-    data = yf.download(tickers=ticker_symbol, period=period, interval=interval)
     xlims = (-2, data['Close'].size + 2)
     scaled_xlims = xlims
 
-    
+
 
     for idx, indicator in enumerate(ta_indicators):
 
         indicator_plot = func_map[eval(indicator[0])](data=data, settings=indicator[2], panel=indicator[1])
-        
+
         indicator_plot_isempty = True
         for i in range(len(indicator_plot)):
             if not all(math.isnan(val) for val in indicator_plot[i]['data']):
@@ -170,7 +195,7 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
             ta_indicators[idx] = None
         else:
             plot += indicator_plot
-    
+
     doji = talib.CDLDOJI(data['Open'], data['High'], data['Low'], data['Close'])
     doji_talib = pd.DataFrame(index=data.index,
                             data={"doji": doji})
@@ -182,14 +207,17 @@ def startChart(ticker_symbol: str, interval: str, volume: bool, ta_indicators: l
             doji_talib['doji'].iloc[i] = data['Low'].iloc[i] * .999
     plot.append(mpf.make_addplot((doji_talib['doji']), panel=1, marker='+', type='scatter'))
 
-    ta_indicators = [x for x in ta_indicators if x != None]
+    ta_indicators = [x for x in ta_indicators if x is not None]
 
-    fig, axes = mpf.plot(data, show_nontrading=True, volume=True, returnfig=True, addplot=plot, type='candle', style=s)
+    if ta_indicators != []:
+        fig, axes = mpf.plot(data, volume=volume, returnfig=True, addplot=plot, type='candle', style=s)
+    else:
+        fig, axes = mpf.plot(data, volume=volume, returnfig=True, type='candle', style=s)
 
     axes[0].callbacks.connect('xlim_changed', on_xlims_change)
 
 
-    ani = animation.FuncAnimation(fig, update_data, interval=50)     
+    ani = animation.FuncAnimation(fig, update_data, interval=50)
 
     mpf.show()
 
@@ -197,7 +225,7 @@ print(sys.argv)
 
 
 
-if(len(sys.argv) == 5):
-    startChart(sys.argv[1], sys.argv[2], True, eval(sys.argv[3]), period=sys.argv[4])
-elif(len(sys.argv) == 6):
-    startChart(sys.argv[1], sys.argv[2], True, eval(sys.argv[3]), start_date=sys.argv[4], end_date=sys.argv[5])
+if len(sys.argv) == 9:
+    startChart(sys.argv[1], sys.argv[2], eval(sys.argv[3]), eval(sys.argv[5]), eval(sys.argv[6]), eval(sys.argv[7]), eval(sys.argv[8]), period=sys.argv[4])
+elif len(sys.argv) == 10:
+    startChart(sys.argv[1], sys.argv[2], eval(sys.argv[3]), eval(sys.argv[6]), eval(sys.argv[7]), eval(sys.argv[8]), eval(sys.argv[9]), start_date=sys.argv[4], end_date=sys.argv[5])

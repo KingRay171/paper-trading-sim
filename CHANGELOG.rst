@@ -1,6 +1,24 @@
 Changelog
 =========
 
+0.12.3
+------
+- fixed bug that caused crypto wallet NAV to not update
+- optimized download of stock prices and information
+- misc. code quality changes
+- stock charting feature now uses charting module
+- charting module now properly parses indicator information from UI module
+- sped up app startup process
+- optimized stock info dialog rendering process
+- dcf module now uses yahooquery for faster info download
+- misc. optimizations
+
+0.12.2
+------
+- minigame now looks for files in the right locations
+- minigame can now run 60fps
+
+
 0.12.1
 ------
 - misc. bug fixes and optimizations

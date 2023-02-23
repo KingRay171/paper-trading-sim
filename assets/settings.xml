@@ -1,7 +1,7 @@
 <settings>
     <chart>
-        <upcolor>Red</upcolor>
-        <downcolor>Green</downcolor>
-        <basestyle>binance</basestyle>
+        <upcolor>Green</upcolor>
+        <downcolor>Red</downcolor>
+        <basestyle>starsandstripes</basestyle>
     </chart>
 </settings>

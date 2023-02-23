@@ -8,6 +8,7 @@ import xml.etree.ElementTree as et
 
 import pandas as pd
 # pylint: disable-msg=E0611
+# pylint: disable-msg=W0603
 from PySide6.QtCharts import (QChart, QChartView, QPieSeries, QLineSeries,
                               QDateTimeAxis, QValueAxis, QBarSeries, QBarSet)
 from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWidget,
@@ -18,10 +19,6 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
                                QSlider, QSpinBox, QDoubleSpinBox)
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor
 from PySide6.QtCore import QRect, QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation
-import yfinance as yf
-import mplfinance as mpf
-from bs4 import BeautifulSoup
-
 import yahooquery as yq
 
 from dependencies import autocomplete as ac
@@ -29,17 +26,18 @@ from dependencies import IsMarketOpen as mktopen
 from dependencies import dcfmodel as dcf
 from dependencies import numberformat as nf
 from dependencies import finviznews as fn
-tab2_isloaded = False
-tab3_isloaded = False
-tab4_isloaded = False
+from dependencies import readassets as ra
+
 
 CURRENT_DIR = os.getcwd() + '\\'
 
 QPropertyAnimation()
 
-current_ticker = ''
+CURRENT_TICKER = ''
 
 selected_ta = []
+
+ARIAL_10 = QFont('arial', 10)
 
 
 def spy_button_clicked():
@@ -47,10 +45,10 @@ def spy_button_clicked():
     Is called when the "Chart SPY" button is clicked.
     Charts SPY with the current user settings
     """
-    chart_configurations.search_bar_groupbox.searchBar.setText(
+    chart_configs.search_bar_groupbox.searchBar.setText(
         "SPY - SPDR S&P 500 ETF Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def qqq_button_clicked():
@@ -58,10 +56,10 @@ def qqq_button_clicked():
     Is called when the "Chart QQQ" button is clicked.
     Charts QQQ with the current user settings
     """
-    chart_configurations.search_bar_groupbox.searchBar.setText(
+    chart_configs.search_bar_groupbox.searchBar.setText(
         "QQQ - Invesco QQQ Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def dia_button_clicked():
@@ -69,10 +67,10 @@ def dia_button_clicked():
     Is called when the "Chart DIA" button is clicked.
     Charts DIA with the current user settings
     """
-    chart_configurations.search_bar_groupbox.searchBar.setText(
+    chart_configs.search_bar_groupbox.searchBar.setText(
         "DIA - SPDR Dow Jones Industrial Average ETF Trust"
     )
-    searchButtonClicked()
+    search_button_clicked()
 
 
 def vix_button_clicked():
@@ -80,8 +78,8 @@ def vix_button_clicked():
     Is called when the "Chart VIX" button is clicked.
     Charts VIX with the current user settings
     """
-    chart_configurations.search_bar_groupbox.searchBar.setText("^VIX ")
-    searchButtonClicked()
+    chart_configs.search_bar_groupbox.searchBar.setText("^VIX ")
+    search_button_clicked()
 
 
 def update_ui():
@@ -95,8 +93,9 @@ def update_ui():
     """
     while True:
         if widget.currentWidget() == wallet_dialog:
-                update_wallet_table()
-                time.sleep(5)
+            update_wallet_nav()
+            update_wallet_table()
+            time.sleep(5)
         if mktopen.isMarketOpen():
             if widget.currentWidget() == portfolio_dialog:
                 update_portfolio_table()
@@ -188,40 +187,37 @@ def update_wallet_table():
     for idx, (ticker, basis, amt) in enumerate(wallet_zip):
 
         # get the current price and the price it last closed at
-        ticker_data = yf.download(tickers=ticker.text, period='5d')
-
-        # edge case where yf.download returns a dataframe of size 4
-        try:
-            ticker_current = ticker_data.iloc[4][3]
-            ticker_last_close = ticker_data.iloc[3][3]
-        except IndexError:
-            ticker_current = ticker_data.iloc[3][3]
-            ticker_last_close = ticker_data.iloc[2][3]
+        ticker_data = yq.Ticker(ticker.text).history('1wk')
+        current_price = ticker_data.iloc[-1][5]
+        last_close_price = ticker_data.iloc[-2][5]
 
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (ticker_current - float(basis.text)) * float(amt.text)
+        total_return = (current_price - float(basis.text)) * float(amt.text)
         percent_change = round(total_return / (float(basis.text) * float(amt.text)) * 100, 2)
 
         # update the table with the new information
 
         # first cell in the row is the coin symbol
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 0, QTableWidgetItem(ticker.text.upper()))
+            idx, 0, QTableWidgetItem(ticker.text.upper())
+        )
 
         # second cell is the coin's performance icon
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 1, updateTickerIcon(ticker_data))
+            idx, 1, update_ticker_icon(ticker_data)
+        )
 
         # third cell is the coin's current price
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}'))
+            idx, 2, QTableWidgetItem(f'${current_price:0,.2f}')
+        )
 
         # fourth cell is the change in the coin's price from it's last close,
         # in dollar and percent terms
-        last_close_change = ticker_current - ticker_last_close
+        last_close_change = current_price - last_close_price
         wallet_dialog.positions_view_groupbox.positions_view.setItem(idx, 3, QTableWidgetItem(
-            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
-        ))
+            f'${last_close_change:0,.2f} ({round(last_close_change / last_close_price * 100, 2)}%)')
+        )
 
 
         # fifth cell is the user's costbasis for the token
@@ -237,7 +233,7 @@ def update_wallet_table():
 
         # seventh cell is the NLV the user has in the coin
         wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 6, QTableWidgetItem(f'${(ticker_current * float(amt.text)):0,.2f}')
+            idx, 6, QTableWidgetItem(f'${(current_price * float(amt.text)):0,.2f}')
         )
 
         # eighth cell is the user's net P/L on the position from when it was opened
@@ -255,9 +251,10 @@ def update_portfolio_table():
     for idx, (ticker, basis, amt) in enumerate(port_zip):
 
         # get the current price and the price it last closed at
-        ticker_data = yf.download(tickers=ticker.text, period='5d')
-        ticker_current = ticker_data.iloc[4][3]
-        ticker_last_close = ticker_data.iloc[3][3]
+
+        ticker_data = yq.Ticker(ticker.text).history(period='5d')
+        ticker_current = ticker_data.iloc[-1][5]
+        ticker_last_close = ticker_data.iloc[-2][5]
         # calculate the return since the position was opened in dollar and percent terms
         total_return = (
             ticker_current - float(basis.text)) * int(amt.text)
@@ -269,7 +266,7 @@ def update_portfolio_table():
         )
 
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 1, updateTickerIcon(ticker_data)
+            idx, 1, update_ticker_icon(ticker_data)
         )
 
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(
@@ -278,7 +275,8 @@ def update_portfolio_table():
 
         last_close_change = ticker_current - ticker_last_close
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(idx, 3, QTableWidgetItem(
-            f'{last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)')
+            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+            )
         )
 
         portfolio_dialog.positions_view_groupbox.positions_view.setItem(idx, 4, QTableWidgetItem(
@@ -298,7 +296,6 @@ def update_portfolio_table():
         )
 
 
-
 def update_watchlist_tickers():
     """
     Updates the table with all the tickers in the user's watchlist in the portfolio dialog
@@ -307,30 +304,39 @@ def update_watchlist_tickers():
     # for each ticker in the watchlist
     for idx, item in enumerate(watchlist_tickers):
 
-        ticker = yf.download(tickers=item.text, period='5d')
-        ticker_current = ticker.iloc[4][3]
-        ticker_last_close = ticker.iloc[3][3]
+        ticker = yq.Ticker(item.text).history(period='5d')
+        ticker_current = ticker.iloc[-1][5]
+        ticker_last_close = ticker.iloc[-2][5]
 
         portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 0, QTableWidgetItem(item.text.upper()))
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 1, updateTickerIcon(ticker))
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 2, QTableWidgetItem('${:0,.2f}'.format(ticker_current)))
+            idx, 0, QTableWidgetItem(item.text.upper())
+        )
 
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(idx, 3, QTableWidgetItem('${:0,.2f}'.format(
-            ticker_current - ticker_last_close) + " (" + str(round(((ticker_current - ticker_last_close) / ticker_last_close * 100), 2)) + "%)"))
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
+            idx, 1, update_ticker_icon(ticker)
+        )
+
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
+            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}')
+        )
+
+        last_close_change = ticker_current - ticker_last_close
+        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(idx, 3, QTableWidgetItem(
+            f'{last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+            )
+        )
 
 
 def daterange_radiobutton_clicked():
     """
-    Should run only when the player clicks the "Chart by Date Range" radiobutton on the "Chart Stocks"
-    dialog. Disables the combobox that lets the user select a period to chart over and enables the
-    calendars so that the user can pick a start and end date for the chart.
+    Should run only when the player clicks the "Chart by Date Range" radiobutton on the
+    "Chart Stocks" dialog. Disables the combobox that lets the user select a period to
+    chart over and enables the calendars so that the user can pick a start and end date
+    for the chart.
     """
-    chart_configurations.settings_groupbox.start_date.setEnabled(True)
-    chart_configurations.settings_groupbox.end_date.setEnabled(True)
-    chart_configurations.settings_groupbox.data_period_combobox.setEnabled(
+    chart_configs.settings_groupbox.start_date.setEnabled(True)
+    chart_configs.settings_groupbox.end_date.setEnabled(True)
+    chart_configs.settings_groupbox.data_period_combobox.setEnabled(
         False)
 
 
@@ -341,21 +347,21 @@ def period_radiobutton_clicked():
     and end date for the chart and enables the period
     combobox so that the user can pick a start and end date for the chart.
     """
-    chart_configurations.settings_groupbox.start_date.setEnabled(False)
-    chart_configurations.settings_groupbox.end_date.setEnabled(False)
-    chart_configurations.settings_groupbox.data_period_combobox.setEnabled(
+    chart_configs.settings_groupbox.start_date.setEnabled(False)
+    chart_configs.settings_groupbox.end_date.setEnabled(False)
+    chart_configs.settings_groupbox.data_period_combobox.setEnabled(
         True)
 
 
-def searchTextChanged(txt: str):
+def search_text_changed(txt: str):
     """
     Executed when text is typed into the search bar on the "Chart Stocks" tab.
     The function takes the entered text and appends it to the search bar.
     """
-    chart_configurations.search_bar_groupbox.searchBar.setText(txt.upper())
+    chart_configs.search_bar_groupbox.searchBar.setText(txt.upper())
 
 
-def searchButtonClicked():
+def search_button_clicked():
     """Plots a ticker from yfinance in a separate matplotfinance window.
 
         ticker : pandas.DataFrame
@@ -369,92 +375,61 @@ def searchButtonClicked():
             Include non-trading days in the chart? (I don't know why you'd do this)
     """
     # gets the stock ticker from the search bar
-    ticker = ''
-    i = 0
-    while chart_configurations.search_bar_groupbox.searchBar.text()[i] != ' ':
-        ticker += chart_configurations.search_bar_groupbox.searchBar.text()[i]
-        i += 1
+    ticker = chart_configs.search_bar_groupbox.searchBar.text().split(' ')[0]
 
     # get the interval the user selected
-    interval = chart_configurations.settings_groupbox.data_timeframe_combobox.currentText()
+    interval = chart_configs.settings_groupbox.data_timeframe_combobox.currentText()
 
     # get all chart settings the user selected on the chart menu
-    include_prepost = False
-    if (chart_configurations.settings_groupbox.prepost_checkbox.isChecked()):
-        include_prepost = True
+    include_prepost = chart_configs.settings_groupbox.prepost_checkbox.isChecked()
 
-    adjust_ohlc = False
-    if (chart_configurations.settings_groupbox.adjust_ohlc_checkbox.isChecked()):
-        adjust_ohlc = True
+    adjust_ohlc = chart_configs.settings_groupbox.adjust_ohlc_checkbox.isChecked()
 
-    split_dividend = False
-    if (chart_configurations.settings_groupbox.split_dividend_checkbox.isChecked()):
-        split_dividend = True
+    split_dividend = chart_configs.settings_groupbox.split_dividend_checkbox.isChecked()
 
-    include_volume = False
-    if (chart_configurations.settings_groupbox.volume_checkbox.isChecked()):
-        include_volume = True
-
-    non_trading = False
-    if (chart_configurations.settings_groupbox.nontrading_checkbox.isChecked()):
-        non_trading = True
-
-    start_date = None
-    end_date = None
-
-    up_color = getXMLData('assets/settings.xml', 'upcolor')
-    down_color = getXMLData('assets/settings.xml', 'downcolor')
-    base_style = getXMLData('assets/settings.xml', 'basestyle')
-
-    # creates a chart style based on the user's settings
-    mc = mpf.make_marketcolors(up=up_color[0].text.lower(
-    ), down=down_color[0].text.lower(), inherit=True)
-    s = mpf.make_mpf_style(base_mpf_style=base_style[0].text, marketcolors=mc)
+    include_volume = chart_configs.settings_groupbox.volume_checkbox.isChecked()
 
    # shows the requested ticker's chart
-    if (chart_configurations.settings_groupbox.daterange_radiobutton.isChecked()):
+    if chart_configs.settings_groupbox.daterange_radiobutton.isChecked():
 
         def thread_worker(title, start_date, end_date, interval):
             os.system(
-                f'python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {start_date} {end_date} ')
+                rf"""python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {start_date} {end_date} {include_prepost} {adjust_ohlc} {split_dividend} {include_volume}""")
 
-        start_date = chart_configurations.settings_groupbox.start_date.selectedDate(
+        start_date = chart_configs.settings_groupbox.start_date.selectedDate(
         ).toString("yyyy-MM-dd")
-        end_date = chart_configurations.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
+        end_date = chart_configs.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
 
-        t1 = Thread(daemon=True, target=thread_worker, args=(
+        Thread(daemon=True, target=thread_worker, args=(
             ticker, start_date, end_date, interval)).start()
     else:
         # only get period if user chose to chart by period
 
         def thread_worker(title, period, interval):
             os.system(
-                f'python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {period}')
+                rf"""python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {period} {include_prepost} {adjust_ohlc} {split_dividend} {include_volume}""")
 
-        period = chart_configurations.settings_groupbox.data_period_combobox.currentText()
+        period = chart_configs.settings_groupbox.data_period_combobox.currentText()
 
-        t1 = Thread(daemon=True, target=thread_worker,
-                    args=(ticker, period, interval)).start()
+        Thread(daemon=True, target=thread_worker,
+            args=(ticker, period, interval)
+        ).start()
 
 
-def updateTickerIcon(ticker) -> QTableWidgetItem:
+def update_ticker_icon(ticker) -> QTableWidgetItem:
     """
     Updates the performance icon for the given stock
 
         ticker : pandas.DataFrame
             A Pandas dataframe representing a ticker's price history.
             Obtained through a call to yf.download
+        Returns a QTableWidgetItem with the new performance icon
     """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
     w = QTableWidgetItem()
-    try:
-        ticker_open = ticker.iloc[4][0]
-        ticker_current = ticker.iloc[4][3]
-        ticker_last_close = ticker.iloc[3][3]
-    except IndexError:
-        ticker_open = ticker.iloc[3][0]
-        ticker_current = ticker.iloc[3][3]
-        ticker_last_close = ticker.iloc[2][3]
+    ticker_open = ticker.iloc[-1][0]
+    ticker_current = ticker.iloc[-1][5]
+    ticker_last_close = ticker.iloc[-2][5]
 
     # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
@@ -515,35 +490,38 @@ def update_portfolio_nav():
     """
 
     # sets buying power to user's cash
-    newVal = float(portfolio_amts[0].text)
+    new_val = float(portfolio_amts[0].text)
     liabilities = 0
     assets = 0
 
     # for each stock in the portfolio, get its price and check if it's held long or sold short
     for idx, amt in enumerate(portfolio_amts[1:]):
         # slice returns only the dollar value without the '$'
-        price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
+        cur_val = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
             idx, 2).text()[1:])
 
         if int(amt.text) > 0:
             # if it's long, add its value to the new value and to the assets tally
-            newVal += float(price) * int(amt.text)
-            assets += float(price) * float(amt.text)
+            new_val += float(cur_val) * int(amt.text)
+            assets += float(cur_val) * float(amt.text)
         elif int(amt.text) < 0:
             # if it's short, subtract its value from the new value and add to the liabilities tally
-            newVal -= float(price) * int(amt.text)
-            liabilites += float(price) * float(amt.text)
+            new_val -= float(cur_val) * int(amt.text)
+            liabilites += float(cur_val) * float(amt.text)
 
     buying_power = get_portfolio_bp()
-    portfolio_dialog.currentNAV.liq.setText(
-        '${:0,.2f}'.format(float(str(newVal))))
-    portfolio_dialog.currentNAV.buyingPower.setText(
-        '${:0,.2f}'.format(buying_power))
-    portfolio_dialog.currentNAV.assets.setText('${:0,.2f}'.format(assets))
-    portfolio_dialog.currentNAV.liabilities.setText(
-        '${:0,.2f}'.format(liabilities))
+    portfolio_dialog.currentNAV.liq.setText(f'${new_val:0,.2f}')
+
+    portfolio_dialog.currentNAV.buyingPower.setText(f'${buying_power:0,.2f}')
+
+    portfolio_dialog.currentNAV.cash.setText(f'${portfolio_cash:0,.2f}')
+
+    portfolio_dialog.currentNAV.assets.setText(f'${assets:0,.2f}')
+
+    portfolio_dialog.currentNAV.liabilities.setText(f'${liabilities:0,.2f}')
+
     portfolio_dialog.currentNAV.returnSinceInception.setText(
-        '{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
+        f'{((new_val / 10000 - 1) * 100):0,.2f}%')
 
 
 def update_wallet_nav():
@@ -551,43 +529,50 @@ def update_wallet_nav():
     (1.5 * value of all short positions)."""
 
     # sets buying power to user's cash
-    newVal = float(wallet_amts[0].text)
+    new_val = float(wallet_amts[0].text)
     liabilities = 0
     assets = 0
     for idx, amt in enumerate(wallet_amts[1:]):
-        price = float(wallet_dialog.positions_view_groupbox.positions_view.item(
-            idx - 1, 2).text()[1:])
+        cur_val = atof(wallet_dialog.positions_view_groupbox.positions_view.item(
+            idx, 2).text()[1:])
         if float(amt.text) > 0:
-            newVal += float(price) * float(amt.text)
-            assets += float(price) * float(amt.text)
+            new_val += float(cur_val) * float(amt.text)
+            assets += float(cur_val) * float(amt.text)
         elif float(amt.text) < 0:
-            newVal -= float(price) * float(amt.text)
-            liabilites += float(price) * float(amt.text)
+            new_val -= float(cur_val) * float(amt.text)
+            liabilites += float(cur_val) * float(amt.text)
 
     buying_power = get_wallet_bp()
-    wallet_dialog.currentNAV.liq.setText(
-        '${:0,.2f}'.format(float(str(newVal))))
-    wallet_dialog.currentNAV.buyingPower.setText(
-        '${:0,.2f}'.format(buying_power))
-    wallet_dialog.currentNAV.assets.setText('${:0,.2f}'.format(assets))
-    wallet_dialog.currentNAV.liabilities.setText(
-        '${:0,.2f}'.format(liabilities))
+    wallet_dialog.currentNAV.liq.setText(f'${new_val:0,.2f}')
+
+    wallet_dialog.currentNAV.buyingPower.setText(f'${buying_power:0,.2f}')
+
+    wallet_dialog.currentNAV.cash.setText(f'${wallet_cash:0,.2f}')
+
+    wallet_dialog.currentNAV.assets.setText(f'${assets:0,.2f}')
+
+    wallet_dialog.currentNAV.liabilities.setText(f'${liabilities:0,.2f}')
+
     wallet_dialog.currentNAV.returnSinceInception.setText(
-        '{:0.2f}'.format((newVal / 10000 - 1) * 100) + "%")
+        f'{((new_val / 10000 - 1) * 100):0,.2f}%')
 
 
 def get_portfolio_bp() -> float:
+    """
+    Returns the user's portfolio buying power.
+    Calculated as cash + (long assets * 0.5) - (short assets * 1.5)
+    """
     buying_power = portfolio_cash
     total_long = 0
     total_short = 0
 
-    for i in range(1, len(portfolio_amts)):
-        price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
-            i - 1, 2).text()[1:])
-        if int(portfolio_amts[i].text) > 0:
-            total_long += float(price) * int(portfolio_amts[i].text)
-        elif int(portfolio_amts[i].text) < 0:
-            total_short += float(price) * int(portfolio_amts[i].text)
+    for idx, amt in enumerate(portfolio_amts[1:]):
+        cur_val = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
+            idx, 2).text()[1:])
+        if int(amt.text) > 0:
+            total_long += float(cur_val) * int(amt.text)
+        elif int(amt.text) < 0:
+            total_short += float(cur_val) * int(amt.text)
 
     buying_power += .5 * total_long
     buying_power -= 1.5 * total_short
@@ -595,87 +580,96 @@ def get_portfolio_bp() -> float:
 
 
 def get_wallet_bp() -> float:
+    """
+    Returns the user's wallet buying power.
+    Calculated as cash * 10
+    """
     return wallet_cash * 10
 
 
-def getXMLData(file, keyword):
-    """Returns a ResultSet containing all instances of the given keyword in the given file"""
-    currentdir = os.getcwd()
-    return BeautifulSoup(open(currentdir + '\\' + file, 'r').read(), "xml").find_all(keyword)
-
-
-def applySettingsChanges():
+def apply_settings_changes():
     """Updates assets/settings.xml with the currently selected settings in the GUI"""
     # gets currently selected settings
-    up = settings_dialog.up_color_combobox.currentText()
-    down = settings_dialog.down_color_combobox.currentText()
+    color_up = settings_dialog.up_color_combobox.currentText()
+    color_down = settings_dialog.down_color_combobox.currentText()
     style = settings_dialog.chart_style_combobox.currentText()
 
     # parses XML file into an ElementTree
     tree = et.parse('assets/settings.xml')
 
     # replaces old data in the file with the current data
-    for upcolor in tree.getroot().iter('upcolor'):
-        upcolor.text = up
+    for color in tree.getroot().iter('upcolor'):
+        color.text = color_up
 
-    for downcolor in tree.getroot().iter('downcolor'):
-        downcolor.text = down
+    for color in tree.getroot().iter('downcolor'):
+        color.text = color_down
 
-    for basestyle in tree.getroot().iter('basestyle'):
-        basestyle.text = style
+    for chart_style in tree.getroot().iter('basestyle'):
+        chart_style.text = style
 
     tree.write('assets/settings.xml')
 
 
-def stockinfo_searchbar_click(dialog: QDialog):
-    global tab2_isloaded
-    global tab3_isloaded
-    tab2_isloaded = False
-    tab3_isloaded = False
-    ticker = ''
-    i = 0
-    while stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i] != ' ':
-        ticker += stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i]
-        i += 1
+def stockinfo_searchbar_click():
+    """
+    Initiates the retrieval and display of stock information when the searchbar button
+    is pressed
+    """
+    global TAB2_ISLOADED
+    global TAB3_ISLOADED
+    TAB2_ISLOADED = False
+    TAB3_ISLOADED = False
 
+    ticker = stockinfo_dialog_main.search_bar_groupbox.searchBar.text().split(' ')[0]
     yq_ticker = yq.Ticker(ticker)
 
-    if (yq_ticker.quote_type[ticker]['quoteType'] == 'ETF'):
+    if yq_ticker.quote_type[ticker]['quoteType'] == 'ETF':
         stockinfo_dialog.setTabEnabled(1, False)
         stockinfo_dialog.setTabEnabled(2, False)
         stockinfo_dialog.setTabEnabled(3, False)
         setup_etf_info(yq_ticker, ticker)
-    elif (yq_ticker.quote_type[ticker]['quoteType'] == 'EQUITY'):
+    elif yq_ticker.quote_type[ticker]['quoteType'] == 'EQUITY':
         stockinfo_dialog.setTabEnabled(1, True)
         stockinfo_dialog.setTabEnabled(2, True)
         stockinfo_dialog.setTabEnabled(3, True)
         setup_stock_info(yq_ticker, ticker)
 
 
-def get_etf_weights(ticker_info: pd.DataFrame) -> list:
-    weights_list = []
+def get_etf_weights(ticker_info: pd.DataFrame) -> dict:
+    """
+    Creates a dictionary with sector names as keys and sector
+    weights as values from the given ticker information dataframe,
+    obtained from a call to yq.Ticker('name').fund_sector_weightings
+    """
+    weights_list = {}
 
-    weights_list.append(["Real Estate", ticker_info.iloc[0]])
-    weights_list.append(["Consumer Cyclicals", ticker_info.iloc[1]])
-    weights_list.append(["Basic Materials", ticker_info.iloc[2]])
-    weights_list.append(["Consumer Defensives", ticker_info.iloc[3]])
-    weights_list.append(["Technology", ticker_info.iloc[4]])
-    weights_list.append(["Communication Services", ticker_info.iloc[5]])
-    weights_list.append(["Financial Services", ticker_info.iloc[6]])
-    weights_list.append(["Utilities", ticker_info.iloc[7]])
-    weights_list.append(["Industrials", ticker_info.iloc[8]])
-    weights_list.append(["Energy", ticker_info.iloc[9]])
-    weights_list.append(["Healthcare", ticker_info.iloc[10]])
+    weights_list["Real Estate"] = ticker_info.iloc[0]
+    weights_list["Consumer Cyclicals"] = ticker_info.iloc[1]
+    weights_list["Basic Materials"] = ticker_info.iloc[2]
+    weights_list["Consumer Defensives"] = ticker_info.iloc[3]
+    weights_list["Technology"] = ticker_info.iloc[4]
+    weights_list["Communication Services"] = ticker_info.iloc[5]
+    weights_list["Financial Services"] = ticker_info.iloc[6]
+    weights_list["Utilities"] = ticker_info.iloc[7]
+    weights_list["Industrials"] = ticker_info.iloc[8]
+    weights_list["Energy"] = ticker_info.iloc[9]
+    weights_list["Healthcare"] = ticker_info.iloc[10]
+
     return weights_list
 
 
 def clear_layout(layout: QVBoxLayout):
-    for i in reversed(range(layout.count())):
-        layout.itemAt(i).widget().setParent(None)
+    """
+    Removes all child widgets from the given layout
+    """
+    for idx in reversed(range(layout.count())):
+        layout.itemAt(idx).widget().setParent(None)
 
 
 def setup_etf_info(ticker: yq.Ticker, name: str):
-    t1 = time.perf_counter()
+    """
+    Populates the stock information dialog with the given ETF's info
+    """
     ticker_data = ticker.all_modules
 
     price_data = ticker_data[name]['price']
@@ -684,6 +678,7 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     summary_detail = ticker_data[name]['summaryDetail']
     asset_profile = ticker_data[name]['assetProfile']
     key_stats = ticker_data[name]['defaultKeyStatistics']
+    fund_performance = ticker.fund_performance[name]['trailingReturns']
     etf_weights = get_etf_weights(ticker.fund_sector_weightings)
     ticker_news = fn.get_finviz_news(name)
 
@@ -700,17 +695,31 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
 
     total_assets_label = QLabel(f"Total Assets: {summary_detail['totalAssets']}")
 
+
     description_label = QLabel("Description: " + asset_profile['longBusinessSummary'])
     description_label.setWordWrap(True)
 
     inception_label = QLabel(f"Date of Inception: {key_stats['fundInceptionDate']}")
 
+    more_info_label = QLabel("Hover over a slice of the pie chart for more information")
+    more_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+
     weights_piechart = QPieSeries()
 
-    for index, weight in enumerate(etf_weights):
-        weights_piechart.append(weight[0], index + 1)
-        weights_piechart.slices()[index].setValue(weight[1] * 100)
+    for index, (sector, weight) in enumerate(etf_weights.items()):
+        weights_piechart.append(sector, index + 1)
+        weights_piechart.slices()[index].setValue(weight * 100)
         weights_piechart.slices()[index].setLabelVisible(True)
+        weights_piechart.slices()[index].setLabelFont(QFont('arial', 8))
+
+    def on_slice_hover(idx, state):
+        _slice = weights_piechart.slices()[idx]
+        _slice.setExploded(state)
+        border_width = 2 if state else 0
+        _slice.setBorderWidth(border_width)
+        _slice.setBorderColor(QColor('black'))
+        more_info_label.setText(f'{_slice.label()} - {_slice.value()}%')
 
     weights_chart = QChart()
     weights_chart.addSeries(weights_piechart)
@@ -718,6 +727,18 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     weights_chart.setVisible(True)
 
     weights_chartview = QChartView(weights_chart)
+    weights_piechart.slices()[0].hovered.connect(lambda state: on_slice_hover(0, state))
+    weights_piechart.slices()[1].hovered.connect(lambda state: on_slice_hover(1, state))
+    weights_piechart.slices()[2].hovered.connect(lambda state: on_slice_hover(2, state))
+    weights_piechart.slices()[3].hovered.connect(lambda state: on_slice_hover(3, state))
+    weights_piechart.slices()[4].hovered.connect(lambda state: on_slice_hover(4, state))
+    weights_piechart.slices()[5].hovered.connect(lambda state: on_slice_hover(5, state))
+    weights_piechart.slices()[6].hovered.connect(lambda state: on_slice_hover(6, state))
+    weights_piechart.slices()[7].hovered.connect(lambda state: on_slice_hover(7, state))
+    weights_piechart.slices()[8].hovered.connect(lambda state: on_slice_hover(8, state))
+    weights_piechart.slices()[9].hovered.connect(lambda state: on_slice_hover(9, state))
+    weights_piechart.slices()[10].hovered.connect(lambda state: on_slice_hover(10, state))
+
 
     current_price_label = QLabel(f"Current Price: {price_data['regularMarketPrice']}")
     open_price_label = QLabel(f"\tOpen: {price_data['regularMarketOpen']}")
@@ -740,16 +761,24 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     fifty_avg_label = QLabel(f"\t50d MA: {summary_detail['fiftyDayAverage']}")
     twohundred_avg_label = QLabel(f"\t200d MA: {summary_detail['twoHundredDayAverage']}")
 
-    threeyear_return_label = QLabel(f"Three-Year CAGR: {ticker.fund_performance[name]['trailingReturns']['threeYear'] * 100}% per annum")
-    fiveyear_return_label = QLabel(f"Five-Year CAGR: {ticker.fund_performance[name]['trailingReturns']['fiveYear'] * 100}% per annum")
+    threeyr_cagr_label = QLabel(
+        f"Three-Year CAGR: {fund_performance['threeYear'] * 100}% per annum"
+    )
+    fiveyr_cagr_label = QLabel(
+        f"Five-Year CAGR: {fund_performance['fiveYear'] * 100}% per annum"
+    )
 
     try:
-        dividend_label = QLabel(f"Trailing Annual Dividend Yield: {summary_detail['trailingAnnualDividendYield'] * 100}% per annum")
+        dividend_label = QLabel(
+            f"Trailing Dividend Yield: {summary_detail['trailingAnnualDividendYield'] * 100}%"
+        )
     except KeyError:  # ETF does not pay a dividend
         dividend_label = QLabel("Trailing Annual Dividend Yield: 0% per annum")
 
     try:
-        dividend_rate_label = QLabel(f"Trailing Annual Dividend Rate: ${summary_detail['trailingAnnualDividendRate']}")
+        dividend_rate_label = QLabel(
+            f"Trailing Dividend Rate: ${summary_detail['trailingAnnualDividendRate']}"
+        )
     except KeyError:
         dividend_rate_label = QLabel("Trailing Annual Dividend Rate: $0.00")
 
@@ -784,6 +813,7 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     about_scrollarea_widget.layout().addWidget(inception_label)
     about_scrollarea_widget.layout().addWidget(description_label)
     about_scrollarea_widget.layout().addWidget(weights_chartview)
+    about_scrollarea_widget.layout().addWidget(more_info_label)
 
     assetinfo_scrollarea_widget.layout().addWidget(current_price_label)
     assetinfo_scrollarea_widget.layout().addWidget(open_price_label)
@@ -801,17 +831,17 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     assetinfo_scrollarea_widget.layout().addWidget(averages_label)
     assetinfo_scrollarea_widget.layout().addWidget(fifty_avg_label)
     assetinfo_scrollarea_widget.layout().addWidget(twohundred_avg_label)
-    assetinfo_scrollarea_widget.layout().addWidget(threeyear_return_label)
-    assetinfo_scrollarea_widget.layout().addWidget(fiveyear_return_label)
+    assetinfo_scrollarea_widget.layout().addWidget(threeyr_cagr_label)
+    assetinfo_scrollarea_widget.layout().addWidget(fiveyr_cagr_label)
     assetinfo_scrollarea_widget.layout().addWidget(dividend_label)
     assetinfo_scrollarea_widget.layout().addWidget(dividend_rate_label)
     assetinfo_scrollarea_widget.layout().addWidget(beta_3y_label)
-    t2 = time.perf_counter()
-    print(f"{t2 - t1} seconds")
 
 
 def setup_stock_info(ticker: yq.Ticker, name: str):
-    t1 = time.perf_counter()
+    """
+    Populates the stock information dialog with the given stock's info
+    """
     ticker_data = ticker.all_modules
     ticker_news = fn.get_finviz_news(name)
 
@@ -919,56 +949,57 @@ def setup_stock_info(ticker: yq.Ticker, name: str):
     assetinfo_scrollarea_widget.layout().addWidget(averages_label)
     assetinfo_scrollarea_widget.layout().addWidget(fifty_avg_label)
     assetinfo_scrollarea_widget.layout().addWidget(twohundred_avg_label)
-    t2 = time.perf_counter()
-    print(f"{t2 - t1} seconds")
 
 
 def stockinfo_dialog_changed(tab_id: int):
-    t = ''
-    i = 0
-    while stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i] != ' ':
-        t += stockinfo_dialog_main.search_bar_groupbox.searchBar.text()[i]
-        i += 1
+    """
+    Populates each tab in the stock information dialog when the user clicks on it
+    """
 
-    ticker = yq.Ticker(t)
-
+    name = stockinfo_dialog_main.search_bar_groupbox.searchBar.text().split(' ')[0]
+    ticker = yq.Ticker(name)
     ticker_data = ticker.all_modules
-    global tab2_isloaded
-    global tab3_isloaded
-    global tab4_isloaded
+    global TAB2_ISLOADED
+    global TAB3_ISLOADED
+    global TAB4_ISLOADED
 
-    if (tab_id == 1 and not tab2_isloaded):
-        t1 = time.perf_counter()
-        ticker_recommendations = ticker_data[t]['upgradeDowngradeHistory']['history'][:9]
-        ticker_instholders = ticker_data[t]['institutionOwnership']['ownershipList'][:9]
-        ticker_mutfundholders = ticker_data[t]['fundOwnership']['ownershipList'][:9]
+    if (tab_id == 1 and not TAB2_ISLOADED):
+        ticker_recommendations = ticker_data[name]['upgradeDowngradeHistory']['history'][:9]
+        ticker_instholders = ticker_data[name]['institutionOwnership']['ownershipList'][:9]
+        ticker_mutfundholders = ticker_data[name]['fundOwnership']['ownershipList'][:9]
 
         for recommendation in ticker_recommendations:
-            l = QLabel(f"{recommendation['firm']}: {recommendation['toGrade']} <br> {recommendation['epochGradeDate']}")
-            stockinfo_dialog_recs.analyst_rec_groupbox.layout().addWidget(l)
+            txt = f"""
+            {recommendation['firm']}: {recommendation['toGrade']} <br>
+            {recommendation['epochGradeDate']}
+            """
+            lbl = QLabel(txt)
+            stockinfo_dialog_recs.analyst_rec_groupbox.layout().addWidget(lbl)
 
         for instholder in ticker_instholders:
-            l = QLabel(
-                f"{instholder['organization']}: {instholder['position']} shares ({instholder['pctHeld'] * 100}%) <br> {instholder['reportDate']}")
-            stockinfo_dialog_recs.iandi_groupbox.layout().addWidget(l)
+            txt = f"""
+            {instholder['organization']}: {instholder['position']} shares ({instholder['pctHeld'] * 100}%) <br>
+            {instholder['reportDate']}
+            """
+            lbl = QLabel(txt)
+            stockinfo_dialog_recs.iandi_groupbox.layout().addWidget(lbl)
 
-        for mutfundholder in ticker_mutfundholders:
-            l = QLabel(
-                f"{mutfundholder['organization']}: {mutfundholder['position']} shares ({mutfundholder['pctHeld'] * 100}%) <br> {mutfundholder['reportDate']}")
-            stockinfo_dialog_recs.mutfund_groupbox.layout().addWidget(l)
+        for mutfund in ticker_mutfundholders:
+            txt = f"""
+            {mutfund['organization']}: {mutfund['position']} shares ({mutfund['pctHeld'] * 100}%) <br>
+            {mutfund['reportDate']}
+            """
+            lbl = QLabel(txt)
+            stockinfo_dialog_recs.mutfund_groupbox.layout().addWidget(lbl)
 
-            tab2_isloaded = True
+        TAB2_ISLOADED = True
 
-        t2 = time.perf_counter()
-        print(f"{t2 - t1} seconds")
-
-    elif (tab_id == 2 and not tab3_isloaded):
-        t1 = time.perf_counter()
-        ticker_pts = ticker_data[t]['financialData']
+    elif (tab_id == 2 and not TAB3_ISLOADED):
+        ticker_pts = ticker_data[name]['financialData']
         ticker_hist = ticker.history(period="2y", interval="1wk")
-        ticker_qtr_earnings = ticker_data[t]['earningsHistory']['history']
-        ticker_qtr_rev = ticker_data[t]['earnings']['financialsChart']['quarterly']
-        ticker_yr_earnings_rev = ticker_data[t]['earnings']['financialsChart']['yearly']
+        ticker_qtr_earnings = ticker_data[name]['earningsHistory']['history']
+        ticker_qtr_rev = ticker_data[name]['earnings']['financialsChart']['quarterly']
+        ticker_yr_earnings_rev = ticker_data[name]['earnings']['financialsChart']['yearly']
 
         ptchart.removeAxis(ptchart.axes(Qt.Orientation.Horizontal)[0])
         ptchart.removeAxis(ptchart.axes(Qt.Orientation.Vertical)[0])
@@ -983,12 +1014,14 @@ def stockinfo_dialog_changed(tab_id: int):
 
         series4 = QLineSeries()
 
-        current_dt = QDateTime().currentDateTime().toMSecsSinceEpoch()
+        current_dt = float(QDateTime().currentDateTime().toMSecsSinceEpoch())
         prediction_date = QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()
         date_format = "yyyy-MM-dd hh:mm:ss"
-        for i in range(ticker_hist.count().iloc[0]):
-            series.append(float(QDateTime().fromString(str(ticker_hist.index[i][1])[
-                          0:19], date_format).toMSecsSinceEpoch()), ticker_hist.iloc[i][3])
+        for idx, close in enumerate(ticker_hist.loc[:, 'adjclose']):
+            datetime = QDateTime().fromString(str(ticker_hist.index[idx][1])[0:19], date_format)
+            epoch_dt = float(datetime.toMSecsSinceEpoch())
+            series.append(epoch_dt, close)
+
         series.append(float(prediction_date), ticker_pts['currentPrice'])
         series.setName("Current Price")
         series.setColor(QColor("blue"))
@@ -1002,16 +1035,13 @@ def stockinfo_dialog_changed(tab_id: int):
         series4.setName("Best Case")
         series4.setColor(QColor("green"))
 
-        series2.append(float(current_dt),
-                       ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series2.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
         series2.append(float(prediction_date), ticker_pts['targetLowPrice'])
 
-        series3.append(float(current_dt),
-                       ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series3.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
         series3.append(float(prediction_date), ticker_pts['targetMeanPrice'])
 
-        series4.append(float(current_dt),
-                       ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series4.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
         series4.append(float(prediction_date), ticker_pts['targetHighPrice'])
 
         ptchart.addSeries(series)
@@ -1022,14 +1052,14 @@ def stockinfo_dialog_changed(tab_id: int):
         ptchart.createDefaultAxes()
         ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
 
-        x_axis = QDateTimeAxis()
-        x_axis.setTickCount(7)
-        x_axis.setFormat("MM-dd-yyyy")
-        x_axis.setTitleText("Date")
-        x_axis.setVisible(True)
+        ptchart_x_axis = QDateTimeAxis()
+        ptchart_x_axis.setTickCount(7)
+        ptchart_x_axis.setFormat("MM-dd-yyyy")
+        ptchart_x_axis.setTitleText("Date")
+        ptchart_x_axis.setVisible(True)
 
-        ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
-        series.attachAxis(x_axis)
+        ptchart.addAxis(ptchart_x_axis, Qt.AlignmentFlag.AlignBottom)
+        series.attachAxis(ptchart_x_axis)
 
         clear_layout(pt_label_container.layout())
         pt_label_container.layout().addWidget(
@@ -1060,29 +1090,28 @@ def stockinfo_dialog_changed(tab_id: int):
             1, QTableWidgetItem("Expected"))
         qtr_earnings_table.setHorizontalHeaderItem(
             2, QTableWidgetItem("Surprise"))
-        for i in range(qtr_earnings_table.columnCount()):
-
+        for idx in range(qtr_earnings_table.columnCount()):
             qtr_earnings_table.horizontalHeaderItem(
-                i).setFont(QFont('arial', 10))
+                idx).setFont(ARIAL_10)
 
-        for i in range(qtr_earnings_table.rowCount()):
+        for idx in range(qtr_earnings_table.rowCount()):
             qtr_earnings_table.setVerticalHeaderItem(
-                i, QTableWidgetItem(str(i + 1)))
+                idx, QTableWidgetItem(str(idx + 1)))
             qtr_earnings_table.verticalHeaderItem(
-                i).setFont(QFont('arial', 10))
+                idx).setFont(ARIAL_10)
 
-        for idx, er in enumerate(ticker_qtr_earnings):
-            reported = er['epsActual']
+        for idx, report in enumerate(ticker_qtr_earnings):
+            reported = report['epsActual']
             actual_qtr_earnings_set.append(reported)
-            if (reported > earnings_trend_max):
+            if reported > earnings_trend_max:
                 earnings_trend_max = reported
-            if (reported < earnings_trend_min):
+            if reported < earnings_trend_min:
                 earnings_trend_min = reported
 
-            estimate = er['epsEstimate']
-            if (estimate > earnings_trend_max):
+            estimate = report['epsEstimate']
+            if estimate > earnings_trend_max:
                 earnings_trend_max = estimate
-            if (estimate < earnings_trend_min):
+            if estimate < earnings_trend_min:
                 earnings_trend_min = estimate
             estimate_qtr_earnings_set.append(estimate)
 
@@ -1106,9 +1135,9 @@ def stockinfo_dialog_changed(tab_id: int):
         for rev in ticker_qtr_rev:
             revenue = rev['revenue']
             qtr_rev_barset.append(float(revenue))
-            if (revenue > qtr_revtrend_max):
+            if revenue > qtr_revtrend_max:
                 qtr_revtrend_max = revenue
-            if (revenue < qtr_revtrend_min):
+            if revenue < qtr_revtrend_min:
                 qtr_revtrend_min = revenue
             qtr_revtrend_label_container.layout().addWidget(
                 QLabel(f"{rev['date']}: {revenue}"))
@@ -1127,15 +1156,15 @@ def stockinfo_dialog_changed(tab_id: int):
         yr_eps_max = 0
         yr_eps_min = 0
 
-        for er in ticker_yr_earnings_rev:
-            earnings = float(er['earnings'])
-            if (earnings > yr_eps_max):
+        for report in ticker_yr_earnings_rev:
+            earnings = float(report['earnings'])
+            if earnings > yr_eps_max:
                 yr_eps_max = earnings
-            if (earnings < yr_eps_min):
+            if earnings < yr_eps_min:
                 yr_eps_min = earnings
             yr_er_barset.append(earnings)
             yr_earnings_label_container.layout().addWidget(
-                QLabel(f"{er['date']}: {earnings}"))
+                QLabel(f"{report['date']}: {earnings}"))
 
         yr_er_barseries.append(yr_er_barset)
         yr_earnings_chart.addSeries(yr_er_barseries)
@@ -1145,77 +1174,74 @@ def stockinfo_dialog_changed(tab_id: int):
 
         yr_revtrend_chart.removeAllSeries()
         clear_layout(yr_revtrend_label_container.layout())
-        s = QBarSeries()
-        set = QBarSet("Revenue")
+        year_rev_series = QBarSeries()
+        year_rev_set = QBarSet("Revenue")
 
         yr_revtrend_max = 0
         yr_revtrend_min = 0
-        for er in ticker_yr_earnings_rev:
-            rev = float(er['revenue'])
-            set.append(rev)
+        for report in ticker_yr_earnings_rev:
+            rev = float(report['revenue'])
+            year_rev_set.append(rev)
             yr_revtrend_max = rev if rev > yr_revtrend_max else yr_revtrend_max
             yr_revtrend_min = rev if rev < yr_revtrend_min else yr_revtrend_min
             yr_revtrend_label_container.layout().addWidget(
-                QLabel(f"{er['date']}: {rev}"))
+                QLabel(f"{report['date']}: {rev}"))
 
-        set.setPen(QColor("green"))
+        year_rev_set.setPen(QColor("green"))
 
-        s.append(set)
+        year_rev_series.append(year_rev_set)
 
-        yr_revtrend_chart.addSeries(s)
+        yr_revtrend_chart.addSeries(year_rev_series)
         yr_revtrend_chart.createDefaultAxes()
         yr_revtrend_chart.axes(Qt.Orientation.Vertical)[0].setRange(
             yr_revtrend_min * 1.1, yr_revtrend_max * 1.1)
 
-        tab3_isloaded = True
+        TAB3_ISLOADED = True
 
-        t2 = time.perf_counter()
-        print(f"{t2 - t1} seconds")
-
-    elif (tab_id == 3 and not tab4_isloaded):
-        t1 = time.perf_counter()
+    elif (tab_id == 3 and not TAB4_ISLOADED):
         ticker_financials = ticker.all_financial_data()
         financials_table.setRowCount(ticker_financials.columns.size)
         financials_table.setColumnCount(5)
-        for i in range(4):
-            tw_item = QTableWidgetItem(str(ticker_financials.iloc[i][0])[:10])
-            financials_table.setHorizontalHeaderItem(i, tw_item)
-            financials_table.horizontalHeaderItem(i).setFont(QFont('arial', 10))
+        for idx in range(4):
+            tw_item = QTableWidgetItem(str(ticker_financials.iloc[idx][0])[:10])
+            financials_table.setHorizontalHeaderItem(idx, tw_item)
+            financials_table.horizontalHeaderItem(idx).setFont(ARIAL_10)
 
-        for i in range(4):
+        for idx in range(4):
             for j in range(3, ticker_financials.iloc[0].size):
-                current_data = float(ticker_financials.iloc[i][j])
+                current_data = float(ticker_financials.iloc[idx][j])
                 if current_data > 1000:
                     formatted_data = nf.simplify(current_data, True)
                     financials_table.setItem(
-                        j, i, QTableWidgetItem(formatted_data))
+                        j, idx, QTableWidgetItem(formatted_data))
                 elif current_data < -1000:
                     formatted_data = nf.simplify(abs(current_data), True)
                     financials_table.setItem(
-                        j, i, QTableWidgetItem(f"-{formatted_data}"))
+                        j, idx, QTableWidgetItem(f"-{formatted_data}"))
                 else:
-                    financials_table.setItem(j, i, QTableWidgetItem(
+                    financials_table.setItem(j, idx, QTableWidgetItem(
                         str(current_data)))
 
         checkboxes = QButtonGroup()
 
-        for i in range(ticker_financials.iloc[0].size):
+        for idx in range(ticker_financials.iloc[0].size):
 
             checkbox = QCheckBox()
             checkboxes.addButton(checkbox)
-            item = QTableWidgetItem(ticker_financials.columns[i])
-            financials_table.setVerticalHeaderItem(i, item)
-            financials_table.verticalHeaderItem(i).setFont(QFont('arial', 10))
+            item = QTableWidgetItem(ticker_financials.columns[idx])
+            financials_table.setVerticalHeaderItem(idx, item)
+            financials_table.verticalHeaderItem(idx).setFont(ARIAL_10)
             checkbox.clicked.connect(on_financials_checkbox_click)
 
-            financials_table.setCellWidget(i, 4, checkbox)
-
-        t2 = time.perf_counter()
-        print(f"{t2 - t1} seconds")
-        tab4_isloaded = True
+            financials_table.setCellWidget(idx, 4, checkbox)
+        TAB4_ISLOADED = True
 
 
 def on_financials_checkbox_click():
+    """
+    Adds the financial data from the checkbox's row to the chart in the financials
+    tab of the stockinfo dialog when selected
+    """
 
     financials_chart.removeAllSeries()
     series = QBarSeries()
@@ -1245,82 +1271,122 @@ def on_financials_checkbox_click():
 
 
 def dcf_findstock_button_click():
-    global current_ticker
-    ticker = ''
-    i = 0
-    while dcf_dialog.search_bar_groupbox.searchBar.text()[i] != ' ':
-        ticker += dcf_dialog.search_bar_groupbox.searchBar.text()[i]
-        i += 1
-    current_ticker = ticker
+    """
+    Populates the DCF dialog with default settings for the stock the user
+    searched for
+    """
+
+    global CURRENT_TICKER
+    ticker = dcf_dialog.search_bar_groupbox.searchBar.text().split(' ')[0]
+    CURRENT_TICKER = ticker
 
     input_info = dcf.parse(ticker)
     dcf_dialog.inputs_groupbox.setVisible(True)
     dcf_dialog.inputs_groupbox.company_label.setText(
-        f"Company: {input_info['company_name']}")
-    dcf_dialog.inputs_groupbox.mkt_price.setText(
-        '${:0,.2f}'.format(input_info['mp']))
+        f"Company: {input_info['company_name']}"
+    )
+    mkt_price = input_info['mp']
+    dcf_dialog.inputs_groupbox.mkt_price.setText(f"${mkt_price:0,.2f}")
+
     dcf_dialog.inputs_groupbox.eps.setText(str(input_info['eps']))
-    dcf_dialog.inputs_groupbox.growth.setText(
-        str(input_info['ge']) + "% per annum")
+
+    dcf_dialog.inputs_groupbox.growth.setText(f"{input_info['ge']}")
+
     dcf_dialog.inputs_groupbox.growth_slider.setValue(input_info['ge'] * 100)
+
     dcf_dialog.inputs_groupbox.discount_rate.setText(
-        str(dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0) + "%")
+        f"{dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0}%"
+    )
+
+
     dcf_dialog.inputs_groupbox.perpetual_rate.setText(
-        str(dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0) + "%")
+        f"{dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0}%"
+    )
+
     dcf_dialog.inputs_groupbox.last_fcf.setText(
-        nf.simplify(input_info['fcf'], True))
+        nf.simplify(input_info['fcf'], True)
+    )
+
     dcf_dialog.inputs_groupbox.shares.setText(
-        nf.simplify(input_info['shares'], True))
+        nf.simplify(input_info['shares'], True)
+    )
 
 
 def growth_slider_moved():
+    """
+    Changes the text on the growth factor label to reflect the new value of the growth
+    factor slider when it is moved
+    """
     dcf_dialog.inputs_groupbox.growth.setText(
-        str(dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0) + "%")
+        f"{dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0}%"
+    )
 
 
 def term_slider_moved():
+    """
+    Changes the text on the term label to reflect the new value of the term slider when
+    it is moved
+    """
     dcf_dialog.inputs_groupbox.term.setText(
-        str(dcf_dialog.inputs_groupbox.term_slider.value()) + " years")
+        f"{dcf_dialog.inputs_groupbox.term_slider.value()} years"
+    )
 
 
 def discount_slider_moved():
+    """
+    Changes the text on the discount rate label to reflect the new value of the discount
+    rate slider when it is moved
+    """
     dcf_dialog.inputs_groupbox.discount_rate.setText(
-        str(dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0) + "%")
+        f"{dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0}%"
+    )
 
 
 def perpetual_slider_moved():
+    """
+    Changes the text on the perpetual rate label to reflect the new value of the perpetual
+    rate slider when it is moved
+    """
     dcf_dialog.inputs_groupbox.perpetual_rate.setText(
-        str(dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0) + "%")
+        f"{dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0}%"
+    )
 
 
 def dcf_getanalysis_button_click():
-    global current_ticker
+    """
+    Populates the right side of the DCF dialog with the report from the DCF module when
+    the "Get Analysis" button is pressed.
+    """
+
     discount_rate = dcf_dialog.inputs_groupbox.discount_rate_slider.value() / 100.0
-    perpetual_rate = dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / \
-        100.0
+    perp_rate = dcf_dialog.inputs_groupbox.perpetual_rate_slider.value() / 100.0
     growth_estimate = dcf_dialog.inputs_groupbox.growth_slider.value() / 100.0
     term = dcf_dialog.inputs_groupbox.term_slider.value()
     eps = float(dcf_dialog.inputs_groupbox.eps.text())
-
     dcf_analysis = dcf.get_fairval(
-        current_ticker, discount_rate, perpetual_rate, growth_estimate, term, eps)
+        CURRENT_TICKER, discount_rate, perp_rate, growth_estimate, term, eps
+    )
+
     future_cashflows_chartview.setVisible(True)
 
     future_cashflows_chart.removeAllSeries()
-    future_cashflows_lineseries = QLineSeries()
-    future_cashflows_lineseries.setName("Forecasted Cash Flows")
+    future_cashflows_series = QLineSeries()
+    future_cashflows_series.setName("Forecasted Cash Flows")
     future_cashflows_pv_lineseries = QLineSeries()
     future_cashflows_pv_lineseries.setName(
         "Present Value of Forecasted Cash Flows")
     current_year = QDateTime().currentDateTime().date().year()
 
-    for i in range(term):
-        future_cashflows_lineseries.append(
-            current_year + i, dcf_analysis['forecasted_cash_flows'][i])
-        future_cashflows_pv_lineseries.append(
-            current_year + i, dcf_analysis['cashflow_present_values'][i])
 
-    future_cashflows_chart.addSeries(future_cashflows_lineseries)
+    dcf_zip = zip(
+        dcf_analysis['forecasted_cash_flows'][:-1], dcf_analysis['cashflow_present_values'][:-1]
+    )
+
+    for idx, (fcf, present_val) in enumerate(dcf_zip):
+        future_cashflows_series.append(current_year + idx, fcf)
+        future_cashflows_pv_lineseries.append(current_year + idx, present_val)
+
+    future_cashflows_chart.addSeries(future_cashflows_series)
     future_cashflows_chart.addSeries(future_cashflows_pv_lineseries)
 
     future_cashflows_chart.createDefaultAxes()
@@ -1330,30 +1396,30 @@ def dcf_getanalysis_button_click():
     upside = round((dcf_analysis['fair_value'] /
                    dcf_analysis['mp'] - 1) * 100, 2)
     dcf_dialog.outputs_groupbox.basic_model_output.fair_value.setText(
-        f"${round(dcf_analysis['fair_value'], 2)} ({upside}%)")
+        f"${round(dcf_analysis['fair_value'], 2)} ({upside}%)"
+    )
 
     upside = round(
         (dcf_analysis['graham_expected_value'] / dcf_analysis['mp'] - 1) * 100, 2)
     dcf_dialog.outputs_groupbox.graham_model_output.ev.setText(
-        f"${round(dcf_analysis['graham_expected_value'], 2)} ({upside}%)")
+        f"${round(dcf_analysis['graham_expected_value'], 2)} ({upside}%)"
+    )
 
     dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate.setText(
-        f"{round(dcf_analysis['graham_growth_estimate'], 2)}% per annum")
+        f"{round(dcf_analysis['graham_growth_estimate'], 2)}% per annum"
+    )
 
 
-def removeIndicator(indicator_fn):
-    for ta in selected_ta:
-        if ta[0] == indicator_fn:
-            selected_ta.remove(ta)
+
 
 
 def change_indicator_panel(indicator_fn, value, args):
     for ta in selected_ta:
         if ta[0] == indicator_fn:
             index = selected_ta.index(ta)
-            tuple = (indicator_fn, int(value))
-            tuple += (args, )
-            selected_ta[index] = tuple
+            new_tup = (indicator_fn, int(value))
+            new_tup += (args, )
+            selected_ta[index] = new_tup
 
 
 def get_indicator_index(indicator_fn) -> int:
@@ -1387,17 +1453,21 @@ progressBar.setValue(30)
 #####################################################
 progressBar.setValue(40)
 
-up_color = getXMLData(r'assets\settings.xml', 'upcolor')
-down_color = getXMLData(r'assets\settings.xml', 'downcolor')
-base_style = getXMLData(r'assets\settings.xml', 'basestyle')
-portfolio_tickers = getXMLData(r'assets\portfolio.xml', 'name')
-portfolio_asset_types = getXMLData(r'assets\portfolio.xml', 'type')
-portfolio_amts = getXMLData(r'assets\portfolio.xml', 'amount')
-purchase_prices = getXMLData(r'assets\portfolio.xml', 'costbasis')
-wallet_tickers = getXMLData(r'assets\wallet.xml', 'name')
-wallet_amts = getXMLData(r'assets\wallet.xml', 'amount')
-wallet_costbases = getXMLData(r'assets\wallet.xml', 'costbasis')
-watchlist_tickers = getXMLData(r'assets\watchlist.xml', 'name')
+up_color = ra.get_xml_data(r'assets\settings.xml', 'upcolor')
+down_color = ra.get_xml_data(r'assets\settings.xml', 'downcolor')
+base_style = ra.get_xml_data(r'assets\settings.xml', 'basestyle')
+portfolio_tickers = ra.get_xml_data(r'assets\portfolio.xml', 'name')
+portfolio_asset_types = ra.get_xml_data(r'assets\portfolio.xml', 'type')
+portfolio_amts = ra.get_xml_data(r'assets\portfolio.xml', 'amount')
+purchase_prices = ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')
+wallet_tickers = ra.get_xml_data(r'assets\wallet.xml', 'name')
+wallet_amts = ra.get_xml_data(r'assets\wallet.xml', 'amount')
+wallet_costbases = ra.get_xml_data(r'assets\wallet.xml', 'costbasis')
+watchlist_tickers = ra.get_xml_data(r'assets\watchlist.xml', 'name')
+
+TAB2_ISLOADED = False
+TAB3_ISLOADED = False
+TAB4_ISLOADED = False
 
 all_tickers_list = pd.read_csv(
     CURRENT_DIR + r"assets\stock_list.csv"
@@ -1418,6 +1488,7 @@ all_tickers_list = [
 # find their current price, and add their values to user's NAV
 portfolio_nav = float(portfolio_amts[0].text)
 portfolio_cash = float(portfolio_amts[0].text)
+
 for port_ticker, port_amt in zip(portfolio_tickers[1:], portfolio_amts[1:]):
     price = yq.Ticker(port_ticker.text).history(period='5d').iloc[4][3]
     portfolio_nav += float(price) * int(port_amt.text)
@@ -1425,14 +1496,7 @@ for port_ticker, port_amt in zip(portfolio_tickers[1:], portfolio_amts[1:]):
 wallet_nav = float(wallet_amts[0].text)
 wallet_cash = float(wallet_amts[0].text)
 for wallet_ticker, wallet_amt in zip(wallet_tickers[1:], wallet_amts[1:]):
-    try:
-        price = yf.download(
-            tickers=wallet_ticker.text, period='5d'
-        ).iloc[4][3]
-    except IndexError:
-        price = yf.download(
-            tickers=wallet_ticker.text, period='5d'
-        ).iloc[3][3]
+    price = yq.Ticker(wallet_ticker.text).history('5d').iloc[-1][5]
     wallet_nav += float(price) * float(wallet_amt.text)
 
 # add genius font to database
@@ -1464,7 +1528,7 @@ portfolio_dialog.positions_view_groupbox.positions_view = QTableWidget(
 portfolio_dialog.positions_view_groupbox.positions_view.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
 portfolio_dialog.positions_view_groupbox.positions_view.setFont(
-    QFont('arial', 10))
+    ARIAL_10)
 portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(
     len(portfolio_amts) - 1)
 portfolio_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
@@ -1490,12 +1554,12 @@ portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     7, QTableWidgetItem("Position Gain/Loss"))
 for i in range(8):
     portfolio_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 for i in range(portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
     portfolio_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(
         0, QTableWidgetItem("1"))
     portfolio_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 update_portfolio_table()
 portfolio_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 progressBar.setValue(60)
@@ -1511,8 +1575,8 @@ portfolio_dialog.currentNAV.netLiq.setText("Net Liq: ")
 portfolio_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
 portfolio_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
 portfolio_dialog.currentNAV.liq = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.liq.setText(
-    '${:0,.2f}'.format(float(str(portfolio_nav))))
+
+
 portfolio_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
 portfolio_dialog.currentNAV.liq.setFont(QFont('genius', 20))
 # cash value labels
@@ -1520,7 +1584,6 @@ portfolio_dialog.currentNAV.cashLabel = QLabel(portfolio_dialog.currentNAV)
 portfolio_dialog.currentNAV.cashLabel.setText("Cash: ")
 portfolio_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
 portfolio_dialog.currentNAV.cash = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cash.setText(f'${portfolio_cash:0,.2f}')
 portfolio_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
 progressBar.setValue(70)
 # buying power labels
@@ -1530,7 +1593,6 @@ portfolio_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
 portfolio_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
 portfolio_dialog.currentNAV.buyingPower = QLabel(
     portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPower.setText(f'${get_portfolio_bp():0,.2f}')
 portfolio_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
 # assets labels
 portfolio_dialog.currentNAV.assetsLabel = QLabel(
@@ -1538,13 +1600,6 @@ portfolio_dialog.currentNAV.assetsLabel = QLabel(
 portfolio_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
 portfolio_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
 portfolio_dialog.currentNAV.assets = QLabel(portfolio_dialog.currentNAV)
-total_long = 0
-for i in range(1, len(portfolio_amts)):
-    price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
-        i - 1, 2).text()[1:])
-    if int(portfolio_amts[i].text) > 0:
-        total_long += float(price) * int(portfolio_amts[i].text)
-portfolio_dialog.currentNAV.assets.setText('${:0,.2f}'.format(total_long))
 portfolio_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
 # liabilities labels
 portfolio_dialog.currentNAV.liabilitiesLabel = QLabel(
@@ -1553,14 +1608,6 @@ portfolio_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
 portfolio_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
 portfolio_dialog.currentNAV.liabilities = QLabel(
     portfolio_dialog.currentNAV)
-total_short = 0
-for i in range(1, len(portfolio_amts)):
-    price = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
-        i - 1, 2).text()[1:])
-    if int(portfolio_amts[i].text) < 0:
-        total_short -= float(price) * int(portfolio_amts[i].text)
-portfolio_dialog.currentNAV.liabilities.setText(
-    '${:0,.2f}'.format(total_short))
 portfolio_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
 # return since inception labels
 portfolio_dialog.currentNAV.returnSinceInceptionLabel = QLabel(
@@ -1573,10 +1620,9 @@ portfolio_dialog.currentNAV.returnSinceInception = QLabel(
     portfolio_dialog.currentNAV)
 portfolio_dialog.currentNAV.returnSinceInception.setFont(
     QFont('genius', 20))
-portfolio_dialog.currentNAV.returnSinceInception.setText(
-    '{:0.2f}'.format((portfolio_nav / 10000 - 1) * 100) + "%")
 portfolio_dialog.currentNAV.returnSinceInception.setGeometry(
     10, 190, 120, 30)
+update_portfolio_nav()
 progressBar.setValue(80)
 # watchlist table settings
 portfolio_dialog.watchlist_groupbox = QGroupBox(portfolio_dialog)
@@ -1601,14 +1647,14 @@ portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
     3, QTableWidgetItem("Gain/Loss Per Share"))
 for i in range(4):
     portfolio_dialog.watchlist_groupbox.watchlist_view.horizontalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 for i in range(portfolio_dialog.watchlist_groupbox.watchlist_view.rowCount()):
     portfolio_dialog.watchlist_groupbox.watchlist_view.setVerticalHeaderItem(
         i, QTableWidgetItem(str(i + 1)))
     portfolio_dialog.watchlist_groupbox.watchlist_view.verticalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 portfolio_dialog.watchlist_groupbox.watchlist_view.setFont(
-    QFont('arial', 10))
+    ARIAL_10)
 portfolio_dialog.watchlist_groupbox.watchlist_view.setGeometry(
     10, 20, 500, 200)
 update_watchlist_tickers()
@@ -1639,170 +1685,164 @@ chart_dialog = QTabWidget()
 chart_dialog.setObjectName("Dialog")
 chart_dialog.resize(1000, 600)
 chart_dialog.setStyleSheet('background-color: deepskyblue;')
-chart_configurations = QDialog()
-chart_configurations.broad_market_groupbox = QGroupBox(
-    chart_configurations)
-chart_configurations.broad_market_groupbox.setTitle(
+chart_configs = QDialog()
+chart_configs.broad_market_groupbox = QGroupBox(
+    chart_configs)
+chart_configs.broad_market_groupbox.setTitle(
     "Broad Market Indicies"
 )
-chart_configurations.broad_market_groupbox.setStyleSheet(
+chart_configs.broad_market_groupbox.setStyleSheet(
     'background-color: white;'
 )
-chart_configurations.broad_market_groupbox.setGeometry(10, 10, 700, 50)
-chart_configurations.broad_market_groupbox.spyButton = QPushButton(
-    text="Chart SPY", parent=chart_configurations.broad_market_groupbox
+chart_configs.broad_market_groupbox.setGeometry(10, 10, 700, 50)
+chart_configs.broad_market_groupbox.spyButton = QPushButton(
+    text="Chart SPY", parent=chart_configs.broad_market_groupbox
 )
-chart_configurations.broad_market_groupbox.spyButton.setGeometry(
+chart_configs.broad_market_groupbox.spyButton.setGeometry(
     QRect(10, 20, 150, 20)
 )
-chart_configurations.broad_market_groupbox.spyButton.clicked.connect(
+chart_configs.broad_market_groupbox.spyButton.clicked.connect(
     spy_button_clicked
 )
-chart_configurations.broad_market_groupbox.qqqButton = QPushButton(
-    text="Chart QQQ", parent=chart_configurations.broad_market_groupbox
+chart_configs.broad_market_groupbox.qqqButton = QPushButton(
+    text="Chart QQQ", parent=chart_configs.broad_market_groupbox
 )
-chart_configurations.broad_market_groupbox.qqqButton.setGeometry(
+chart_configs.broad_market_groupbox.qqqButton.setGeometry(
     QRect(170, 20, 150, 20)
 )
-chart_configurations.broad_market_groupbox.qqqButton.clicked.connect(
+chart_configs.broad_market_groupbox.qqqButton.clicked.connect(
     qqq_button_clicked
 )
-chart_configurations.broad_market_groupbox.diaButton = QPushButton(
-    text="Chart DIA", parent=chart_configurations.broad_market_groupbox
+chart_configs.broad_market_groupbox.diaButton = QPushButton(
+    text="Chart DIA", parent=chart_configs.broad_market_groupbox
 )
-chart_configurations.broad_market_groupbox.diaButton.setGeometry(
+chart_configs.broad_market_groupbox.diaButton.setGeometry(
     QRect(330, 20, 150, 20)
 )
-chart_configurations.broad_market_groupbox.diaButton.clicked.connect(
+chart_configs.broad_market_groupbox.diaButton.clicked.connect(
     dia_button_clicked
 )
-chart_configurations.broad_market_groupbox.vixButton = QPushButton(
-    text="Chart VIX", parent=chart_configurations.broad_market_groupbox
+chart_configs.broad_market_groupbox.vixButton = QPushButton(
+    text="Chart VIX", parent=chart_configs.broad_market_groupbox
 )
-chart_configurations.broad_market_groupbox.vixButton.setGeometry(
+chart_configs.broad_market_groupbox.vixButton.setGeometry(
     QRect(490, 20, 150, 20)
 )
-chart_configurations.broad_market_groupbox.vixButton.clicked.connect(
+chart_configs.broad_market_groupbox.vixButton.clicked.connect(
     vix_button_clicked
 )
 
 # search bar for searching for a stock to chart
-chart_configurations.search_bar_groupbox = QGroupBox(chart_configurations)
-chart_configurations.search_bar_groupbox.setStyleSheet(
+chart_configs.search_bar_groupbox = QGroupBox(chart_configs)
+chart_configs.search_bar_groupbox.setStyleSheet(
     'background-color: white;')
-chart_configurations.search_bar_groupbox.setTitle("Find a Stock")
-chart_configurations.search_bar_groupbox.setGeometry(10, 70, 960, 70)
-chart_configurations.search_bar_groupbox.searchBar = QLineEdit(
-    chart_configurations.search_bar_groupbox)
-chart_configurations.search_bar_groupbox.searchBar.setGeometry(
+chart_configs.search_bar_groupbox.setTitle("Find a Stock")
+chart_configs.search_bar_groupbox.setGeometry(10, 70, 960, 70)
+chart_configs.search_bar_groupbox.searchBar = QLineEdit(
+    chart_configs.search_bar_groupbox)
+chart_configs.search_bar_groupbox.searchBar.setGeometry(
     10, 20, 850, 40)
-chart_configurations.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
-chart_configurations.search_bar_groupbox.searchBar.setFont(
-    QFont('arial', 10))
-chart_configurations.search_bar_groupbox.search_button = QPushButton(
-    chart_configurations.search_bar_groupbox)
-chart_configurations.search_bar_groupbox.search_button.setGeometry(
+chart_configs.search_bar_groupbox.searchBar.textChanged.connect(
+    search_text_changed)
+chart_configs.search_bar_groupbox.searchBar.setFont(
+    ARIAL_10)
+chart_configs.search_bar_groupbox.search_button = QPushButton(
+    chart_configs.search_bar_groupbox)
+chart_configs.search_bar_groupbox.search_button.setGeometry(
     870, 20, 80, 40)
-chart_configurations.search_bar_groupbox.search_button.setText("Chart")
-chart_configurations.search_bar_groupbox.search_button.setEnabled(False)
-chart_configurations.search_bar_groupbox.search_button.clicked.connect(
-    searchButtonClicked)
-chart_configurations.settings_groupbox = QGroupBox(chart_configurations)
-chart_configurations.settings_groupbox.setStyleSheet(
+chart_configs.search_bar_groupbox.search_button.setText("Chart")
+chart_configs.search_bar_groupbox.search_button.setEnabled(False)
+chart_configs.search_bar_groupbox.search_button.clicked.connect(
+    search_button_clicked)
+chart_configs.settings_groupbox = QGroupBox(chart_configs)
+chart_configs.settings_groupbox.setStyleSheet(
     'background-color: white;')
-chart_configurations.settings_groupbox.setGeometry(10, 150, 1280, 600)
-chart_configurations.settings_groupbox.setTitle("Chart Settings")
+chart_configs.settings_groupbox.setGeometry(10, 150, 1280, 600)
+chart_configs.settings_groupbox.setTitle("Chart Settings")
 periods = ["1d", "5d", "1mo", "3mo", "6mo",
            "1y", "2y", "5y", "10y", "ytd", "max"]
 timeframes = ["1m", "2m", "5m", "15m", "30m", "60m",
               "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"]
-chart_configurations.settings_groupbox.period_radiobutton = QRadioButton(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.period_radiobutton.setText(
+chart_configs.settings_groupbox.period_radiobutton = QRadioButton(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.period_radiobutton.setText(
     "Chart by Period")
-chart_configurations.settings_groupbox.period_radiobutton.setGeometry(
+chart_configs.settings_groupbox.period_radiobutton.setGeometry(
     10, 50, 100, 30)
-chart_configurations.settings_groupbox.period_radiobutton.setChecked(True)
-chart_configurations.settings_groupbox.period_radiobutton.clicked.connect(
+chart_configs.settings_groupbox.period_radiobutton.setChecked(True)
+chart_configs.settings_groupbox.period_radiobutton.clicked.connect(
     period_radiobutton_clicked)
-chart_configurations.settings_groupbox.daterange_radiobutton = QRadioButton(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.daterange_radiobutton.setText(
+chart_configs.settings_groupbox.daterange_radiobutton = QRadioButton(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.daterange_radiobutton.setText(
     "Chart by Date Range")
-chart_configurations.settings_groupbox.daterange_radiobutton.setGeometry(
+chart_configs.settings_groupbox.daterange_radiobutton.setGeometry(
     10, 100, 170, 30)
-chart_configurations.settings_groupbox.daterange_radiobutton.clicked.connect(
+chart_configs.settings_groupbox.daterange_radiobutton.clicked.connect(
     daterange_radiobutton_clicked)
-chart_configurations.settings_groupbox.data_period_combobox = QComboBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.data_period_combobox.addItems(
+chart_configs.settings_groupbox.data_period_combobox = QComboBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.data_period_combobox.addItems(
     periods)
-chart_configurations.settings_groupbox.data_period_combobox.setGeometry(
+chart_configs.settings_groupbox.data_period_combobox.setGeometry(
     120, 60, 50, 20)
-chart_configurations.settings_groupbox.data_timeframe_combobox = QComboBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.data_timeframe_combobox.addItems(
+chart_configs.settings_groupbox.data_timeframe_combobox = QComboBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.data_timeframe_combobox.addItems(
     timeframes)
-chart_configurations.settings_groupbox.data_timeframe_combobox.setGeometry(
+chart_configs.settings_groupbox.data_timeframe_combobox.setGeometry(
     850, 50, 50, 30)
-chart_configurations.settings_groupbox.prepost_checkbox = QCheckBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.prepost_checkbox.setText(
+chart_configs.settings_groupbox.prepost_checkbox = QCheckBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.prepost_checkbox.setText(
     "Include Pre/Post Market Data")
-chart_configurations.settings_groupbox.prepost_checkbox.setGeometry(
+chart_configs.settings_groupbox.prepost_checkbox.setGeometry(
     10, 20, 180, 30)
-chart_configurations.settings_groupbox.split_dividend_checkbox = QCheckBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.split_dividend_checkbox.setText(
+chart_configs.settings_groupbox.split_dividend_checkbox = QCheckBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.split_dividend_checkbox.setText(
     "Show Split and Dividend Actions")
-chart_configurations.settings_groupbox.split_dividend_checkbox.setGeometry(
+chart_configs.settings_groupbox.split_dividend_checkbox.setGeometry(
     200, 20, 190, 30)
-chart_configurations.settings_groupbox.adjust_ohlc_checkbox = QCheckBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.adjust_ohlc_checkbox.setText(
+chart_configs.settings_groupbox.adjust_ohlc_checkbox = QCheckBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.adjust_ohlc_checkbox.setText(
     "Adjust OHLC")
-chart_configurations.settings_groupbox.adjust_ohlc_checkbox.setGeometry(
+chart_configs.settings_groupbox.adjust_ohlc_checkbox.setGeometry(
     400, 20, 100, 30)
-chart_configurations.settings_groupbox.volume_checkbox = QCheckBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.volume_checkbox.setText(
+chart_configs.settings_groupbox.volume_checkbox = QCheckBox(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.volume_checkbox.setText(
     "Include Volume Bars")
-chart_configurations.settings_groupbox.volume_checkbox.setGeometry(
+chart_configs.settings_groupbox.volume_checkbox.setGeometry(
     500, 20, 140, 30)
-chart_configurations.settings_groupbox.nontrading_checkbox = QCheckBox(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.nontrading_checkbox.setText(
-    "Include Non-Trading Days")
-chart_configurations.settings_groupbox.nontrading_checkbox.setGeometry(
-    650, 20, 160, 30)
-chart_configurations.settings_groupbox.timeframe_label = QLabel(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.timeframe_label.setText(
+chart_configs.settings_groupbox.timeframe_label = QLabel(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.timeframe_label.setText(
     "Chart Timeframe:")
-chart_configurations.settings_groupbox.timeframe_label.setGeometry(
+chart_configs.settings_groupbox.timeframe_label.setGeometry(
     820, 20, 100, 30)
-chart_configurations.settings_groupbox.start_date = QCalendarWidget(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.start_date.setGeometry(
+chart_configs.settings_groupbox.start_date = QCalendarWidget(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.start_date.setGeometry(
     10, 130, 600, 370)
-chart_configurations.settings_groupbox.start_date.setStyleSheet(
+chart_configs.settings_groupbox.start_date.setStyleSheet(
     'background-color: deepskyblue; border: 3px solid black;')
-chart_configurations.settings_groupbox.start_date.setEnabled(False)
-chart_configurations.settings_groupbox.end_date = QCalendarWidget(
-    chart_configurations.settings_groupbox)
-chart_configurations.settings_groupbox.end_date.setGeometry(
+chart_configs.settings_groupbox.start_date.setEnabled(False)
+chart_configs.settings_groupbox.end_date = QCalendarWidget(
+    chart_configs.settings_groupbox)
+chart_configs.settings_groupbox.end_date.setGeometry(
     620, 130, 600, 370)
-chart_configurations.settings_groupbox.end_date.setStyleSheet(
+chart_configs.settings_groupbox.end_date.setStyleSheet(
     'background-color: deepskyblue; border: 3px solid black;')
-chart_configurations.settings_groupbox.end_date.setEnabled(False)
+chart_configs.settings_groupbox.end_date.setEnabled(False)
 model = QStringListModel()
 model.setStringList(all_tickers_list)
 completer = ac.CustomQCompleter()
 completer.setModel(model)
-chart_configurations.search_bar_groupbox.searchBar.setCompleter(completer)
+chart_configs.search_bar_groupbox.searchBar.setCompleter(completer)
 completer.activated.connect(
-    lambda: chart_configurations.search_bar_groupbox.search_button.setEnabled(True))
+    lambda: chart_configs.search_bar_groupbox.search_button.setEnabled(True))
 completer.setMaxVisibleItems(5)
 technical_indicators_dialog = QDialog()
 technical_indicators_dialog.momentum_groupbox = QGroupBox(
@@ -1813,13 +1853,22 @@ technical_indicators_dialog.momentum_groupbox.setGeometry(10, 10, 300, 620)
 technical_indicators_dialog.momentum_groupbox.setStyleSheet(
     'background-color: white')
 ta_combobox_items = [str(i) for i in range(0, 16)]
-SETTINGS_DIALOG_BUTTON_STYLESHEET = "QPushButton::hover{background-color : deepskyblue; color : white;}"
+SETTINGS_DIALOG_BTN_STYLESHEET = "QPushButton::hover{background-color: deepskyblue; color: white;}"
+
 def on_enter(event, widget, widget_button):
+    """
+    Sets the background color of the technical indicator widget to gray when it is hovered over
+    """
     widget_button.setVisible(True)
     widget.setStyleSheet("background-color : #E3E3E3;")
     for child in widget.children()[1:]:
         child.setStyleSheet("background-color : #E3E3E3;")
+
 def on_exit(event, widget, widget_button):
+    """
+    Sets the background color of the technical indicator widget to white when it is
+    no longer being hovered over
+    """
     widget_button.setVisible(False)
     widget.setStyleSheet("background-color : white;")
     for child in widget.children()[1:]:
@@ -1849,10 +1898,11 @@ adx_widget.layout().addWidget(adx_panel_combobox)
 adx_checkbox = QCheckBox()
 adx_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ADX", adx_panel_combobox.currentIndex(
-    ))) if adx_checkbox.isChecked() else removeIndicator("talib.ADX")
+    ))) if adx_checkbox.isChecked() else remove_indicator("talib.ADX")
 )
 adx_widget.layout().addWidget(adx_checkbox)
 momentum_widget.layout().addWidget(adx_widget)
+
 # add ADX rating indicator to momentum indicator scrollable
 adxr_widget = QWidget()
 adxr_widget.setLayout(QHBoxLayout())
@@ -1868,7 +1918,7 @@ adxr_widget.layout().addWidget(adxr_panel_combobox)
 adxr_checkbox = QCheckBox()
 adxr_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ADXR", adxr_panel_combobox.currentIndex(
-    ))) if adxr_checkbox.isChecked() else removeIndicator("talib.ADXR")
+    ))) if adxr_checkbox.isChecked() else remove_indicator("talib.ADXR")
 )
 adxr_widget.layout().addWidget(adxr_checkbox)
 momentum_widget.layout().addWidget(adxr_widget)
@@ -1886,7 +1936,7 @@ apo_widget.layout().addWidget(apo_panel_combobox)
 apo_checkbox = QCheckBox()
 apo_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.APO", apo_panel_combobox.currentIndex(
-    ))) if apo_checkbox.isChecked() else removeIndicator("talib.APO")
+    ))) if apo_checkbox.isChecked() else remove_indicator("talib.APO")
 )
 apo_widget.layout().addWidget(apo_checkbox)
 momentum_widget.layout().addWidget(apo_widget)
@@ -1904,7 +1954,7 @@ aroon_widget.layout().addWidget(aroon_panel_combobox)
 aroon_checkbox = QCheckBox()
 aroon_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.AROON", aroon_panel_combobox.currentIndex(
-    ))) if aroon_checkbox.isChecked() else removeIndicator("talib.AROON")
+    ))) if aroon_checkbox.isChecked() else remove_indicator("talib.AROON")
 )
 aroon_widget.layout().addWidget(aroon_checkbox)
 momentum_widget.layout().addWidget(aroon_widget)
@@ -1922,7 +1972,7 @@ aroonosc_widget.layout().addWidget(aroonosc_panel_combobox)
 aroonosc_checkbox = QCheckBox()
 aroonosc_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.AROONOSC", aroonosc_panel_combobox.currentIndex(
-    ))) if aroonosc_checkbox.isChecked() else removeIndicator("talib.AROONOSC")
+    ))) if aroonosc_checkbox.isChecked() else remove_indicator("talib.AROONOSC")
 )
 aroonosc_widget.layout().addWidget(aroonosc_checkbox)
 momentum_widget.layout().addWidget(aroonosc_widget)
@@ -1940,7 +1990,7 @@ bop_widget.layout().addWidget(bop_panel_combobox)
 bop_checkbox = QCheckBox()
 bop_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.BOP", bop_panel_combobox.currentIndex(
-    ))) if bop_checkbox.isChecked() else removeIndicator("talib.BOP")
+    ))) if bop_checkbox.isChecked() else remove_indicator("talib.BOP")
 )
 bop_widget.layout().addWidget(bop_checkbox)
 momentum_widget.layout().addWidget(bop_widget)
@@ -1958,7 +2008,7 @@ cci_widget.layout().addWidget(cci_panel_combobox)
 cci_checkbox = QCheckBox()
 cci_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.CCI", cci_panel_combobox.currentIndex(
-    ))) if cci_checkbox.isChecked() else removeIndicator("talib.CCI")
+    ))) if cci_checkbox.isChecked() else remove_indicator("talib.CCI")
 )
 cci_widget.layout().addWidget(cci_checkbox)
 momentum_widget.layout().addWidget(cci_widget)
@@ -1976,7 +2026,7 @@ cmo_widget.layout().addWidget(cmo_panel_combobox)
 cmo_checkbox = QCheckBox()
 cmo_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.CMO", cmo_panel_combobox.currentIndex(
-    ))) if cmo_checkbox.isChecked() else removeIndicator("talib.CMO")
+    ))) if cmo_checkbox.isChecked() else remove_indicator("talib.CMO")
 )
 cmo_widget.layout().addWidget(cmo_checkbox)
 momentum_widget.layout().addWidget(cmo_widget)
@@ -1994,7 +2044,7 @@ dx_widget.layout().addWidget(dx_panel_combobox)
 dx_checkbox = QCheckBox()
 dx_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.DX", dx_panel_combobox.currentIndex(
-    ))) if dx_checkbox.isChecked() else removeIndicator("talib.DX")
+    ))) if dx_checkbox.isChecked() else remove_indicator("talib.DX")
 )
 dx_widget.layout().addWidget(dx_checkbox)
 momentum_widget.layout().addWidget(dx_widget)
@@ -2012,7 +2062,7 @@ dx_widget.layout().addWidget(dx_panel_combobox)
 dx_checkbox = QCheckBox()
 dx_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.DX", dx_panel_combobox.currentIndex(
-    ))) if dx_checkbox.isChecked() else removeIndicator("talib.DX")
+    ))) if dx_checkbox.isChecked() else remove_indicator("talib.DX")
 )
 dx_widget.layout().addWidget(dx_checkbox)
 momentum_widget.layout().addWidget(dx_widget)
@@ -2030,7 +2080,7 @@ macd_widget.layout().addWidget(macd_panel_combobox)
 macd_checkbox = QCheckBox()
 macd_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MACD", macd_panel_combobox.currentIndex(
-    ))) if macd_checkbox.isChecked() else removeIndicator("talib.MACD")
+    ))) if macd_checkbox.isChecked() else remove_indicator("talib.MACD")
 )
 macd_widget.layout().addWidget(macd_checkbox)
 momentum_widget.layout().addWidget(macd_widget)
@@ -2048,7 +2098,7 @@ macdext_widget.layout().addWidget(macdext_panel_combobox)
 macdext_checkbox = QCheckBox()
 macdext_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MACDEXT", macdext_panel_combobox.currentIndex(
-    ))) if macdext_checkbox.isChecked() else removeIndicator("talib.MACDEXT")
+    ))) if macdext_checkbox.isChecked() else remove_indicator("talib.MACDEXT")
 )
 macdext_widget.layout().addWidget(macdext_checkbox)
 momentum_widget.layout().addWidget(macdext_widget)
@@ -2066,11 +2116,11 @@ mfi_widget.layout().addWidget(mfi_panel_combobox)
 mfi_checkbox = QCheckBox()
 mfi_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MFI", mfi_panel_combobox.currentIndex(
-    ))) if mfi_checkbox.isChecked() else removeIndicator("talib.MFI")
+    ))) if mfi_checkbox.isChecked() else remove_indicator("talib.MFI")
 )
 mfi_widget.layout().addWidget(mfi_checkbox)
 momentum_widget.layout().addWidget(mfi_widget)
-chart_dialog.addTab(chart_configurations, "Chart Configurations")
+chart_dialog.addTab(chart_configs, "Chart Configurations")
 chart_dialog.addTab(technical_indicators_dialog, "Technical Indicators")
 # add minus directional index to momentum indicator scrollable
 minusdi_widget = QWidget()
@@ -2086,7 +2136,7 @@ minusdi_widget.layout().addWidget(minusdi_panel_combobox)
 minusdi_checkbox = QCheckBox()
 minusdi_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MINUS_DI", minusdi_panel_combobox.currentIndex(
-    ))) if minusdi_checkbox.isChecked() else removeIndicator("talib.MINUS_DI")
+    ))) if minusdi_checkbox.isChecked() else remove_indicator("talib.MINUS_DI")
 )
 minusdi_widget.layout().addWidget(minusdi_checkbox)
 momentum_widget.layout().addWidget(minusdi_widget)
@@ -2104,7 +2154,7 @@ minusdm_widget.layout().addWidget(minusdm_panel_combobox)
 minusdm_checkbox = QCheckBox()
 minusdm_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MINUS_DM", minusdm_panel_combobox.currentIndex(
-    ))) if minusdm_checkbox.isChecked() else removeIndicator("talib.MINUS_DM")
+    ))) if minusdm_checkbox.isChecked() else remove_indicator("talib.MINUS_DM")
 )
 minusdm_widget.layout().addWidget(minusdm_checkbox)
 momentum_widget.layout().addWidget(minusdm_widget)
@@ -2122,7 +2172,7 @@ mom_widget.layout().addWidget(mom_panel_combobox)
 mom_checkbox = QCheckBox()
 mom_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.MOM", mom_panel_combobox.currentIndex(
-    ))) if mom_checkbox.isChecked() else removeIndicator("talib.MOM")
+    ))) if mom_checkbox.isChecked() else remove_indicator("talib.MOM")
 )
 mom_widget.layout().addWidget(mom_checkbox)
 momentum_widget.layout().addWidget(mom_widget)
@@ -2140,7 +2190,7 @@ plusdi_widget.layout().addWidget(plusdi_panel_combobox)
 plusdi_checkbox = QCheckBox()
 plusdi_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.PLUS_DI", plusdi_panel_combobox.currentIndex(
-    ))) if plusdi_checkbox.isChecked() else removeIndicator("talib.PLUS_DI")
+    ))) if plusdi_checkbox.isChecked() else remove_indicator("talib.PLUS_DI")
 )
 plusdi_widget.layout().addWidget(plusdi_checkbox)
 momentum_widget.layout().addWidget(plusdi_widget)
@@ -2158,7 +2208,7 @@ plusdm_widget.layout().addWidget(plusdm_panel_combobox)
 plusdm_checkbox = QCheckBox()
 plusdm_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.PLUS_DM", plusdm_panel_combobox.currentIndex(
-    ))) if plusdm_checkbox.isChecked() else removeIndicator("talib.PLUS_DM")
+    ))) if plusdm_checkbox.isChecked() else remove_indicator("talib.PLUS_DM")
 )
 plusdm_widget.layout().addWidget(plusdm_checkbox)
 momentum_widget.layout().addWidget(plusdm_widget)
@@ -2176,7 +2226,7 @@ kama_widget.layout().addWidget(kama_panel_combobox)
 kama_checkbox = QCheckBox()
 kama_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.momentum.kama", kama_panel_combobox.currentIndex(
-    ))) if kama_checkbox.isChecked() else removeIndicator("ta.momentum.kama")
+    ))) if kama_checkbox.isChecked() else remove_indicator("ta.momentum.kama")
 )
 kama_widget.layout().addWidget(kama_checkbox)
 momentum_widget.layout().addWidget(kama_widget)
@@ -2194,7 +2244,7 @@ pvo_widget.layout().addWidget(pvo_panel_combobox)
 pvo_checkbox = QCheckBox()
 pvo_checkbox.clicked.connect(
     lambda: selected_ta.append(("ta.momentum.pvo", pvo_panel_combobox.currentIndex(
-    ))) if pvo_checkbox.isChecked() else removeIndicator("ta.momentum.pvo")
+    ))) if pvo_checkbox.isChecked() else remove_indicator("ta.momentum.pvo")
 )
 pvo_widget.layout().addWidget(pvo_checkbox)
 momentum_widget.layout().addWidget(pvo_widget)
@@ -2212,7 +2262,7 @@ roc_widget.layout().addWidget(roc_panel_combobox)
 roc_checkbox = QCheckBox()
 roc_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ROC", roc_panel_combobox.currentIndex(
-    ))) if roc_checkbox.isChecked() else removeIndicator("talib.ROC")
+    ))) if roc_checkbox.isChecked() else remove_indicator("talib.ROC")
 )
 roc_widget.layout().addWidget(roc_checkbox)
 momentum_widget.layout().addWidget(roc_widget)
@@ -2230,7 +2280,7 @@ rocp_widget.layout().addWidget(rocp_panel_combobox)
 rocp_checkbox = QCheckBox()
 rocp_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ROCP", rocp_panel_combobox.currentIndex(
-    ))) if rocp_checkbox.isChecked() else removeIndicator("talib.ROCP")
+    ))) if rocp_checkbox.isChecked() else remove_indicator("talib.ROCP")
 )
 rocp_widget.layout().addWidget(rocp_checkbox)
 momentum_widget.layout().addWidget(rocp_widget)
@@ -2248,7 +2298,7 @@ rocr_widget.layout().addWidget(rocr_panel_combobox)
 rocr_checkbox = QCheckBox()
 rocr_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ROCR", rocr_panel_combobox.currentIndex(
-    ))) if rocr_checkbox.isChecked() else removeIndicator("talib.ROCR")
+    ))) if rocr_checkbox.isChecked() else remove_indicator("talib.ROCR")
 )
 rocr_widget.layout().addWidget(rocr_checkbox)
 momentum_widget.layout().addWidget(rocr_widget)
@@ -2266,7 +2316,7 @@ rocr100_widget.layout().addWidget(rocr100_panel_combobox)
 rocr100_checkbox = QCheckBox()
 rocr100_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.ROCR100", rocr100_panel_combobox.currentIndex(
-    ))) if rocr100_checkbox.isChecked() else removeIndicator("talib.ROCR100")
+    ))) if rocr100_checkbox.isChecked() else remove_indicator("talib.ROCR100")
 )
 rocr100_widget.layout().addWidget(rocr100_checkbox)
 momentum_widget.layout().addWidget(rocr100_widget)
@@ -2284,7 +2334,7 @@ rsi_widget.layout().addWidget(rsi_panel_combobox)
 rsi_checkbox = QCheckBox()
 rsi_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.RSI", rsi_panel_combobox.currentIndex(
-    ))) if rsi_checkbox.isChecked() else removeIndicator("talib.RSI")
+    ))) if rsi_checkbox.isChecked() else remove_indicator("talib.RSI")
 )
 rsi_widget.layout().addWidget(rsi_checkbox)
 momentum_widget.layout().addWidget(rsi_widget)
@@ -2302,7 +2352,7 @@ slowstoch_widget.layout().addWidget(slowstoch_panel_combobox)
 slowstoch_checkbox = QCheckBox()
 slowstoch_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.STOCH", slowstoch_panel_combobox.currentIndex(
-    ))) if slowstoch_checkbox.isChecked() else removeIndicator("talib.STOCH")
+    ))) if slowstoch_checkbox.isChecked() else remove_indicator("talib.STOCH")
 )
 slowstoch_widget.layout().addWidget(slowstoch_checkbox)
 momentum_widget.layout().addWidget(slowstoch_widget)
@@ -2320,7 +2370,7 @@ faststoch_widget.layout().addWidget(faststoch_panel_combobox)
 faststoch_checkbox = QCheckBox()
 faststoch_checkbox.clicked.connect(
     lambda: selected_ta.append(("talib.STOCHF", faststoch_panel_combobox.currentIndex(
-    ))) if faststoch_checkbox.isChecked() else removeIndicator("talib.STOCHF")
+    ))) if faststoch_checkbox.isChecked() else remove_indicator("talib.STOCHF")
 )
 faststoch_widget.layout().addWidget(faststoch_checkbox)
 momentum_widget.layout().addWidget(faststoch_widget)
@@ -2333,8 +2383,15 @@ stochrsi_widget.layout().addWidget(stochrsi_label)
 stochrsi_label.setAutoFillBackground(False)
 stochrsi_panel_combobox = QComboBox()
 stochrsi_panel_combobox.addItems(ta_combobox_items)
-stochrsi_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "talib.STOCHRSI", state, selected_ta[get_indicator_index("talib.STOCHRSI")][2]) if stochrsi_checkbox.isChecked() else None)
+stochrsi_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "talib.STOCHRSI",
+        state,
+        selected_ta[get_indicator_index("talib.STOCHRSI")][2]
+    )
+    if stochrsi_checkbox.isChecked()
+    else None
+)
 stochrsi_widget.layout().addWidget(stochrsi_panel_combobox)
 stochrsi_settings_button = QPushButton()
 stochrsi_settings_button.setVisible(False)
@@ -2347,6 +2404,9 @@ stochrsi_widget.enterEvent = lambda event: on_enter(
 stochrsi_widget.leaveEvent = lambda event: on_exit(
     event, stochrsi_widget, stochrsi_settings_button)
 def stochrsi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the stochrsi indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Parabolic SAR")
     wnd.setLayout(QVBoxLayout())
@@ -2378,25 +2438,33 @@ def stochrsi_button_clicked():
     fastd_matype_widget.layout().addWidget(fastd_matype_spinbox)
     wnd.layout().addWidget(fastd_matype_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         fastk_spinbox.setValue(5)
         fastd_spinbox.setValue(3)
         fastd_matype_spinbox.setValue(0)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if stochrsi_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (stochrsi_checkbox.isChecked()):
-            selected_ta[get_indicator_index("talib.STOCHRSI")] = ("talib.STOCHRSI", stochrsi_panel_combobox.currentIndex(), [
-                fastk_spinbox.value(), fastd_spinbox.value(), fastd_matype_spinbox.value()])
+        new_vals = [
+            fastk_spinbox.value(),
+            fastd_spinbox.value(),
+            fastd_matype_spinbox.value()
+        ]
+        settings_tuple = (
+            "talib.STOCHRSI",
+            stochrsi_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if stochrsi_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.STOCHRSI")] = settings_tuple
         else:
-            selected_ta.append(("talib.STOCHRSI", stochrsi_panel_combobox.currentIndex(), [
-                               fastk_spinbox.value(), fastd_spinbox.value(), fastd_matype_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             stochrsi_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -2411,11 +2479,17 @@ stochrsi_settings_button.clicked.connect(stochrsi_button_clicked)
 stochrsi_widget.layout().addWidget(stochrsi_settings_button)
 stochrsi_checkbox = QCheckBox()
 stochrsi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.STOCHRSI", stochrsi_panel_combobox.currentIndex(
-    ))) if stochrsi_checkbox.isChecked() else removeIndicator("talib.STOCHRSI")
+    lambda: indicator_box_clicked(
+        stochrsi_checkbox,
+        stochrsi_panel_combobox.currentIndex(),
+        "talib.STOCHRSI",
+        [5, 3, 0],
+        selected_ta
+    )
 )
 stochrsi_widget.layout().addWidget(stochrsi_checkbox)
 momentum_widget.layout().addWidget(stochrsi_widget)
+
 # add true strength index to momentum indicator scrollable
 tsi_widget = QWidget()
 tsi_widget.setLayout(QHBoxLayout())
@@ -2427,8 +2501,12 @@ tsi_panel_combobox = QComboBox()
 tsi_panel_combobox.addItems(ta_combobox_items)
 tsi_panel_combobox.currentTextChanged.connect(
     lambda state: change_indicator_panel(
-        "ta.momentum.tsi", state, selected_ta[get_indicator_index("ta.momentum.tsi")][2]
-    ) if tsi_checkbox.isChecked() else None
+        "ta.momentum.tsi",
+        state,
+        selected_ta[get_indicator_index("ta.momentum.tsi")][2]
+    )
+    if tsi_checkbox.isChecked()
+    else None
 )
 tsi_widget.layout().addWidget(tsi_panel_combobox)
 tsi_settings_button = QPushButton()
@@ -2442,6 +2520,9 @@ tsi_widget.enterEvent = lambda event: on_enter(
 tsi_widget.leaveEvent = lambda event: on_exit(
     event, tsi_widget, tsi_settings_button)
 def tsi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the tsi indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("True Strength Index")
     wnd.setLayout(QVBoxLayout())
@@ -2464,24 +2545,28 @@ def tsi_button_clicked():
     fast_period_widget.layout().addWidget(fast_period_spinbox)
     wnd.layout().addWidget(fast_period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         fast_period_spinbox.setValue(13)
         slow_period_spinbox.setValue(25)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if tsi_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (tsi_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.momentum.tsi")] = ("ta.momentum.tsi", tsi_panel_combobox.currentIndex(), [
-                slow_period_spinbox.value(), fast_period_spinbox.value()])
+        new_vals =  [
+            slow_period_spinbox.value(),
+            fast_period_spinbox.value()
+        ]
+        settings_tuple = ("ta.momentum.tsi", tsi_panel_combobox.currentIndex(), new_vals)
+
+        if tsi_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.momentum.tsi")] = settings_tuple
         else:
-            selected_ta.append(("ta.momentum.tsi", tsi_panel_combobox.currentIndex(), [
-                               slow_period_spinbox.value(), fast_period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             tsi_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -2496,11 +2581,17 @@ tsi_settings_button.clicked.connect(tsi_button_clicked)
 tsi_widget.layout().addWidget(tsi_settings_button)
 tsi_checkbox = QCheckBox()
 tsi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.momentum.tsi", tsi_panel_combobox.currentIndex(
-    ))) if tsi_checkbox.isChecked() else removeIndicator("ta.momentum.tsi")
+    lambda: indicator_box_clicked(
+        tsi_checkbox,
+        tsi_panel_combobox.currentIndex(),
+        "ta.momentum.tsi",
+        [13, 25],
+        selected_ta
+    )
 )
 tsi_widget.layout().addWidget(tsi_checkbox)
 momentum_widget.layout().addWidget(tsi_widget)
+
 # add ultimate oscillator to momentum indicator scrollable
 ultosc_widget = QWidget()
 ultosc_widget.setLayout(QHBoxLayout())
@@ -2510,8 +2601,15 @@ ultosc_widget.layout().addWidget(ultosc_label)
 ultosc_label.setAutoFillBackground(False)
 ultosc_panel_combobox = QComboBox()
 ultosc_panel_combobox.addItems(ta_combobox_items)
-ultosc_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "talib.ULTOSC", state, selected_ta[get_indicator_index("talib.ULTOSC")][2]) if ultosc_checkbox.isChecked() else None)
+ultosc_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "talib.ULTOSC",
+        state,
+        selected_ta[get_indicator_index("talib.ULTOSC")][2]
+    )
+    if ultosc_checkbox.isChecked()
+    else None
+)
 ultosc_widget.layout().addWidget(ultosc_panel_combobox)
 ultosc_settings_button = QPushButton()
 ultosc_settings_button.setVisible(False)
@@ -2524,6 +2622,9 @@ ultosc_widget.enterEvent = lambda event: on_enter(
 ultosc_widget.leaveEvent = lambda event: on_exit(
     event, ultosc_widget, ultosc_settings_button)
 def ultosc_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the ultosc indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Parabolic SAR")
     wnd.setLayout(QVBoxLayout())
@@ -2555,25 +2656,29 @@ def ultosc_button_clicked():
     slow_widget.layout().addWidget(slow_spinbox)
     wnd.layout().addWidget(slow_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         fast_spinbox.setValue(7)
         medium_spinbox.setValue(14)
         slow_spinbox.setValue(28)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if ultosc_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (ultosc_checkbox.isChecked()):
-            selected_ta[get_indicator_index("talib.ULTOSC")] = ("talib.ULTOSC", ultosc_panel_combobox.currentIndex(), [
-                fast_spinbox.value(), medium_spinbox.value(), slow_spinbox.value()])
+        new_vals = [
+            fast_spinbox.value(),
+            medium_spinbox.value(),
+            slow_spinbox.value()
+        ]
+        settings_tuple = ("talib.ULTOSC", ultosc_panel_combobox.currentIndex(), new_vals)
+        if ultosc_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ULTOSC")] = settings_tuple
         else:
-            selected_ta.append(("talib.ULTOSC", ultosc_panel_combobox.currentIndex(), [
-                               fast_spinbox.value(), medium_spinbox.value(), slow_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             ultosc_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -2588,11 +2693,17 @@ ultosc_settings_button.clicked.connect(ultosc_button_clicked)
 ultosc_widget.layout().addWidget(ultosc_settings_button)
 ultosc_checkbox = QCheckBox()
 ultosc_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ULTOSC", ultosc_panel_combobox.currentIndex(
-    ))) if ultosc_checkbox.isChecked() else removeIndicator("talib.ULTOSC")
+    lambda: indicator_box_clicked(
+        ultosc_checkbox,
+        ultosc_panel_combobox.currentIndex(),
+        "talib.ULTOSC",
+        [7, 14, 28],
+        selected_ta
+    )
 )
 ultosc_widget.layout().addWidget(ultosc_checkbox)
 momentum_widget.layout().addWidget(ultosc_widget)
+
 # add williams %r to momentum indicator scrollable
 willr_widget = QWidget()
 willr_widget.setLayout(QHBoxLayout())
@@ -2602,8 +2713,15 @@ willr_widget.layout().addWidget(willr_label)
 willr_label.setAutoFillBackground(False)
 willr_panel_combobox = QComboBox()
 willr_panel_combobox.addItems(ta_combobox_items)
-willr_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "talib.WILLR", state,  selected_ta[get_indicator_index("talib.WILLR")][2]) if willr_checkbox.isChecked() else None)
+willr_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "talib.WILLR",
+        state,
+        selected_ta[get_indicator_index("talib.WILLR")][2]
+    )
+    if willr_checkbox.isChecked()
+    else None
+)
 willr_widget.layout().addWidget(willr_panel_combobox)
 willr_settings_button = QPushButton()
 willr_settings_button.setVisible(False)
@@ -2616,6 +2734,9 @@ willr_widget.enterEvent = lambda event: on_enter(
 willr_widget.leaveEvent = lambda event: on_exit(
     event, willr_widget, willr_settings_button)
 def willr_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the willr indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("William's %R")
     wnd.setLayout(QVBoxLayout())
@@ -2629,21 +2750,24 @@ def willr_button_clicked():
     period_widget.layout().addWidget(period_spinbox)
     wnd.layout().addWidget(period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     defaults_button.clicked.connect(lambda: period_spinbox.setValue(14))
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if willr_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (willr_checkbox.isChecked()):
-            selected_ta[get_indicator_index("talib.WILLR")] = (
-                "talib.WILLR", willr_panel_combobox.currentIndex(), [period_spinbox.value()])
+        settings_tuple = (
+            "talib.WILLR",
+            willr_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+        if willr_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.WILLR")] = settings_tuple
         else:
-            selected_ta.append(
-                ("talib.WILLR", willr_panel_combobox.currentIndex(), [period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             willr_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -2658,11 +2782,18 @@ willr_settings_button.clicked.connect(willr_button_clicked)
 willr_widget.layout().addWidget(willr_settings_button)
 willr_checkbox = QCheckBox()
 willr_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.WILLR", willr_panel_combobox.currentIndex(
-    ))) if willr_checkbox.isChecked() else removeIndicator("talib.WILLR")
+    lambda: indicator_box_clicked(
+        willr_checkbox,
+        willr_panel_combobox.currentIndex(),
+        "talib.WILLR",
+        [14],
+        selected_ta
+    )
 )
 willr_widget.layout().addWidget(willr_checkbox)
 momentum_widget.layout().addWidget(willr_widget)
+
+
 # create trend indicator scrollable
 technical_indicators_dialog.trend_groupbox = QGroupBox(
     technical_indicators_dialog)
@@ -2681,6 +2812,7 @@ technical_indicators_dialog.trend_groupbox.trend_scrollarea.setWidget(
     trend_widget)
 technical_indicators_dialog.trend_groupbox.trend_scrollarea.setVerticalScrollBarPolicy(
     Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
 # add dpo to trend indicator scrollable
 dpo_widget = QWidget()
 dpo_widget.setLayout(QHBoxLayout())
@@ -2692,8 +2824,12 @@ dpo_panel_combobox = QComboBox()
 dpo_panel_combobox.addItems(ta_combobox_items)
 dpo_panel_combobox.currentTextChanged.connect(
     lambda state: change_indicator_panel(
-        "ta.trend.dpo", state, selected_ta[get_indicator_index("ta.trend.dpo")][2]
-    ) if dpo_checkbox.isChecked() else None
+        "ta.trend.dpo",
+        state,
+        selected_ta[get_indicator_index("ta.trend.dpo")][2]
+    )
+    if dpo_checkbox.isChecked()
+    else None
 )
 dpo_widget.layout().addWidget(dpo_panel_combobox)
 dpo_settings_button = QPushButton()
@@ -2707,6 +2843,9 @@ dpo_widget.enterEvent = lambda event: on_enter(
 dpo_widget.leaveEvent = lambda event: on_exit(
     event, dpo_widget, dpo_settings_button)
 def dpo_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the dpo indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Trix Indicator")
     wnd.setLayout(QVBoxLayout())
@@ -2720,22 +2859,27 @@ def dpo_button_clicked():
     period_widget.layout().addWidget(period_spinbox)
     wnd.layout().addWidget(period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     defaults_button.clicked.connect(lambda: period_spinbox.setValue(20))
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if dpo_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (dpo_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.dpo")] = (
-                "ta.trend.dpo", dpo_panel_combobox.currentIndex(), [period_spinbox.value()])
+        settings_tuple = (
+            "ta.trend.dpo",
+            dpo_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if dpo_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.dpo")] = settings_tuple
         else:
-            selected_ta.append(
-                ("ta.trend.dpo", dpo_panel_combobox.currentIndex(), [period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             dpo_checkbox.setChecked(True)
+
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
     buttons_widget = QWidget()
@@ -2749,11 +2893,17 @@ dpo_settings_button.clicked.connect(dpo_button_clicked)
 dpo_widget.layout().addWidget(dpo_settings_button)
 dpo_checkbox = QCheckBox()
 dpo_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.dpo", dpo_panel_combobox.currentIndex(
-    ))) if dpo_checkbox.isChecked() else removeIndicator("ta.trend.dpo")
+    lambda: indicator_box_clicked(
+        dpo_checkbox,
+        dpo_panel_combobox.currentIndex(),
+        "ta.trend.dpo",
+        [20],
+        selected_ta
+    )
 )
 dpo_widget.layout().addWidget(dpo_checkbox)
 trend_widget.layout().addWidget(dpo_widget)
+
 # add kst oscillator to trend indicator scrollable
 kst_widget = QWidget()
 kst_widget.setLayout(QHBoxLayout())
@@ -2765,8 +2915,12 @@ kst_panel_combobox = QComboBox()
 kst_panel_combobox.addItems(ta_combobox_items)
 kst_panel_combobox.currentTextChanged.connect(
     lambda state: change_indicator_panel(
-        "ta.trend.KSTIndicator", state, selected_ta[get_indicator_index("ta.trend.KSTIndicator")][2]
-    ) if kst_checkbox.isChecked() else None
+        "ta.trend.KSTIndicator",
+        state,
+        selected_ta[get_indicator_index("ta.trend.KSTIndicator")][2]
+    )
+    if kst_checkbox.isChecked()
+    else None
 )
 kst_widget.layout().addWidget(kst_panel_combobox)
 kst_settings_button = QPushButton()
@@ -2780,6 +2934,9 @@ kst_widget.enterEvent = lambda event: on_enter(
 kst_widget.leaveEvent = lambda event: on_exit(
     event, kst_widget, kst_settings_button)
 def kst_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the kst indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("KST Oscillator")
     wnd.setLayout(QVBoxLayout())
@@ -2865,7 +3022,7 @@ def kst_button_clicked():
     signal_widget.layout().addWidget(signal_spinbox)
     wnd.layout().addWidget(signal_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         roc1_spinbox.setValue(10)
         roc2_spinbox.setValue(15)
@@ -2878,30 +3035,29 @@ def kst_button_clicked():
         signal_spinbox.setValue(9)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if kst_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
+        new_vals = [
+                roc1_spinbox.value(),
+                roc2_spinbox.value(),
+                roc3_spinbox.value(),
+                roc4_spinbox.value(),
+                sma1_spinbox.value(),
+                sma2_spinbox.value(),
+                sma3_spinbox.value(),
+                sma4_spinbox.value(),
+                signal_spinbox.value()
+        ]
+        settings_tuple = ("ta.trend.KSTIndicator", kst_panel_combobox.currentIndex(), new_vals)
+
         if kst_checkbox.isChecked():
-            selected_ta[get_indicator_index("ta.trend.KSTIndicator")] = ("ta.trend.KSTIndicator",
-                                                                            kst_panel_combobox.currentIndex(),
-                                                                            [
-                                                                                roc1_spinbox.value(),
-                                                                                roc2_spinbox.value(),
-                                                                                roc3_spinbox.value(),
-                                                                                roc4_spinbox.value(),
-                                                                                sma1_spinbox.value(),
-                                                                                sma2_spinbox.value(),
-                                                                                sma3_spinbox.value(),
-                                                                                sma4_spinbox.value(),
-                                                                                signal_spinbox.value()
-                                                                            ]
-                                                                        )
+            selected_ta[get_indicator_index("ta.trend.KSTIndicator")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.KSTIndicator", kst_panel_combobox.currentIndex(),
-                                [roc1_spinbox.value(), roc2_spinbox.value(), roc3_spinbox.value(), roc4_spinbox.value(), sma1_spinbox.value(), sma2_spinbox.value(), sma3_spinbox.value(), sma4_spinbox.value(), signal_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             kst_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -2916,11 +3072,17 @@ kst_settings_button.clicked.connect(kst_button_clicked)
 kst_widget.layout().addWidget(kst_settings_button)
 kst_checkbox = QCheckBox()
 kst_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.KSTIndicator", kst_panel_combobox.currentIndex(
-    ))) if kst_checkbox.isChecked() else removeIndicator("ta.trend.KSTIndicator")
+    lambda: indicator_box_clicked(
+        kst_checkbox,
+        kst_panel_combobox.currentIndex(),
+        "ta.trend.KSTIndicator",
+        [10, 15, 20, 30, 10, 10, 15, 9,],
+        selected_ta
+    )
 )
 kst_widget.layout().addWidget(kst_checkbox)
 trend_widget.layout().addWidget(kst_widget)
+
 # add ichimoku to trend indicator scrollable
 ichimoku_widget = QWidget()
 ichimoku_widget.setLayout(QHBoxLayout())
@@ -2930,8 +3092,15 @@ ichimoku_widget.layout().addWidget(ichimoku_label)
 ichimoku_label.setAutoFillBackground(False)
 ichimoku_panel_combobox = QComboBox()
 ichimoku_panel_combobox.addItems(ta_combobox_items)
-ichimoku_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.IchimokuIndicator", state, selected_ta[get_indicator_index("ta.trend.IchimokuIndicator")][2]) if ichimoku_checkbox.isChecked() else None)
+ichimoku_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.IchimokuIndicator",
+        state,
+        selected_ta[get_indicator_index("ta.trend.IchimokuIndicator")][2]
+    )
+    if ichimoku_checkbox.isChecked()
+    else None
+)
 ichimoku_widget.layout().addWidget(ichimoku_panel_combobox)
 ichimoku_settings_button = QPushButton()
 ichimoku_settings_button.setVisible(False)
@@ -2944,6 +3113,9 @@ ichimoku_widget.enterEvent = lambda event: on_enter(
 ichimoku_widget.leaveEvent = lambda event: on_exit(
     event, ichimoku_widget, ichimoku_settings_button)
 def ichimoku_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the ichimoku indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Schaff Indicator")
     wnd.setLayout(QVBoxLayout())
@@ -2984,7 +3156,7 @@ def ichimoku_button_clicked():
     shift_widget.layout().addWidget(shift_checkbox)
     wnd.layout().addWidget(shift_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         low_period_spinbox.setValue(9)
         med_period_spinbox.setValue(26)
@@ -2992,18 +3164,28 @@ def ichimoku_button_clicked():
         shift_checkbox.setChecked(False)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if ichimoku_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+
     def ok_button_clicked():
-        if (ichimoku_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.IchimokuIndicator")] = ("ta.trend.IchimokuIndicator", ichimoku_panel_combobox.currentIndex(), [
-                low_period_spinbox.value(), med_period_spinbox.value(), high_period_spinbox.value(), shift_checkbox.isChecked()])
+        new_vals = [
+            low_period_spinbox.value(),
+            med_period_spinbox.value(),
+            high_period_spinbox.value(),
+            shift_checkbox.isChecked()
+        ]
+        settings_tuple = (
+            "ta.trend.IchimokuIndicator",
+            ichimoku_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if ichimoku_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.IchimokuIndicator")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.IchimokuIndicator", ichimoku_panel_combobox.currentIndex(), [
-                               low_period_spinbox.value(), med_period_spinbox.value(), high_period_spinbox.value(), shift_checkbox.isChecked()]))
+            selected_ta.append(settings_tuple)
             ichimoku_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3018,11 +3200,17 @@ ichimoku_settings_button.clicked.connect(ichimoku_button_clicked)
 ichimoku_widget.layout().addWidget(ichimoku_settings_button)
 ichimoku_checkbox = QCheckBox()
 ichimoku_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.IchimokuIndicator", ichimoku_panel_combobox.currentIndex(
-    ))) if ichimoku_checkbox.isChecked() else removeIndicator("ta.trend.IchimokuIndicator")
+    lambda: indicator_box_clicked(
+        ichimoku_checkbox,
+        ichimoku_panel_combobox.currentIndex(),
+        "ta.trend.IchimokuIndicator",
+        [9, 26, 52, False],
+        selected_ta
+    )
 )
 ichimoku_widget.layout().addWidget(ichimoku_checkbox)
 trend_widget.layout().addWidget(ichimoku_widget)
+
 # add mass index to trend indicator scrollable
 mi_widget = QWidget()
 mi_widget.setLayout(QHBoxLayout())
@@ -3032,8 +3220,15 @@ mi_widget.layout().addWidget(mi_label)
 mi_label.setAutoFillBackground(False)
 mi_panel_combobox = QComboBox()
 mi_panel_combobox.addItems(ta_combobox_items)
-mi_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.mass_index", state, selected_ta[get_indicator_index("ta.trend.mass_index")][2]) if mi_checkbox.isChecked() else None)
+mi_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.mass_index",
+        state,
+        selected_ta[get_indicator_index("ta.trend.mass_index")][2]
+    )
+    if mi_checkbox.isChecked()
+    else None
+)
 mi_widget.layout().addWidget(mi_panel_combobox)
 mi_settings_button = QPushButton()
 mi_settings_button.setVisible(False)
@@ -3046,6 +3241,9 @@ mi_widget.enterEvent = lambda event: on_enter(
 mi_widget.leaveEvent = lambda event: on_exit(
     event, mi_widget, mi_settings_button)
 def mi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the mass index
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Mass Index")
     wnd.setLayout(QVBoxLayout())
@@ -3068,24 +3266,31 @@ def mi_button_clicked():
     slow_period_widget.layout().addWidget(slow_period_spinbox)
     wnd.layout().addWidget(slow_period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         fast_period_spinbox.setValue(9)
         slow_period_spinbox.setValue(25)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if mi_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (mi_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.mass_index")] = ("ta.trend.mass_index", mi_panel_combobox.currentIndex(), [
-                fast_period_spinbox.value(), slow_period_spinbox.value()])
+        new_vals = [
+            fast_period_spinbox.value(),
+            slow_period_spinbox.value()
+        ]
+        settings_tuple = (
+            "ta.trend.mass_index",
+            mi_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if mi_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.mass_index")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.mass_index", mi_panel_combobox.currentIndex(), [
-                               fast_period_spinbox.value(), slow_period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             mi_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3100,11 +3305,17 @@ mi_settings_button.clicked.connect(mi_button_clicked)
 mi_widget.layout().addWidget(mi_settings_button)
 mi_checkbox = QCheckBox()
 mi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.mass_index", mi_panel_combobox.currentIndex(
-    ))) if mi_checkbox.isChecked() else removeIndicator("ta.trend.mass_index")
+    lambda: indicator_box_clicked(
+        mi_checkbox,
+        mi_panel_combobox.currentIndex(),
+        "ta.trend.mass_index",
+        [9, 25],
+        selected_ta
+    )
 )
 mi_widget.layout().addWidget(mi_checkbox)
 trend_widget.layout().addWidget(mi_widget)
+
 # add schaff to trend indicator scrollable
 schaff_widget = QWidget()
 schaff_widget.setLayout(QHBoxLayout())
@@ -3114,8 +3325,15 @@ schaff_widget.layout().addWidget(schaff_label)
 schaff_label.setAutoFillBackground(False)
 schaff_panel_combobox = QComboBox()
 schaff_panel_combobox.addItems(ta_combobox_items)
-schaff_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.stc", state, selected_ta[get_indicator_index("ta.trend.stc")][2]) if schaff_checkbox.isChecked() else None)
+schaff_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.stc",
+        state,
+        selected_ta[get_indicator_index("ta.trend.stc")][2]
+    )
+    if schaff_checkbox.isChecked()
+    else None
+)
 schaff_widget.layout().addWidget(schaff_panel_combobox)
 schaff_settings_button = QPushButton()
 schaff_settings_button.setVisible(False)
@@ -3124,10 +3342,15 @@ size_retain.setRetainSizeWhenHidden(True)
 schaff_settings_button.setSizePolicy(size_retain)
 schaff_settings_button.setIcon(QIcon('icons/gear.jpg'))
 schaff_widget.enterEvent = lambda event: on_enter(
-    event, schaff_widget, schaff_settings_button)
+    event, schaff_widget, schaff_settings_button
+)
 schaff_widget.leaveEvent = lambda event: on_exit(
-    event, schaff_widget, schaff_settings_button)
+    event, schaff_widget, schaff_settings_button
+)
 def schaff_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the schaff indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Schaff Indicator")
     wnd.setLayout(QVBoxLayout())
@@ -3177,7 +3400,7 @@ def schaff_button_clicked():
     length2_widget.layout().addWidget(length2_spinbox)
     wnd.layout().addWidget(length2_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         macd_slow_spinbox.setValue(50)
         macd_fast_spinbox.setValue(23)
@@ -3186,18 +3409,28 @@ def schaff_button_clicked():
         length2_spinbox.setValue(3)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if schaff_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (schaff_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.stc")] = ("ta.trend.stc", schaff_panel_combobox.currentIndex(),
-                                                                [macd_slow_spinbox.value(), macd_fast_spinbox.value(), cycle_spinbox.value(), length1_spinbox.value(), length2_spinbox.value()])
+        new_vals = [
+            macd_slow_spinbox.value(),
+            macd_fast_spinbox.value(),
+            cycle_spinbox.value(),
+            length1_spinbox.value(),
+            length2_spinbox.value()
+        ]
+        settings_tuple = (
+            "ta.trend.stc",
+            schaff_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if schaff_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.stc")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.stc", schaff_panel_combobox.currentIndex(),
-                                [macd_slow_spinbox.value(), macd_fast_spinbox.value(), cycle_spinbox.value(), length1_spinbox.value(), length2_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             schaff_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3212,11 +3445,17 @@ schaff_settings_button.clicked.connect(schaff_button_clicked)
 schaff_widget.layout().addWidget(schaff_settings_button)
 schaff_checkbox = QCheckBox()
 schaff_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.stc", schaff_panel_combobox.currentIndex(
-    ))) if schaff_checkbox.isChecked() else removeIndicator("ta.trend.stc")
+    lambda: indicator_box_clicked(
+        schaff_checkbox,
+        schaff_panel_combobox.currentIndex(),
+        "ta.trend.stc",
+        [50, 23, 10, 3, 3],
+        selected_ta
+    )
 )
 schaff_widget.layout().addWidget(schaff_checkbox)
 trend_widget.layout().addWidget(schaff_widget)
+
 # add trix indicator to trend indicator scrollable
 trix_widget = QWidget()
 trix_widget.setLayout(QHBoxLayout())
@@ -3226,8 +3465,15 @@ trix_widget.layout().addWidget(trix_label)
 trix_label.setAutoFillBackground(False)
 trix_panel_combobox = QComboBox()
 trix_panel_combobox.addItems(ta_combobox_items)
-trix_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.trix", state, selected_ta[get_indicator_index("ta.trend.trix")][2]) if trix_checkbox.isChecked() else None)
+trix_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.trix",
+        state,
+        selected_ta[get_indicator_index("ta.trend.trix")][2]
+    )
+    if trix_checkbox.isChecked()
+    else None
+)
 trix_widget.layout().addWidget(trix_panel_combobox)
 trix_settings_button = QPushButton()
 trix_settings_button.setVisible(False)
@@ -3240,6 +3486,9 @@ trix_widget.enterEvent = lambda event: on_enter(
 trix_widget.leaveEvent = lambda event: on_exit(
     event, trix_widget, trix_settings_button)
 def trix_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the trix indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Trix Indicator")
     wnd.setLayout(QVBoxLayout())
@@ -3253,21 +3502,24 @@ def trix_button_clicked():
     period_widget.layout().addWidget(period_spinbox)
     wnd.layout().addWidget(period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     defaults_button.clicked.connect(lambda: period_spinbox.setValue(14))
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if trix_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (trix_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.trix")] = (
-                "ta.trend.trix", trix_panel_combobox.currentIndex(), [period_spinbox.value()])
+        settings_tuple = (
+            "ta.trend.trix",
+            trix_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+        if trix_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.trix")] = settings_tuple
         else:
-            selected_ta.append(
-                ("ta.trend.trix", trix_panel_combobox.currentIndex(), [period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             trix_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3282,11 +3534,17 @@ trix_settings_button.clicked.connect(trix_button_clicked)
 trix_widget.layout().addWidget(trix_settings_button)
 trix_checkbox = QCheckBox()
 trix_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.trix", trix_panel_combobox.currentIndex(
-    ), 15)) if trix_checkbox.isChecked() else removeIndicator("ta.trend.trix")
+    lambda: indicator_box_clicked(
+        trix_checkbox,
+        trix_panel_combobox.currentIndex(),
+        "ta.trend.trix",
+        [15],
+        selected_ta
+    )
 )
 trix_widget.layout().addWidget(trix_checkbox)
 trend_widget.layout().addWidget(trix_widget)
+
 # add parabolic sar to trend indicator scrollable
 psar_widget = QWidget()
 psar_widget.setLayout(QHBoxLayout())
@@ -3296,8 +3554,15 @@ psar_widget.layout().addWidget(psar_label)
 psar_label.setAutoFillBackground(False)
 psar_panel_combobox = QComboBox()
 psar_panel_combobox.addItems(ta_combobox_items)
-psar_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.PSARIndicator", state, selected_ta[get_indicator_index("ta.trend.PSARIndicator")][2]) if psar_checkbox.isChecked() else None)
+psar_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.PSARIndicator",
+        state,
+        selected_ta[get_indicator_index("ta.trend.PSARIndicator")][2]
+    )
+    if psar_checkbox.isChecked()
+    else None
+)
 psar_widget.layout().addWidget(psar_panel_combobox)
 psar_settings_button = QPushButton()
 psar_settings_button.setVisible(False)
@@ -3310,6 +3575,9 @@ psar_widget.enterEvent = lambda event: on_enter(
 psar_widget.leaveEvent = lambda event: on_exit(
     event, psar_widget, psar_settings_button)
 def psar_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the PSAR indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Parabolic SAR")
     wnd.setLayout(QVBoxLayout())
@@ -3332,24 +3600,31 @@ def psar_button_clicked():
     max_acc_fac_widget.layout().addWidget(max_acc_fac_spinbox)
     wnd.layout().addWidget(max_acc_fac_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def restore_defaults():
         acc_fac_spinbox.setValue(.02)
         max_acc_fac_spinbox.setValue(.2)
     defaults_button.clicked.connect(restore_defaults)
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if psar_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (psar_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.PSARIndicator")] = (
-                "ta.trend.PSARIndicator", psar_panel_combobox.currentIndex(), [acc_fac_spinbox.value(), max_acc_fac_spinbox.value()])
+        new_vals = [
+            acc_fac_spinbox.value(),
+            max_acc_fac_spinbox.value()
+        ]
+        settings_tuple = (
+            "ta.trend.PSARIndicator",
+            psar_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if psar_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.PSARIndicator")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.PSARIndicator", psar_panel_combobox.currentIndex(), [
-                               acc_fac_spinbox.value(), max_acc_fac_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             psar_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3364,11 +3639,17 @@ psar_settings_button.clicked.connect(psar_button_clicked)
 psar_widget.layout().addWidget(psar_settings_button)
 psar_checkbox = QCheckBox()
 psar_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.PSARIndicator", psar_panel_combobox.currentIndex(
-    ), [.02, .2])) if psar_checkbox.isChecked() else removeIndicator("ta.trend.PSARIndicator")
+    lambda: indicator_box_clicked(
+        psar_checkbox,
+        psar_panel_combobox.currentIndex(),
+        "ta.trend.PSARIndicator",
+        [.02, .2],
+        selected_ta
+    )
 )
 psar_widget.layout().addWidget(psar_checkbox)
 trend_widget.layout().addWidget(psar_widget)
+
 # add vortex to trend indicator scrollable
 vortex_widget = QWidget()
 vortex_widget.setLayout(QHBoxLayout())
@@ -3378,8 +3659,15 @@ vortex_widget.layout().addWidget(vortex_label)
 vortex_label.setAutoFillBackground(False)
 vortex_panel_combobox = QComboBox()
 vortex_panel_combobox.addItems(ta_combobox_items)
-vortex_panel_combobox.currentTextChanged.connect(lambda state: change_indicator_panel(
-    "ta.trend.VortexIndicator", state, selected_ta[get_indicator_index("ta.trend.VortexIndicator")][2]) if vortex_checkbox.isChecked() else None)
+vortex_panel_combobox.currentTextChanged.connect(
+    lambda state: change_indicator_panel(
+        "ta.trend.VortexIndicator",
+        state,
+        selected_ta[get_indicator_index("ta.trend.VortexIndicator")][2]
+    )
+    if vortex_checkbox.isChecked()
+    else None
+)
 vortex_widget.layout().addWidget(vortex_panel_combobox)
 vortex_settings_button = QPushButton()
 vortex_settings_button.setVisible(False)
@@ -3392,6 +3680,9 @@ vortex_widget.enterEvent = lambda event: on_enter(
 vortex_widget.leaveEvent = lambda event: on_exit(
     event, vortex_widget, vortex_settings_button)
 def vortex_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the trix indicator
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Vortex Indicator")
     wnd.setLayout(QVBoxLayout())
@@ -3399,27 +3690,33 @@ def vortex_button_clicked():
     period_widget.setLayout(QHBoxLayout())
     period_label = QLabel("Period")
     period_spinbox = QSpinBox()
-    period_spinbox.setValue(selected_ta[get_indicator_index(
-        "ta.trend.VortexIndicator")][2][0] if vortex_checkbox.isChecked() else 14)
+    period_spinbox.setValue(
+        selected_ta[get_indicator_index("ta.trend.VortexIndicator")][2][0]
+        if vortex_checkbox.isChecked()
+        else 14
+    )
     period_widget.layout().addWidget(period_label)
     period_widget.layout().addWidget(period_spinbox)
     wnd.layout().addWidget(period_widget)
     defaults_button = QPushButton("Reset to Defaults")
-    defaults_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     defaults_button.clicked.connect(lambda: period_spinbox.setValue(14))
     cancel_button = QPushButton("Cancel")
-    cancel_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
     ok_button = QPushButton(
         "Save" if vortex_checkbox.isChecked() else "Save and Add")
-    ok_button.setStyleSheet(SETTINGS_DIALOG_BUTTON_STYLESHEET)
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        if (vortex_checkbox.isChecked()):
-            selected_ta[get_indicator_index("ta.trend.VortexIndicator")] = (
-                "ta.trend.VortexIndicator", vortex_panel_combobox.currentIndex(), [period_spinbox.value()])
+        settings_tuple = (
+            "ta.trend.VortexIndicator",
+            vortex_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+        if vortex_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.trend.VortexIndicator")] = settings_tuple
         else:
-            selected_ta.append(("ta.trend.VortexIndicator", vortex_panel_combobox.currentIndex(), [
-                               period_spinbox.value()]))
+            selected_ta.append(settings_tuple)
             vortex_checkbox.setChecked(True)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
@@ -3434,11 +3731,32 @@ vortex_settings_button.clicked.connect(vortex_button_clicked)
 vortex_widget.layout().addWidget(vortex_settings_button)
 vortex_checkbox = QCheckBox()
 vortex_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.trend.VortexIndicator", vortex_panel_combobox.currentIndex(
-    ), [14])) if vortex_checkbox.isChecked() else removeIndicator("ta.trend.VortexIndicator")
+    lambda: indicator_box_clicked(
+        vortex_checkbox,
+        vortex_panel_combobox.currentIndex(),
+        "ta.trend.VortexIndicator",
+        [14],
+        selected_ta
+    )
 )
 vortex_widget.layout().addWidget(vortex_checkbox)
 trend_widget.layout().addWidget(vortex_widget)
+
+def indicator_box_clicked(box: QCheckBox, index: int, function: str, settings: list, ta_list: list):
+    """
+    A function that is called whenever an indicator's checkbox is clicked.
+    If the click is to add the indicator, an indicator tuple is created from the function
+    string, selected index, and indicator settings and added to the global TA list.
+    If the click is to remove the indicator, the global list is cleared and replaced with
+    a new list that doesn't have the given indicator tuple.
+    """
+    if box.isChecked():
+        ta_list.append((function, index, settings))
+    else:
+        new_list = list(filter(lambda ta: ta[0] != function, ta_list))
+        ta_list.clear()
+        ta_list.extend(new_list)
+
 # create moving average indicator scrollable
 technical_indicators_dialog.ma_groupbox = QGroupBox(
     technical_indicators_dialog)
@@ -3456,7 +3774,7 @@ ma_widget.setLayout(QVBoxLayout())
 technical_indicators_dialog.ma_groupbox.ma_scrollarea.setWidget(ma_widget)
 technical_indicators_dialog.ma_groupbox.ma_scrollarea.setVerticalScrollBarPolicy(
     Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-chart_dialog.addTab(chart_configurations, "Chart Configurations")
+chart_dialog.addTab(chart_configs, "Chart Configurations")
 chart_dialog.addTab(technical_indicators_dialog, "Technical Indicators")
 ################
 # trade dialog #
@@ -3481,9 +3799,10 @@ stockinfo_dialog_main.search_bar_groupbox.searchBar = QLineEdit(
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setGeometry(
     10, 20, 850, 40)
 stockinfo_dialog_main.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
+    search_text_changed
+)
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setFont(
-    QFont('arial', 10))
+    ARIAL_10)
 stockinfo_dialog_main.search_bar_groupbox.searchBar.setCompleter(completer)
 stockinfo_dialog_main.search_bar_groupbox.search_button = QPushButton(
     stockinfo_dialog_main.search_bar_groupbox)
@@ -3492,7 +3811,9 @@ stockinfo_dialog_main.search_bar_groupbox.search_button.setGeometry(
 stockinfo_dialog_main.search_bar_groupbox.search_button.setText(
     "Show Info")
 stockinfo_dialog_main.search_bar_groupbox.search_button.clicked.connect(
-    lambda: stockinfo_searchbar_click(stockinfo_dialog_main))
+    stockinfo_searchbar_click
+)
+
 stockinfo_dialog_main.asset_info_groupbox = QGroupBox(
     stockinfo_dialog_main)
 stockinfo_dialog_main.asset_info_groupbox.setStyleSheet(
@@ -3511,31 +3832,34 @@ stockinfo_dialog_main.asset_info_groupbox.content_container.setGeometry(
     5, 15, 305, 520)
 stockinfo_dialog_main.asset_info_groupbox.content_container.setVerticalScrollBarPolicy(
     Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
 stockinfo_dialog_main.about_groupbox = QGroupBox(stockinfo_dialog_main)
 stockinfo_dialog_main.about_groupbox.setStyleSheet(
     'background-color: white')
 stockinfo_dialog_main.about_groupbox.setTitle("About the Asset")
-stockinfo_dialog_main.about_groupbox.setGeometry(330, 90, 470, 550)
+stockinfo_dialog_main.about_groupbox.setGeometry(330, 90, 540, 550)
 stockinfo_dialog_main.about_groupbox.setVisible(False)
 stockinfo_dialog_main.about_groupbox.content_container = QScrollArea(
     stockinfo_dialog_main.about_groupbox)
 about_scrollarea_widget = QWidget()
-about_scrollarea_widget.resize(400, 800)
+about_scrollarea_widget.resize(540, 800)
 about_scrollarea_widget.setLayout(QVBoxLayout())
 stockinfo_dialog_main.about_groupbox.content_container.setWidget(
     about_scrollarea_widget
 )
 stockinfo_dialog_main.about_groupbox.content_container.setGeometry(
-    5, 15, 420, 520)
+    5, 15, 530, 520)
 stockinfo_dialog_main.about_groupbox.content_container.setVerticalScrollBarPolicy(
     Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
 stockinfo_dialog_main.news_groupbox = QGroupBox(stockinfo_dialog_main)
 stockinfo_dialog_main.news_groupbox.setStyleSheet(
     'background-color: white')
 stockinfo_dialog_main.news_groupbox.setTitle("News")
-stockinfo_dialog_main.news_groupbox.setGeometry(810, 90, 470, 550)
+stockinfo_dialog_main.news_groupbox.setGeometry(880, 90, 400, 550)
 stockinfo_dialog_main.news_groupbox.setVisible(False)
 stockinfo_dialog_main.news_groupbox.setLayout(QVBoxLayout())
+
 stockinfo_dialog_recs = QDialog()
 stockinfo_dialog_recs.setStyleSheet('background-color: deepskyblue')
 stockinfo_dialog_recs.analyst_rec_groupbox = QGroupBox(
@@ -3619,7 +3943,7 @@ qtr_earnings_table = QTableWidget(qtr_earnings_groupbox)
 qtr_earnings_table.setGeometry(820, 20, 350, 290)
 qtr_earnings_table.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
-qtr_earnings_table.setFont(QFont('arial', 10))
+qtr_earnings_table.setFont(ARIAL_10)
 qtr_earnings_table.setStyleSheet('background-color: white;')
 qtr_revtrend_chart = QChart()
 qtr_revtrend_chart.setTitle("Quarterly Revenue Trend")
@@ -3694,7 +4018,7 @@ financials_table = QTableWidget(financials_groupbox)
 financials_table.setGeometry(10, 325, 1200, 1500)
 financials_table.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
-financials_table.setFont(QFont('arial', 10))
+financials_table.setFont(ARIAL_10)
 financials_table.setStyleSheet('background-color: white;')
 stockinfo_dialog.addTab(stockinfo_dialog_main, "Overview")
 stockinfo_dialog.addTab(stockinfo_dialog_recs, "Insiders and Institutions")
@@ -3715,15 +4039,16 @@ dcf_dialog.search_bar_groupbox.searchBar = QLineEdit(
     dcf_dialog.search_bar_groupbox)
 dcf_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
 dcf_dialog.search_bar_groupbox.searchBar.textChanged.connect(
-    lambda txt: searchTextChanged(txt))
-dcf_dialog.search_bar_groupbox.searchBar.setFont(QFont('arial', 10))
+    search_text_changed)
+dcf_dialog.search_bar_groupbox.searchBar.setFont(ARIAL_10)
 dcf_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
 dcf_dialog.search_bar_groupbox.search_button = QPushButton(
     dcf_dialog.search_bar_groupbox)
 dcf_dialog.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
 dcf_dialog.search_bar_groupbox.search_button.setText("Show Model")
 dcf_dialog.search_bar_groupbox.search_button.clicked.connect(
-    lambda: dcf_findstock_button_click())
+    dcf_findstock_button_click
+)
 dcf_dialog.inputs_groupbox = QGroupBox(dcf_dialog)
 dcf_dialog.inputs_groupbox.setStyleSheet('background-color: white;')
 dcf_dialog.inputs_groupbox.setTitle("Model Inputs")
@@ -3944,7 +4269,8 @@ settings_dialog.apply_button = QPushButton(settings_dialog)
 settings_dialog.apply_button.setText("Apply")
 settings_dialog.apply_button.setGeometry(450, 500, 100, 50)
 settings_dialog.apply_button.clicked.connect(
-    lambda: applySettingsChanges())
+    apply_settings_changes
+)
 #################
 # wallet dialog #
 #################
@@ -3962,8 +4288,6 @@ wallet_dialog.currentNAV.netLiq.setText("Net Liq: ")
 wallet_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
 wallet_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
 wallet_dialog.currentNAV.liq = QLabel(wallet_dialog.currentNAV)
-wallet_dialog.currentNAV.liq.setText(
-    '${:0,.2f}'.format(float(str(wallet_nav))))
 wallet_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
 wallet_dialog.currentNAV.liq.setFont(QFont('genius', 20))
 # positions table settings
@@ -3977,7 +4301,7 @@ wallet_dialog.positions_view_groupbox.positions_view = QTableWidget(
 wallet_dialog.positions_view_groupbox.positions_view.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
 wallet_dialog.positions_view_groupbox.positions_view.setFont(
-    QFont('arial', 10))
+    ARIAL_10)
 wallet_dialog.positions_view_groupbox.positions_view.setRowCount(
     len(wallet_amts) - 1)
 wallet_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
@@ -3995,7 +4319,7 @@ wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     2, QTableWidgetItem("Current Price"))
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
-    3, QTableWidgetItem("Gain/Loss Per Share"))
+    3, QTableWidgetItem("Gain/Loss Per Share Today"))
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     4, QTableWidgetItem("Purchase Price"))
 wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
@@ -4006,19 +4330,18 @@ wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     7, QTableWidgetItem("Position Gain/Loss"))
 for i in range(8):
     wallet_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 for i in range(portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
     wallet_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(
         0, QTableWidgetItem("1"))
     wallet_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(
-        i).setFont(QFont('arial', 10))
+        i).setFont(ARIAL_10)
 update_wallet_table()
 # cash labels
 wallet_dialog.currentNAV.cashLabel = QLabel(wallet_dialog.currentNAV)
 wallet_dialog.currentNAV.cashLabel.setText("Cash: ")
 wallet_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
 wallet_dialog.currentNAV.cash = QLabel(wallet_dialog.currentNAV)
-wallet_dialog.currentNAV.cash.setText('${:0,.2f}'.format(wallet_cash))
 wallet_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
 # buying power labels
 wallet_dialog.currentNAV.buyingPowerLabel = QLabel(
@@ -4026,21 +4349,12 @@ wallet_dialog.currentNAV.buyingPowerLabel = QLabel(
 wallet_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
 wallet_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
 wallet_dialog.currentNAV.buyingPower = QLabel(wallet_dialog.currentNAV)
-wallet_dialog.currentNAV.buyingPower.setText(
-    '${:0,.2f}'.format(get_wallet_bp()))
 wallet_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
 # assets labels
 wallet_dialog.currentNAV.assetsLabel = QLabel(wallet_dialog.currentNAV)
 wallet_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
 wallet_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
 wallet_dialog.currentNAV.assets = QLabel(wallet_dialog.currentNAV)
-total_long = 0
-for i in range(1, len(wallet_amts)):
-    price = atof(wallet_dialog.positions_view_groupbox.positions_view.item(
-        i - 1, 2).text()[1:])
-    if float(wallet_amts[i].text) > 0:
-        total_long += float(price) * float(wallet_amts[i].text)
-wallet_dialog.currentNAV.assets.setText('${:0,.2f}'.format(total_long))
 wallet_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
 # liabilities labels
 wallet_dialog.currentNAV.liabilitiesLabel = QLabel(
@@ -4048,14 +4362,6 @@ wallet_dialog.currentNAV.liabilitiesLabel = QLabel(
 wallet_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
 wallet_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
 wallet_dialog.currentNAV.liabilities = QLabel(wallet_dialog.currentNAV)
-total_short = 0
-for i in range(1, len(wallet_amts)):
-    price = atof(wallet_dialog.positions_view_groupbox.positions_view.item(
-        i - 1, 2).text()[1:])
-    if float(wallet_amts[i].text) < 0:
-        total_short -= float(price) * float(wallet_amts[i].text)
-wallet_dialog.currentNAV.liabilities.setText(
-    '${:0,.2f}'.format(total_short))
 wallet_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
 # return since inception labels
 wallet_dialog.currentNAV.returnSinceInceptionLabel = QLabel(
@@ -4067,10 +4373,9 @@ wallet_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(
 wallet_dialog.currentNAV.returnSinceInception = QLabel(
     wallet_dialog.currentNAV)
 wallet_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
-wallet_dialog.currentNAV.returnSinceInception.setText(
-    '{:0.2f}'.format((wallet_nav / 10000 - 1) * 100) + "%")
 wallet_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
 wallet_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
+update_wallet_nav()
 ######################
 # end of dialog init #
 ######################

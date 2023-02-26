@@ -34,7 +34,6 @@ func_map = {
     talib.CCI : ta_addplot.cci_addplot,
     talib.CMO : ta_addplot.cmo_addplot,
     talib.DX : ta_addplot.dx_addplot,
-    talib.MACD : ta_addplot.macd_addplot,
     talib.MACDEXT : ta_addplot.macdext_addplot,
     talib.MFI : ta_addplot.mfi_addplot,
     talib.MINUS_DI : ta_addplot.minusdi_addplot,
@@ -63,7 +62,8 @@ func_map = {
     ta.trend.PSARIndicator : ta_addplot.parabolicsar_addplot,
     ta.trend.KSTIndicator : ta_addplot.kst_addplot,
     ta.trend.trix : ta_addplot.trix_addplot,
-    ta.trend.mass_index : ta_addplot.mi_addplot
+    ta.trend.mass_index : ta_addplot.mi_addplot,
+    ta.momentum.pvo : ta_addplot.pvo_addplot
 }
 
 
@@ -144,15 +144,6 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
             indicator = (eval(indicator[0]), indicator[1], indicator[2])
             indicator_plot = func_map[indicator[0]](data=data, settings=indicator[2], ax=axes[indicator[1] * 2])
             plot += indicator_plot
-        doji = talib.CDLDOJI(data['Open'], data['High'], data['Low'], data['Close'])
-        doji_talib = pd.DataFrame(index=data.index,
-                            data={"doji": doji})
-        for i in range(doji_talib['doji'].size):
-            if(doji_talib['doji'].iloc[i] == 0):
-                doji_talib['doji'].iloc[i] = float('nan')
-            elif(doji_talib['doji'].iloc[i] == 100):
-                doji_talib['doji'].iloc[i] = data['Low'].iloc[i] * .999
-        plot.append(mpf.make_addplot((doji_talib['doji']), ax=ax_main, marker='+', type='scatter'))
         for i in range(0, len(axes), 1):
 
             axes[i].clear()
@@ -162,10 +153,8 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
 
         if volume:
             mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol,style=s)
-            print('vol')
         else:
             mpf.plot(data,type='candle',addplot=plot,ax=ax_main,style=s)
-            print('no vol')
         return axes
 
 
@@ -195,17 +184,6 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
             ta_indicators[idx] = None
         else:
             plot += indicator_plot
-
-    doji = talib.CDLDOJI(data['Open'], data['High'], data['Low'], data['Close'])
-    doji_talib = pd.DataFrame(index=data.index,
-                            data={"doji": doji})
-    print(doji_talib['doji'].iloc[0])
-    for i in range(doji_talib['doji'].size):
-        if(doji_talib['doji'].iloc[i] == 0):
-            doji_talib['doji'].iloc[i] = float('nan')
-        elif(doji_talib['doji'].iloc[i] == 100):
-            doji_talib['doji'].iloc[i] = data['Low'].iloc[i] * .999
-    plot.append(mpf.make_addplot((doji_talib['doji']), panel=1, marker='+', type='scatter'))
 
     ta_indicators = [x for x in ta_indicators if x is not None]
 

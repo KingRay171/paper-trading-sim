@@ -28,8 +28,9 @@ from dependencies import numberformat as nf
 from dependencies import finviznews as fn
 from dependencies import readassets as ra
 
+app = QApplication(sys.argv)
 
-CURRENT_DIR = os.getcwd() + '\\'
+CWD = os.getcwd() + '\\'
 
 QPropertyAnimation()
 
@@ -39,6 +40,20 @@ selected_ta = []
 
 ARIAL_10 = QFont('arial', 10)
 
+SETTINGS_DIALOG_BTN_STYLESHEET = "QPushButton::hover{background-color: deepskyblue; color: white;}"
+
+SCROLLBAR_ALWAYSON = Qt.ScrollBarPolicy.ScrollBarAlwaysOn
+
+# performance icons
+GREENARROW_GREENBOX = QIcon(f"{CWD}icons/greenarrowgreenbox.png")
+GREENARROW_FLATBOX = QIcon(f"{CWD}icons/greenarrowflatbox.png")
+GREENARROW_REDBOX = QIcon(f"{CWD}icons/greenarrowredbox.png")
+FLATARROW_GREENBOX = QIcon(f"{CWD}icons/flatarrowgreenbox.png")
+FLATARROW_FLATBOX = QIcon(f"{CWD}icons/flatarrowflatbox.png")
+FLATARROW_REDBOX = QIcon(f"{CWD}icons/flatarrowredbox.png")
+REDARROW_GREENBOX = QIcon(f"{CWD}icons/redarrowgreenbox.png")
+REDARROW_FLATBOX = QIcon(f"{CWD}icons/redarrowflatbox.png")
+REDARROW_REDBOX = QIcon(f"{CWD}icons/redarrowredbox.png")
 
 def spy_button_clicked():
     """
@@ -392,28 +407,41 @@ def search_button_clicked():
    # shows the requested ticker's chart
     if chart_configs.settings_groupbox.daterange_radiobutton.isChecked():
 
-        def thread_worker(title, start_date, end_date, interval):
-            os.system(
-                rf"""python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {start_date} {end_date} {include_prepost} {adjust_ohlc} {split_dividend} {include_volume}""")
-
-        start_date = chart_configs.settings_groupbox.start_date.selectedDate(
-        ).toString("yyyy-MM-dd")
-        end_date = chart_configs.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
-
-        Thread(daemon=True, target=thread_worker, args=(
-            ticker, start_date, end_date, interval)).start()
+        chart_by_dates(
+            ticker, interval, include_prepost, adjust_ohlc, split_dividend, include_volume
+        )
     else:
         # only get period if user chose to chart by period
+        chart_by_period(
+            ticker, interval, include_prepost, adjust_ohlc, split_dividend, include_volume
+        )
 
-        def thread_worker(title, period, interval):
-            os.system(
-                rf"""python3 {CURRENT_DIR}dependencies\stockchart.py {title} {interval} "{selected_ta}" {period} {include_prepost} {adjust_ohlc} {split_dividend} {include_volume}""")
 
-        period = chart_configs.settings_groupbox.data_period_combobox.currentText()
+def chart_by_dates(ticker: str, interval: str, prepost: str, ohlc: str, split_div: str, vol: str):
+    """
+    Starts chart UI, passes start date and end date as command line arguments
+    """
+    def thread_worker(title, start, end, interval):
+        cla = f'{title} {interval} "{selected_ta}" {start} {end} {prepost} {ohlc} {split_div} {vol}'
+        os.system(rf"python3 {CWD}dependencies\stockchart.py {cla}")
 
-        Thread(daemon=True, target=thread_worker,
-            args=(ticker, period, interval)
-        ).start()
+    start = chart_configs.settings_groupbox.start_date.selectedDate().toString("yyyy-MM-dd")
+    end = chart_configs.settings_groupbox.end_date.selectedDate().toString("yyyy-MM-dd")
+
+    Thread(daemon=True, target=thread_worker, args=(ticker, start, end, interval)).start()
+
+
+def chart_by_period(ticker: str, interval: str, prepost: str, ohlc: str, split_div: str, vol: str):
+    """
+    Starts chart UI, passes a period as a command line argument
+    """
+    def thread_worker(title, period, interval):
+        cla = f'{title} {interval} "{selected_ta}" {period} {prepost} {ohlc} {split_div} {vol}'
+        os.system(rf"python3 {CWD}dependencies\stockchart.py {cla}")
+
+    period = chart_configs.settings_groupbox.data_period_combobox.currentText()
+
+    Thread(daemon=True, target=thread_worker, args=(ticker, period, interval)).start()
 
 
 def update_ticker_icon(ticker) -> QTableWidgetItem:
@@ -426,7 +454,7 @@ def update_ticker_icon(ticker) -> QTableWidgetItem:
         Returns a QTableWidgetItem with the new performance icon
     """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
-    w = QTableWidgetItem()
+    tw_item = QTableWidgetItem()
     ticker_open = ticker.iloc[-1][0]
     ticker_current = ticker.iloc[-1][5]
     ticker_last_close = ticker.iloc[-2][5]
@@ -441,45 +469,45 @@ def update_ticker_icon(ticker) -> QTableWidgetItem:
     close_pos = "UP"
     if open_change < -.1:
         open_pos = "DOWN"
-    elif open_change > -.1 and open_change < .1:
+
+    elif -.1 < open_change < .1:
         open_pos = "FLAT"
 
     if close_change < -.1:
         close_pos = "DOWN"
-    elif close_change > -.1 and close_change < .1:
+    elif -.1 < close_change < .1:
         close_pos = "FLAT"
 
     match open_pos:
         case "UP":
             match close_pos:
                 case "UP":
-                    w.setIcon(
-                        QIcon(CURRENT_DIR + 'icons/greenarrowgreenbox.png'))
+                    tw_item.setIcon(GREENARROW_GREENBOX)
                 case "FLAT":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/greenarrowflatbox.png'))
+                    tw_item.setIcon(GREENARROW_FLATBOX)
                 case "DOWN":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/greenarrowredbox.png'))
+                    tw_item.setIcon(GREENARROW_REDBOX)
 
         case "FLAT":
             match close_pos:
                 case "UP":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/flatarrowgreenbox.png'))
+                    tw_item.setIcon(FLATARROW_GREENBOX)
                 case "FLAT":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/flatarrowflatbox.png'))
+                    tw_item.setIcon(FLATARROW_FLATBOX)
                 case "DOWN":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/flatarrowredbox.png'))
+                    tw_item.setIcon(FLATARROW_REDBOX)
 
         case "DOWN":
             match close_pos:
                 case "UP":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/redarrowgreenbox.png'))
+                    tw_item.setIcon(REDARROW_GREENBOX)
                 case "FLAT":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/redarrowflatbox.png'))
+                    tw_item.setIcon(REDARROW_FLATBOX)
                 case "DOWN":
-                    w.setIcon(QIcon(CURRENT_DIR + 'icons/redarrowredbox.png'))
+                    tw_item.setIcon(REDARROW_REDBOX)
 
     # returns a tablewidgetitem containing the new icon
-    return w
+    return tw_item
 
 
 def update_portfolio_nav():
@@ -1245,26 +1273,25 @@ def on_financials_checkbox_click():
 
     financials_chart.removeAllSeries()
     series = QBarSeries()
-    for i in range(financials_table.rowCount()):
+    for outer in range(financials_table.rowCount()):
         box = financials_table.cellWidget(i, 4)
         if box.isChecked():
-            set = QBarSet(financials_table.verticalHeaderItem(i).text())
-            for j in range(4):
-
-                val = financials_table.item(i, j).text()
+            financials_set = QBarSet(financials_table.verticalHeaderItem(outer).text())
+            for inner in range(4):
+                val = financials_table.item(outer, inner).text()
                 last_char = val[-1]
                 match last_char:
                     case 'k':
-                        set.append(float(val[:-1]) * 10**3)
+                        financials_set.append(float(val[:-1]) * 10**3)
                     case 'M':
-                        set.append(float(val[:-1]) * 10**6)
+                        financials_set.append(float(val[:-1]) * 10**6)
                     case 'B':
-                        set.append(float(val[:-1]) * 10**9)
+                        financials_set.append(float(val[:-1]) * 10**9)
                     case 'T':
-                        set.append(float(val[:-1]) * 10**12)
+                        financials_set.append(float(val[:-1]) * 10**12)
                     case _:
-                        set.append(float(val))
-            series.append(set)
+                        financials_set.append(float(val))
+            series.append(financials_set)
 
     financials_chart.addSeries(series)
     financials_chart.createDefaultAxes()
@@ -1410,22 +1437,27 @@ def dcf_getanalysis_button_click():
     )
 
 
-
-
-
-def change_indicator_panel(indicator_fn, value, args):
-    for ta in selected_ta:
-        if ta[0] == indicator_fn:
-            index = selected_ta.index(ta)
+def change_indicator_panel(indicator_fn: str, value: int, args: list):
+    """
+    Changes the given indicator's panel (where it appears on the chart). Should
+    be called whenever an indicator's panel combobox is changed.
+    """
+    for indicator in selected_ta:
+        if indicator[0] == indicator_fn:
+            index = selected_ta.index(indicator)
             new_tup = (indicator_fn, int(value))
             new_tup += (args, )
             selected_ta[index] = new_tup
 
 
-def get_indicator_index(indicator_fn) -> int:
-    for ta in selected_ta:
-        if ta[0] == indicator_fn:
-            return selected_ta.index(ta)
+def get_indicator_index(indicator_fn: str) -> int:
+    """
+    Takes an indicator as a string and returns its index in the TA list
+    """
+    for indicator in selected_ta:
+        if indicator[0] == indicator_fn:
+            return selected_ta.index(indicator)
+    raise ValueError(f"Indicator '{str}' is not in the list of TA")
 
 
 def close_event(event):
@@ -1433,11 +1465,11 @@ def close_event(event):
     print("closed")
 
 
-app = QApplication(sys.argv)
 widget = QTabWidget()
 widget.setWindowTitle("Ray's Paper Trading Game")
 splash = QSplashScreen(
-    QPixmap(CURRENT_DIR + 'splashscreen-images/splash.png')
+    QPixmap(f"{CWD}splashscreen-images/splash.png")
+
 )
 progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
@@ -1470,19 +1502,16 @@ TAB3_ISLOADED = False
 TAB4_ISLOADED = False
 
 all_tickers_list = pd.read_csv(
-    CURRENT_DIR + r"assets\stock_list.csv"
+    CWD + r"assets\stock_list.csv"
 )['Symbol'].tolist()
 all_names_list = pd.read_csv(
-    CURRENT_DIR + r"assets\stock_list.csv"
+    CWD + r"assets\stock_list.csv"
 )['Name'].tolist()
 
 all_tickers_list[5023] = 'NAN'
 
-all_tickers_list = [
-                     f"{all_tickers_list[i]} - {all_names_list[i]}"
-                     for i, val
-                     in enumerate(all_tickers_list)
-                    ]
+tickers_names_zip = zip(all_tickers_list, all_names_list)
+all_tickers_list = [f"{ticker} - {name}" for (ticker, name) in tickers_names_zip]
 
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
@@ -1853,7 +1882,7 @@ technical_indicators_dialog.momentum_groupbox.setGeometry(10, 10, 300, 620)
 technical_indicators_dialog.momentum_groupbox.setStyleSheet(
     'background-color: white')
 ta_combobox_items = [str(i) for i in range(0, 16)]
-SETTINGS_DIALOG_BTN_STYLESHEET = "QPushButton::hover{background-color: deepskyblue; color: white;}"
+
 
 def on_enter(event, widget, widget_button):
     """
@@ -1883,22 +1912,95 @@ momentum_widget.setLayout(QVBoxLayout())
 technical_indicators_dialog.momentum_groupbox.momentum_scrollarea.setWidget(
     momentum_widget)
 technical_indicators_dialog.momentum_groupbox.momentum_scrollarea.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
+
 # add average directional index indicator to momentum indicator scrollable
 adx_widget = QWidget()
 adx_widget.setLayout(QHBoxLayout())
 adx_label = QLabel()
-adx_label.setText("Average Directional Index (ADX)")
+adx_label.setText("Average Directional Movement")
 adx_widget.layout().addWidget(adx_label)
+adx_label.setAutoFillBackground(False)
 adx_panel_combobox = QComboBox()
 adx_panel_combobox.addItems(ta_combobox_items)
 adx_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ADX", state))
+    lambda state: change_indicator_panel(
+        "talib.ADX",
+        state,
+        selected_ta[get_indicator_index("talib.ADX")][2]
+    )
+    if adx_checkbox.isChecked()
+    else None
+)
 adx_widget.layout().addWidget(adx_panel_combobox)
+adx_settings_button = QPushButton()
+adx_settings_button.setVisible(False)
+size_retain = adx_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+adx_settings_button.setSizePolicy(size_retain)
+adx_settings_button.setIcon(QIcon('icons/gear.jpg'))
+adx_widget.enterEvent = lambda event: on_enter(
+    event, adx_widget, adx_settings_button)
+adx_widget.leaveEvent = lambda event: on_exit(
+    event, adx_widget, adx_settings_button)
+def adx_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the adx indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Average Directional Movement")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ADX")][2][0] if adx_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if adx_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ADX",
+            adx_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if adx_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ADX")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            adx_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+adx_settings_button.clicked.connect(adx_button_clicked)
+adx_widget.layout().addWidget(adx_settings_button)
 adx_checkbox = QCheckBox()
 adx_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ADX", adx_panel_combobox.currentIndex(
-    ))) if adx_checkbox.isChecked() else remove_indicator("talib.ADX")
+    lambda: indicator_box_clicked(
+        adx_checkbox,
+        adx_panel_combobox.currentIndex(),
+        "talib.ADX",
+        [14],
+        selected_ta
+    )
 )
 adx_widget.layout().addWidget(adx_checkbox)
 momentum_widget.layout().addWidget(adx_widget)
@@ -1907,473 +2009,2379 @@ momentum_widget.layout().addWidget(adx_widget)
 adxr_widget = QWidget()
 adxr_widget.setLayout(QHBoxLayout())
 adxr_label = QLabel()
-adxr_label.setText("Average Directional Index Rating (ADXR)")
+adxr_label.setText("ADX Rating")
 adxr_widget.layout().addWidget(adxr_label)
+adxr_label.setAutoFillBackground(False)
 adxr_panel_combobox = QComboBox()
 adxr_panel_combobox.addItems(ta_combobox_items)
 adxr_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ADXR", state)
+    lambda state: change_indicator_panel(
+        "talib.ADXR",
+        state,
+        selected_ta[get_indicator_index("talib.ADXR")][2]
+    )
+    if adxr_checkbox.isChecked()
+    else None
 )
 adxr_widget.layout().addWidget(adxr_panel_combobox)
+adxr_settings_button = QPushButton()
+adxr_settings_button.setVisible(False)
+size_retain = adxr_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+adxr_settings_button.setSizePolicy(size_retain)
+adxr_settings_button.setIcon(QIcon('icons/gear.jpg'))
+adxr_widget.enterEvent = lambda event: on_enter(
+    event, adxr_widget, adxr_settings_button)
+adxr_widget.leaveEvent = lambda event: on_exit(
+    event, adxr_widget, adxr_settings_button)
+def adxr_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the adxr indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("ADX Rating")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ADXR")][2][0] if adxr_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if adxr_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ADXR",
+            adxr_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if adxr_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ADXR")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            adxr_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+adxr_settings_button.clicked.connect(adxr_button_clicked)
+adxr_widget.layout().addWidget(adxr_settings_button)
 adxr_checkbox = QCheckBox()
 adxr_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ADXR", adxr_panel_combobox.currentIndex(
-    ))) if adxr_checkbox.isChecked() else remove_indicator("talib.ADXR")
+    lambda: indicator_box_clicked(
+        adxr_checkbox,
+        adxr_panel_combobox.currentIndex(),
+        "talib.ADXR",
+        [14],
+        selected_ta
+    )
 )
 adxr_widget.layout().addWidget(adxr_checkbox)
 momentum_widget.layout().addWidget(adxr_widget)
+
 # add abs. price osc. to momentum indicator scrollable
 apo_widget = QWidget()
 apo_widget.setLayout(QHBoxLayout())
 apo_label = QLabel()
-apo_label.setText("Absolute Price Oscillator (APO)")
+apo_label.setText("Absolute Price Oscillator")
 apo_widget.layout().addWidget(apo_label)
+apo_label.setAutoFillBackground(False)
 apo_panel_combobox = QComboBox()
 apo_panel_combobox.addItems(ta_combobox_items)
 apo_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.APO", state))
+    lambda state: change_indicator_panel(
+        "talib.APO",
+        state,
+        selected_ta[get_indicator_index("talib.APO")][2]
+    )
+    if apo_checkbox.isChecked()
+    else None
+)
 apo_widget.layout().addWidget(apo_panel_combobox)
+apo_settings_button = QPushButton()
+apo_settings_button.setVisible(False)
+size_retain = apo_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+apo_settings_button.setSizePolicy(size_retain)
+apo_settings_button.setIcon(QIcon('icons/gear.jpg'))
+apo_widget.enterEvent = lambda event: on_enter(
+    event, apo_widget, apo_settings_button)
+apo_widget.leaveEvent = lambda event: on_exit(
+    event, apo_widget, apo_settings_button)
+def apo_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the apo indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Absolute Price Oscillator")
+    wnd.setLayout(QVBoxLayout())
+    fastma_widget = QWidget()
+    fastma_widget.setLayout(QHBoxLayout())
+    fastma_label = QLabel("Fast MA Period")
+    fastma_spinbox = QSpinBox()
+    fastma_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.APO")][2][0] if apo_checkbox.isChecked() else 12)
+    fastma_widget.layout().addWidget(fastma_label)
+    fastma_widget.layout().addWidget(fastma_spinbox)
+    wnd.layout().addWidget(fastma_widget)
+    slowma_widget = QWidget()
+    slowma_widget.setLayout(QHBoxLayout())
+    slowma_label = QLabel("Slow MA Period")
+    slowma_spinbox = QSpinBox()
+    slowma_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.APO")][2][1] if apo_checkbox.isChecked() else 26)
+    slowma_widget.layout().addWidget(slowma_label)
+    slowma_widget.layout().addWidget(slowma_spinbox)
+    wnd.layout().addWidget(slowma_widget)
+    matype_widget = QWidget()
+    matype_widget.setLayout(QHBoxLayout())
+    matype_label = QLabel("MA Type")
+    matype_spinbox = QSpinBox()
+    matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.APO")][2][2] if apo_checkbox.isChecked() else 0)
+    matype_widget.layout().addWidget(matype_label)
+    matype_widget.layout().addWidget(matype_spinbox)
+    wnd.layout().addWidget(matype_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        fastma_spinbox.setValue(12)
+        slowma_spinbox.setValue(26)
+        matype_spinbox.setValue(9)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if apo_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+            fastma_spinbox.value(),
+            slowma_spinbox.value(),
+            matype_spinbox.value()
+        ]
+        settings_tuple = (
+            "talib.APO",
+            apo_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if apo_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.APO")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            apo_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+apo_settings_button.clicked.connect(apo_button_clicked)
+apo_widget.layout().addWidget(apo_settings_button)
 apo_checkbox = QCheckBox()
 apo_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.APO", apo_panel_combobox.currentIndex(
-    ))) if apo_checkbox.isChecked() else remove_indicator("talib.APO")
+    lambda: indicator_box_clicked(
+        apo_checkbox,
+        apo_panel_combobox.currentIndex(),
+        "talib.APO",
+        [12, 26, 0],
+        selected_ta
+    )
 )
 apo_widget.layout().addWidget(apo_checkbox)
 momentum_widget.layout().addWidget(apo_widget)
+
 # add aroon indicator to momentum indicator scrollable
 aroon_widget = QWidget()
 aroon_widget.setLayout(QHBoxLayout())
 aroon_label = QLabel()
-aroon_label.setText("Aroon Indicator")
+aroon_label.setText("Aroon")
 aroon_widget.layout().addWidget(aroon_label)
+aroon_label.setAutoFillBackground(False)
 aroon_panel_combobox = QComboBox()
 aroon_panel_combobox.addItems(ta_combobox_items)
 aroon_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.AROON", state))
+    lambda state: change_indicator_panel(
+        "talib.AROON",
+        state,
+        selected_ta[get_indicator_index("talib.AROON")][2]
+    )
+    if aroon_checkbox.isChecked()
+    else None
+)
 aroon_widget.layout().addWidget(aroon_panel_combobox)
+aroon_settings_button = QPushButton()
+aroon_settings_button.setVisible(False)
+size_retain = aroon_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+aroon_settings_button.setSizePolicy(size_retain)
+aroon_settings_button.setIcon(QIcon('icons/gear.jpg'))
+aroon_widget.enterEvent = lambda event: on_enter(
+    event, aroon_widget, aroon_settings_button)
+aroon_widget.leaveEvent = lambda event: on_exit(
+    event, aroon_widget, aroon_settings_button)
+def aroon_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the aroon indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Aroon")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.AROON")][2][0] if aroon_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if aroon_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.AROON",
+            aroon_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if aroon_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.AROON")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            aroon_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+aroon_settings_button.clicked.connect(aroon_button_clicked)
+aroon_widget.layout().addWidget(aroon_settings_button)
 aroon_checkbox = QCheckBox()
 aroon_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.AROON", aroon_panel_combobox.currentIndex(
-    ))) if aroon_checkbox.isChecked() else remove_indicator("talib.AROON")
+    lambda: indicator_box_clicked(
+        aroon_checkbox,
+        aroon_panel_combobox.currentIndex(),
+        "talib.AROON",
+        [14],
+        selected_ta
+    )
 )
 aroon_widget.layout().addWidget(aroon_checkbox)
 momentum_widget.layout().addWidget(aroon_widget)
+
 # add aroon oscillator to momentum indicator scrollable
 aroonosc_widget = QWidget()
 aroonosc_widget.setLayout(QHBoxLayout())
 aroonosc_label = QLabel()
 aroonosc_label.setText("Aroon Oscillator")
 aroonosc_widget.layout().addWidget(aroonosc_label)
+aroonosc_label.setAutoFillBackground(False)
 aroonosc_panel_combobox = QComboBox()
 aroonosc_panel_combobox.addItems(ta_combobox_items)
 aroonosc_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.AROONOSC", state))
+    lambda state: change_indicator_panel(
+        "talib.AROONOSC",
+        state,
+        selected_ta[get_indicator_index("talib.AROONOSC")][2]
+    )
+    if aroonosc_checkbox.isChecked()
+    else None
+)
 aroonosc_widget.layout().addWidget(aroonosc_panel_combobox)
+aroonosc_settings_button = QPushButton()
+aroonosc_settings_button.setVisible(False)
+size_retain = aroonosc_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+aroonosc_settings_button.setSizePolicy(size_retain)
+aroonosc_settings_button.setIcon(QIcon('icons/gear.jpg'))
+aroonosc_widget.enterEvent = lambda event: on_enter(
+    event, aroonosc_widget, aroonosc_settings_button)
+aroonosc_widget.leaveEvent = lambda event: on_exit(
+    event, aroonosc_widget, aroonosc_settings_button)
+def aroonosc_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the aroonosc indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Aroon Oscillator")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.AROONOSC")][2][0] if aroonosc_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if aroonosc_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.AROONOSC",
+            aroonosc_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if aroonosc_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.AROONOSC")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            aroonosc_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+aroonosc_settings_button.clicked.connect(aroonosc_button_clicked)
+aroonosc_widget.layout().addWidget(aroonosc_settings_button)
 aroonosc_checkbox = QCheckBox()
 aroonosc_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.AROONOSC", aroonosc_panel_combobox.currentIndex(
-    ))) if aroonosc_checkbox.isChecked() else remove_indicator("talib.AROONOSC")
+    lambda: indicator_box_clicked(
+        aroonosc_checkbox,
+        aroonosc_panel_combobox.currentIndex(),
+        "talib.AROONOSC",
+        [14],
+        selected_ta
+    )
 )
 aroonosc_widget.layout().addWidget(aroonosc_checkbox)
 momentum_widget.layout().addWidget(aroonosc_widget)
+
 # add balance of power to momentum indicator scrollable
 bop_widget = QWidget()
 bop_widget.setLayout(QHBoxLayout())
 bop_label = QLabel()
-bop_label.setText("Balance of Power (BOP)")
+bop_label.setText("Balance of Power")
 bop_widget.layout().addWidget(bop_label)
+bop_label.setAutoFillBackground(False)
 bop_panel_combobox = QComboBox()
 bop_panel_combobox.addItems(ta_combobox_items)
 bop_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.BOP", state))
+    lambda state: change_indicator_panel(
+        "talib.BOP",
+        state,
+        selected_ta[get_indicator_index("talib.BOP")][2]
+    )
+    if bop_checkbox.isChecked()
+    else None
+)
 bop_widget.layout().addWidget(bop_panel_combobox)
+bop_settings_button = QPushButton()
+bop_settings_button.setVisible(False)
+size_retain = bop_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+bop_settings_button.setSizePolicy(size_retain)
+bop_settings_button.setIcon(QIcon('icons/gear.jpg'))
+bop_widget.enterEvent = lambda event: on_enter(
+    event, bop_widget, bop_settings_button)
+bop_widget.leaveEvent = lambda event: on_exit(
+    event, bop_widget, bop_settings_button)
+def bop_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the bop indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Balance of Power")
+    wnd.setLayout(QVBoxLayout())
+
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if bop_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.BOP",
+            bop_panel_combobox.currentIndex(),
+            []
+        )
+
+        if bop_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.BOP")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            bop_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+bop_settings_button.clicked.connect(bop_button_clicked)
+bop_widget.layout().addWidget(bop_settings_button)
 bop_checkbox = QCheckBox()
 bop_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.BOP", bop_panel_combobox.currentIndex(
-    ))) if bop_checkbox.isChecked() else remove_indicator("talib.BOP")
+    lambda: indicator_box_clicked(
+        bop_checkbox,
+        bop_panel_combobox.currentIndex(),
+        "talib.BOP",
+        [],
+        selected_ta
+    )
 )
 bop_widget.layout().addWidget(bop_checkbox)
 momentum_widget.layout().addWidget(bop_widget)
+
 # add commodity channel index to momentum indicator scrollable
 cci_widget = QWidget()
 cci_widget.setLayout(QHBoxLayout())
 cci_label = QLabel()
-cci_label.setText("Commodity Channel Index (CCI)")
+cci_label.setText("Commodity Channel Index")
 cci_widget.layout().addWidget(cci_label)
+cci_label.setAutoFillBackground(False)
 cci_panel_combobox = QComboBox()
 cci_panel_combobox.addItems(ta_combobox_items)
 cci_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.CCI", state))
+    lambda state: change_indicator_panel(
+        "talib.CCI",
+        state,
+        selected_ta[get_indicator_index("talib.CCI")][2]
+    )
+    if cci_checkbox.isChecked()
+    else None
+)
 cci_widget.layout().addWidget(cci_panel_combobox)
+cci_settings_button = QPushButton()
+cci_settings_button.setVisible(False)
+size_retain = cci_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+cci_settings_button.setSizePolicy(size_retain)
+cci_settings_button.setIcon(QIcon('icons/gear.jpg'))
+cci_widget.enterEvent = lambda event: on_enter(
+    event, cci_widget, cci_settings_button)
+cci_widget.leaveEvent = lambda event: on_exit(
+    event, cci_widget, cci_settings_button)
+def cci_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the cci indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Commodity Channel Index")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.CCI")][2][0] if cci_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if cci_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.CCI",
+            cci_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if cci_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.CCI")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            cci_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+cci_settings_button.clicked.connect(cci_button_clicked)
+cci_widget.layout().addWidget(cci_settings_button)
 cci_checkbox = QCheckBox()
 cci_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.CCI", cci_panel_combobox.currentIndex(
-    ))) if cci_checkbox.isChecked() else remove_indicator("talib.CCI")
+    lambda: indicator_box_clicked(
+        cci_checkbox,
+        cci_panel_combobox.currentIndex(),
+        "talib.CCI",
+        [14],
+        selected_ta
+    )
 )
 cci_widget.layout().addWidget(cci_checkbox)
 momentum_widget.layout().addWidget(cci_widget)
+
 # add chande momentum oscillator to momentum indicator scrollable
 cmo_widget = QWidget()
 cmo_widget.setLayout(QHBoxLayout())
 cmo_label = QLabel()
-cmo_label.setText("Chande Momentum Oscillator (CMO)")
+cmo_label.setText("Chande Momentum Oscillator")
 cmo_widget.layout().addWidget(cmo_label)
+cmo_label.setAutoFillBackground(False)
 cmo_panel_combobox = QComboBox()
 cmo_panel_combobox.addItems(ta_combobox_items)
 cmo_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.CMO", state))
+    lambda state: change_indicator_panel(
+        "talib.CMO",
+        state,
+        selected_ta[get_indicator_index("talib.CMO")][2]
+    )
+    if cmo_checkbox.isChecked()
+    else None
+)
 cmo_widget.layout().addWidget(cmo_panel_combobox)
+cmo_settings_button = QPushButton()
+cmo_settings_button.setVisible(False)
+size_retain = cmo_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+cmo_settings_button.setSizePolicy(size_retain)
+cmo_settings_button.setIcon(QIcon('icons/gear.jpg'))
+cmo_widget.enterEvent = lambda event: on_enter(
+    event, cmo_widget, cmo_settings_button)
+cmo_widget.leaveEvent = lambda event: on_exit(
+    event, cmo_widget, cmo_settings_button)
+def cmo_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the cmo indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Chande Momentum Oscillator")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.CMO")][2][0] if cmo_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if cmo_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.CMO",
+            cmo_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if cmo_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.CMO")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            cmo_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+cmo_settings_button.clicked.connect(cmo_button_clicked)
+cmo_widget.layout().addWidget(cmo_settings_button)
 cmo_checkbox = QCheckBox()
 cmo_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.CMO", cmo_panel_combobox.currentIndex(
-    ))) if cmo_checkbox.isChecked() else remove_indicator("talib.CMO")
+    lambda: indicator_box_clicked(
+        cmo_checkbox,
+        cmo_panel_combobox.currentIndex(),
+        "talib.CMO",
+        [14],
+        selected_ta
+    )
 )
 cmo_widget.layout().addWidget(cmo_checkbox)
 momentum_widget.layout().addWidget(cmo_widget)
+
 # add directional movement index to momentum indicator scrollable
 dx_widget = QWidget()
 dx_widget.setLayout(QHBoxLayout())
 dx_label = QLabel()
-dx_label.setText("Directional Movement Index (DX)")
+dx_label.setText("Directional Movement Index")
 dx_widget.layout().addWidget(dx_label)
+dx_label.setAutoFillBackground(False)
 dx_panel_combobox = QComboBox()
 dx_panel_combobox.addItems(ta_combobox_items)
 dx_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.DX", state))
+    lambda state: change_indicator_panel(
+        "talib.DX",
+        state,
+        selected_ta[get_indicator_index("talib.DX")][2]
+    )
+    if dx_checkbox.isChecked()
+    else None
+)
 dx_widget.layout().addWidget(dx_panel_combobox)
+dx_settings_button = QPushButton()
+dx_settings_button.setVisible(False)
+size_retain = dx_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+dx_settings_button.setSizePolicy(size_retain)
+dx_settings_button.setIcon(QIcon('icons/gear.jpg'))
+dx_widget.enterEvent = lambda event: on_enter(
+    event, dx_widget, dx_settings_button)
+dx_widget.leaveEvent = lambda event: on_exit(
+    event, dx_widget, dx_settings_button)
+def dx_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the dx indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Directional Movement Index")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.DX")][2][0] if dx_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if dx_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.DX",
+            dx_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if dx_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.DX")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            dx_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+dx_settings_button.clicked.connect(dx_button_clicked)
+dx_widget.layout().addWidget(dx_settings_button)
 dx_checkbox = QCheckBox()
 dx_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.DX", dx_panel_combobox.currentIndex(
-    ))) if dx_checkbox.isChecked() else remove_indicator("talib.DX")
+    lambda: indicator_box_clicked(
+        dx_checkbox,
+        dx_panel_combobox.currentIndex(),
+        "talib.DX",
+        [14],
+        selected_ta
+    )
 )
 dx_widget.layout().addWidget(dx_checkbox)
 momentum_widget.layout().addWidget(dx_widget)
-# add directional movement index to momentum indicator scrollable
-dx_widget = QWidget()
-dx_widget.setLayout(QHBoxLayout())
-dx_label = QLabel()
-dx_label.setText("Directional Movement Index (DX)")
-dx_widget.layout().addWidget(dx_label)
-dx_panel_combobox = QComboBox()
-dx_panel_combobox.addItems(ta_combobox_items)
-dx_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.DX", state))
-dx_widget.layout().addWidget(dx_panel_combobox)
-dx_checkbox = QCheckBox()
-dx_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.DX", dx_panel_combobox.currentIndex(
-    ))) if dx_checkbox.isChecked() else remove_indicator("talib.DX")
-)
-dx_widget.layout().addWidget(dx_checkbox)
-momentum_widget.layout().addWidget(dx_widget)
-# add moving average convergence divergence to momentum indicator scrollable
-macd_widget = QWidget()
-macd_widget.setLayout(QHBoxLayout())
-macd_label = QLabel()
-macd_label.setText("MACD")
-macd_widget.layout().addWidget(macd_label)
-macd_panel_combobox = QComboBox()
-macd_panel_combobox.addItems(ta_combobox_items)
-macd_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MACD", state))
-macd_widget.layout().addWidget(macd_panel_combobox)
-macd_checkbox = QCheckBox()
-macd_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MACD", macd_panel_combobox.currentIndex(
-    ))) if macd_checkbox.isChecked() else remove_indicator("talib.MACD")
-)
-macd_widget.layout().addWidget(macd_checkbox)
-momentum_widget.layout().addWidget(macd_widget)
+
 # add moving average convergence divergence w/controllable MA type to momentum indicator scrollable
 macdext_widget = QWidget()
 macdext_widget.setLayout(QHBoxLayout())
 macdext_label = QLabel()
-macdext_label.setText("MACDEXT")
+macdext_label.setText("MACD")
 macdext_widget.layout().addWidget(macdext_label)
+macdext_widget.setAutoFillBackground(False)
 macdext_panel_combobox = QComboBox()
 macdext_panel_combobox.addItems(ta_combobox_items)
 macdext_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MACDEXT", state))
+    lambda state: change_indicator_panel(
+        "talib.MACDEXT",
+        state,
+        selected_ta[get_indicator_index("talib.MACDEXT")][2]
+    )
+    if macdext_checkbox.isChecked()
+    else None
+)
 macdext_widget.layout().addWidget(macdext_panel_combobox)
+macdext_settings_button = QPushButton()
+macdext_settings_button.setVisible(False)
+size_retain = macdext_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+macdext_settings_button.setSizePolicy(size_retain)
+macdext_settings_button.setIcon(QIcon('icons/gear.jpg'))
+macdext_widget.enterEvent = lambda event: on_enter(
+    event, macdext_widget, macdext_settings_button)
+macdext_widget.leaveEvent = lambda event: on_exit(
+    event, macdext_widget, macdext_settings_button)
+def macdext_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the macdext indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("MACD")
+    wnd.setLayout(QVBoxLayout())
+    fastpd_widget = QWidget()
+    fastpd_widget.setLayout(QHBoxLayout())
+    fastpd_label = QLabel("Fast Period")
+    fastpd_spinbox = QSpinBox()
+    fastpd_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][0] if macdext_checkbox.isChecked() else 12)
+    fastpd_widget.layout().addWidget(fastpd_label)
+    fastpd_widget.layout().addWidget(fastpd_spinbox)
+    wnd.layout().addWidget(fastpd_widget)
+    fastpd_matype_widget = QWidget()
+    fastpd_matype_widget.setLayout(QHBoxLayout())
+    fastpd_matype_label = QLabel("Fast MA Type")
+    fastpd_matype_spinbox = QSpinBox()
+    fastpd_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][1] if macdext_checkbox.isChecked() else 0)
+    fastpd_matype_widget.layout().addWidget(fastpd_matype_label)
+    fastpd_matype_widget.layout().addWidget(fastpd_matype_spinbox)
+    wnd.layout().addWidget(fastpd_matype_widget)
+    slowpd_widget = QWidget()
+    slowpd_widget.setLayout(QHBoxLayout())
+    slowpd_label = QLabel("Slow Period")
+    slowpd_spinbox = QSpinBox()
+    slowpd_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][2] if macdext_checkbox.isChecked() else 26)
+    slowpd_widget.layout().addWidget(slowpd_label)
+    slowpd_widget.layout().addWidget(slowpd_spinbox)
+    wnd.layout().addWidget(slowpd_widget)
+    slowpd_matype_widget = QWidget()
+    slowpd_matype_widget.setLayout(QHBoxLayout())
+    slowpd_matype_label = QLabel("Slow MA Type")
+    slowpd_matype_spinbox = QSpinBox()
+    slowpd_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][3] if macdext_checkbox.isChecked() else 0)
+    slowpd_matype_widget.layout().addWidget(slowpd_matype_label)
+    slowpd_matype_widget.layout().addWidget(slowpd_matype_spinbox)
+    wnd.layout().addWidget(slowpd_matype_widget)
+    signalpd_widget = QWidget()
+    signalpd_widget.setLayout(QHBoxLayout())
+    signalpd_label = QLabel("Signal Period")
+    signalpd_spinbox = QSpinBox()
+    signalpd_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][4] if macdext_checkbox.isChecked() else 9)
+    signalpd_widget.layout().addWidget(signalpd_label)
+    signalpd_widget.layout().addWidget(signalpd_spinbox)
+    wnd.layout().addWidget(signalpd_widget)
+    signalpd_matype_widget = QWidget()
+    signalpd_matype_widget.setLayout(QHBoxLayout())
+    signalpd_matype_label = QLabel("Signal MA Type")
+    signalpd_matype_spinbox = QSpinBox()
+    signalpd_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MACDEXT")][2][5] if macdext_checkbox.isChecked() else 0)
+    signalpd_matype_widget.layout().addWidget(signalpd_matype_label)
+    signalpd_matype_widget.layout().addWidget(signalpd_matype_spinbox)
+    wnd.layout().addWidget(signalpd_matype_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        fastpd_spinbox.setValue(12)
+        fastpd_matype_spinbox.setValue(0)
+        slowpd_spinbox.setValue(26)
+        slowpd_matype_spinbox.setValue(0)
+        signalpd_spinbox.setValue(9)
+        signalpd_matype_spinbox.setValue(0)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if macdext_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+                fastpd_spinbox.value(),
+                fastpd_matype_spinbox.value(),
+                slowpd_spinbox.value(),
+                slowpd_matype_spinbox.value(),
+                signalpd_spinbox.value(),
+                signalpd_matype_spinbox.value(),
+        ]
+        settings_tuple = ("talib.MACDEXT", macdext_panel_combobox.currentIndex(), new_vals)
+
+        if macdext_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.MACDEXT")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            macdext_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+macdext_settings_button.clicked.connect(macdext_button_clicked)
+macdext_widget.layout().addWidget(macdext_settings_button)
 macdext_checkbox = QCheckBox()
 macdext_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MACDEXT", macdext_panel_combobox.currentIndex(
-    ))) if macdext_checkbox.isChecked() else remove_indicator("talib.MACDEXT")
+    lambda: indicator_box_clicked(
+        macdext_checkbox,
+        macdext_panel_combobox.currentIndex(),
+        "talib.MACDEXT",
+        [12, 0, 26, 0, 9, 0],
+        selected_ta
+    )
 )
 macdext_widget.layout().addWidget(macdext_checkbox)
 momentum_widget.layout().addWidget(macdext_widget)
+
 # add money flow index to momentum indicator scrollable
 mfi_widget = QWidget()
 mfi_widget.setLayout(QHBoxLayout())
 mfi_label = QLabel()
-mfi_label.setText("Money Flow Index (MFI)")
+mfi_label.setText("Money Flow Index")
 mfi_widget.layout().addWidget(mfi_label)
+mfi_label.setAutoFillBackground(False)
 mfi_panel_combobox = QComboBox()
 mfi_panel_combobox.addItems(ta_combobox_items)
 mfi_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MFI", state))
+    lambda state: change_indicator_panel(
+        "talib.MFI",
+        state,
+        selected_ta[get_indicator_index("talib.MFI")][2]
+    )
+    if mfi_checkbox.isChecked()
+    else None
+)
 mfi_widget.layout().addWidget(mfi_panel_combobox)
+mfi_settings_button = QPushButton()
+mfi_settings_button.setVisible(False)
+size_retain = mfi_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+mfi_settings_button.setSizePolicy(size_retain)
+mfi_settings_button.setIcon(QIcon('icons/gear.jpg'))
+mfi_widget.enterEvent = lambda event: on_enter(
+    event, mfi_widget, mfi_settings_button)
+mfi_widget.leaveEvent = lambda event: on_exit(
+    event, mfi_widget, mfi_settings_button)
+def mfi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the mfi indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Money Flow Index")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MFI")][2][0] if mfi_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if mfi_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.MFI",
+            mfi_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if mfi_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.MFI")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            mfi_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+mfi_settings_button.clicked.connect(mfi_button_clicked)
+mfi_widget.layout().addWidget(mfi_settings_button)
 mfi_checkbox = QCheckBox()
 mfi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MFI", mfi_panel_combobox.currentIndex(
-    ))) if mfi_checkbox.isChecked() else remove_indicator("talib.MFI")
+    lambda: indicator_box_clicked(
+        mfi_checkbox,
+        mfi_panel_combobox.currentIndex(),
+        "talib.MFI",
+        [14],
+        selected_ta
+    )
 )
 mfi_widget.layout().addWidget(mfi_checkbox)
 momentum_widget.layout().addWidget(mfi_widget)
-chart_dialog.addTab(chart_configs, "Chart Configurations")
-chart_dialog.addTab(technical_indicators_dialog, "Technical Indicators")
+
 # add minus directional index to momentum indicator scrollable
 minusdi_widget = QWidget()
 minusdi_widget.setLayout(QHBoxLayout())
 minusdi_label = QLabel()
-minusdi_label.setText("Minus Directional Index")
+minusdi_label.setText("Minus Directional Indicator")
 minusdi_widget.layout().addWidget(minusdi_label)
+minusdi_label.setAutoFillBackground(False)
 minusdi_panel_combobox = QComboBox()
 minusdi_panel_combobox.addItems(ta_combobox_items)
 minusdi_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MINUS_DI", state))
+    lambda state: change_indicator_panel(
+        "talib.MINUS_DI",
+        state,
+        selected_ta[get_indicator_index("talib.MINUS_DI")][2]
+    )
+    if minusdi_checkbox.isChecked()
+    else None
+)
 minusdi_widget.layout().addWidget(minusdi_panel_combobox)
+minusdi_settings_button = QPushButton()
+minusdi_settings_button.setVisible(False)
+size_retain = minusdi_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+minusdi_settings_button.setSizePolicy(size_retain)
+minusdi_settings_button.setIcon(QIcon('icons/gear.jpg'))
+minusdi_widget.enterEvent = lambda event: on_enter(
+    event, minusdi_widget, minusdi_settings_button)
+minusdi_widget.leaveEvent = lambda event: on_exit(
+    event, minusdi_widget, minusdi_settings_button)
+def minusdi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the minusdi indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Minus Directional Indicator")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MINUS_DI")][2][0] if minusdi_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if minusdi_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.MINUS_DI",
+            minusdi_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if minusdi_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.MINUS_DI")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            minusdi_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+minusdi_settings_button.clicked.connect(minusdi_button_clicked)
+minusdi_widget.layout().addWidget(minusdi_settings_button)
 minusdi_checkbox = QCheckBox()
 minusdi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MINUS_DI", minusdi_panel_combobox.currentIndex(
-    ))) if minusdi_checkbox.isChecked() else remove_indicator("talib.MINUS_DI")
+    lambda: indicator_box_clicked(
+        minusdi_checkbox,
+        minusdi_panel_combobox.currentIndex(),
+        "talib.MINUS_DI",
+        [14],
+        selected_ta
+    )
 )
 minusdi_widget.layout().addWidget(minusdi_checkbox)
 momentum_widget.layout().addWidget(minusdi_widget)
+
 # add minus directional movement to momentum indicator scrollable
 minusdm_widget = QWidget()
 minusdm_widget.setLayout(QHBoxLayout())
 minusdm_label = QLabel()
 minusdm_label.setText("Minus Directional Movement")
 minusdm_widget.layout().addWidget(minusdm_label)
+minusdm_label.setAutoFillBackground(False)
 minusdm_panel_combobox = QComboBox()
 minusdm_panel_combobox.addItems(ta_combobox_items)
 minusdm_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MINUS_DM", state))
+    lambda state: change_indicator_panel(
+        "talib.MINUS_DM",
+        state,
+        selected_ta[get_indicator_index("talib.MINUS_DM")][2]
+    )
+    if minusdm_checkbox.isChecked()
+    else None
+)
 minusdm_widget.layout().addWidget(minusdm_panel_combobox)
+minusdm_settings_button = QPushButton()
+minusdm_settings_button.setVisible(False)
+size_retain = minusdm_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+minusdm_settings_button.setSizePolicy(size_retain)
+minusdm_settings_button.setIcon(QIcon('icons/gear.jpg'))
+minusdm_widget.enterEvent = lambda event: on_enter(
+    event, minusdm_widget, minusdm_settings_button)
+minusdm_widget.leaveEvent = lambda event: on_exit(
+    event, minusdm_widget, minusdm_settings_button)
+def minusdm_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the minusdm indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Minus Directional Movement")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MINUS_DM")][2][0] if minusdm_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if minusdm_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.MINUS_DM",
+            minusdm_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if minusdm_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.MINUS_DM")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            minusdm_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+minusdm_settings_button.clicked.connect(minusdm_button_clicked)
+minusdm_widget.layout().addWidget(minusdm_settings_button)
 minusdm_checkbox = QCheckBox()
 minusdm_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MINUS_DM", minusdm_panel_combobox.currentIndex(
-    ))) if minusdm_checkbox.isChecked() else remove_indicator("talib.MINUS_DM")
+    lambda: indicator_box_clicked(
+        minusdm_checkbox,
+        minusdm_panel_combobox.currentIndex(),
+        "talib.MINUS_DM",
+        [14],
+        selected_ta
+    )
 )
 minusdm_widget.layout().addWidget(minusdm_checkbox)
 momentum_widget.layout().addWidget(minusdm_widget)
-# add momentum to momentum indicator scrollableMINUS_DM
+
+# add momentum to momentum indicator scrollable
 mom_widget = QWidget()
 mom_widget.setLayout(QHBoxLayout())
 mom_label = QLabel()
 mom_label.setText("Momentum")
 mom_widget.layout().addWidget(mom_label)
+mom_label.setAutoFillBackground(False)
 mom_panel_combobox = QComboBox()
 mom_panel_combobox.addItems(ta_combobox_items)
 mom_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.MOM", state))
+    lambda state: change_indicator_panel(
+        "talib.MOM",
+        state,
+        selected_ta[get_indicator_index("talib.MOM")][2]
+    )
+    if mom_checkbox.isChecked()
+    else None
+)
 mom_widget.layout().addWidget(mom_panel_combobox)
+mom_settings_button = QPushButton()
+mom_settings_button.setVisible(False)
+size_retain = mom_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+mom_settings_button.setSizePolicy(size_retain)
+mom_settings_button.setIcon(QIcon('icons/gear.jpg'))
+mom_widget.enterEvent = lambda event: on_enter(
+    event, mom_widget, mom_settings_button)
+mom_widget.leaveEvent = lambda event: on_exit(
+    event, mom_widget, mom_settings_button)
+def mom_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the mom indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Momentum")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.MOM")][2][0] if mom_checkbox.isChecked() else 10)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if mom_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.MOM",
+            mom_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if mom_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.MOM")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            mom_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+mom_settings_button.clicked.connect(mom_button_clicked)
+mom_widget.layout().addWidget(mom_settings_button)
 mom_checkbox = QCheckBox()
 mom_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.MOM", mom_panel_combobox.currentIndex(
-    ))) if mom_checkbox.isChecked() else remove_indicator("talib.MOM")
+    lambda: indicator_box_clicked(
+        mom_checkbox,
+        mom_panel_combobox.currentIndex(),
+        "talib.MOM",
+        [10],
+        selected_ta
+    )
 )
 mom_widget.layout().addWidget(mom_checkbox)
 momentum_widget.layout().addWidget(mom_widget)
+
 # add plus directional indicator to momentum indicator scrollable
 plusdi_widget = QWidget()
 plusdi_widget.setLayout(QHBoxLayout())
 plusdi_label = QLabel()
 plusdi_label.setText("Plus Directional Indicator")
 plusdi_widget.layout().addWidget(plusdi_label)
+plusdi_label.setAutoFillBackground(False)
 plusdi_panel_combobox = QComboBox()
 plusdi_panel_combobox.addItems(ta_combobox_items)
 plusdi_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.PLUS_DI", state))
+    lambda state: change_indicator_panel(
+        "talib.PLUS_DI",
+        state,
+        selected_ta[get_indicator_index("talib.PLUS_DI")][2]
+    )
+    if plusdi_checkbox.isChecked()
+    else None
+)
 plusdi_widget.layout().addWidget(plusdi_panel_combobox)
+plusdi_settings_button = QPushButton()
+plusdi_settings_button.setVisible(False)
+size_retain = plusdi_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+plusdi_settings_button.setSizePolicy(size_retain)
+plusdi_settings_button.setIcon(QIcon('icons/gear.jpg'))
+plusdi_widget.enterEvent = lambda event: on_enter(
+    event, plusdi_widget, plusdi_settings_button)
+plusdi_widget.leaveEvent = lambda event: on_exit(
+    event, plusdi_widget, plusdi_settings_button)
+def plusdi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the plusdi indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Plus Directional Indicator")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.PLUS_DI")][2][0] if plusdi_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if plusdi_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.PLUS_DI",
+            plusdi_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if plusdi_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.PLUS_DI")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            plusdi_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+plusdi_settings_button.clicked.connect(plusdi_button_clicked)
+plusdi_widget.layout().addWidget(plusdi_settings_button)
 plusdi_checkbox = QCheckBox()
 plusdi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.PLUS_DI", plusdi_panel_combobox.currentIndex(
-    ))) if plusdi_checkbox.isChecked() else remove_indicator("talib.PLUS_DI")
+    lambda: indicator_box_clicked(
+        plusdi_checkbox,
+        plusdi_panel_combobox.currentIndex(),
+        "talib.PLUS_DI",
+        [14],
+        selected_ta
+    )
 )
 plusdi_widget.layout().addWidget(plusdi_checkbox)
 momentum_widget.layout().addWidget(plusdi_widget)
+
 # add plus directional movement to momentum indicator scrollable
 plusdm_widget = QWidget()
 plusdm_widget.setLayout(QHBoxLayout())
 plusdm_label = QLabel()
 plusdm_label.setText("Plus Directional Movement")
 plusdm_widget.layout().addWidget(plusdm_label)
+plusdm_label.setAutoFillBackground(False)
 plusdm_panel_combobox = QComboBox()
 plusdm_panel_combobox.addItems(ta_combobox_items)
 plusdm_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.PLUS_DM", state))
+    lambda state: change_indicator_panel(
+        "talib.PLUS_DM",
+        state,
+        selected_ta[get_indicator_index("talib.PLUS_DM")][2]
+    )
+    if plusdm_checkbox.isChecked()
+    else None
+)
 plusdm_widget.layout().addWidget(plusdm_panel_combobox)
+plusdm_settings_button = QPushButton()
+plusdm_settings_button.setVisible(False)
+size_retain = plusdm_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+plusdm_settings_button.setSizePolicy(size_retain)
+plusdm_settings_button.setIcon(QIcon('icons/gear.jpg'))
+plusdm_widget.enterEvent = lambda event: on_enter(
+    event, plusdm_widget, plusdm_settings_button)
+plusdm_widget.leaveEvent = lambda event: on_exit(
+    event, plusdm_widget, plusdm_settings_button)
+def plusdm_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the plusdm indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Plus Directional Movement")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.PLUS_DM")][2][0] if plusdm_checkbox.isChecked() else 14)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if plusdm_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.PLUS_DM",
+            plusdm_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if plusdm_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.PLUS_DM")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            plusdm_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+plusdm_settings_button.clicked.connect(plusdm_button_clicked)
+plusdm_widget.layout().addWidget(plusdm_settings_button)
 plusdm_checkbox = QCheckBox()
 plusdm_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.PLUS_DM", plusdm_panel_combobox.currentIndex(
-    ))) if plusdm_checkbox.isChecked() else remove_indicator("talib.PLUS_DM")
+    lambda: indicator_box_clicked(
+        plusdm_checkbox,
+        plusdm_panel_combobox.currentIndex(),
+        "talib.PLUS_DM",
+        [14],
+        selected_ta
+    )
 )
 plusdm_widget.layout().addWidget(plusdm_checkbox)
 momentum_widget.layout().addWidget(plusdm_widget)
+
 # add percentage price oscillator to momentum indicator scrollable
 kama_widget = QWidget()
 kama_widget.setLayout(QHBoxLayout())
 kama_label = QLabel()
 kama_label.setText("KAMA Indicator")
 kama_widget.layout().addWidget(kama_label)
+kama_label.setAutoFillBackground(False)
 kama_panel_combobox = QComboBox()
 kama_panel_combobox.addItems(ta_combobox_items)
 kama_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("ta.momentum.kama", state))
+    lambda state: change_indicator_panel(
+        "ta.momentum.kama",
+        state,
+        selected_ta[get_indicator_index("ta.momentum.kama")][2]
+    )
+    if kama_checkbox.isChecked()
+    else None
+)
 kama_widget.layout().addWidget(kama_panel_combobox)
+kama_settings_button = QPushButton()
+kama_settings_button.setVisible(False)
+size_retain = kama_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+kama_settings_button.setSizePolicy(size_retain)
+kama_settings_button.setIcon(QIcon('icons/gear.jpg'))
+kama_widget.enterEvent = lambda event: on_enter(
+    event, kama_widget, kama_settings_button)
+kama_widget.leaveEvent = lambda event: on_exit(
+    event, kama_widget, kama_settings_button)
+def kama_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the kama indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("KAMA Indicator")
+    wnd.setLayout(QVBoxLayout())
+    er_widget = QWidget()
+    er_widget.setLayout(QHBoxLayout())
+    er_label = QLabel("Efficiency Ratio")
+    er_spinbox = QSpinBox()
+    er_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.kama")][2][0] if kama_checkbox.isChecked() else 10)
+    er_widget.layout().addWidget(er_label)
+    er_widget.layout().addWidget(er_spinbox)
+    wnd.layout().addWidget(er_widget)
+    fastma_widget = QWidget()
+    fastma_widget.setLayout(QHBoxLayout())
+    fastma_label = QLabel("Fast EMA Period")
+    fastma_spinbox = QSpinBox()
+    fastma_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.kama")][2][1] if kama_checkbox.isChecked() else 2)
+    fastma_widget.layout().addWidget(fastma_label)
+    fastma_widget.layout().addWidget(fastma_spinbox)
+    wnd.layout().addWidget(fastma_widget)
+    slowma_widget = QWidget()
+    slowma_widget.setLayout(QHBoxLayout())
+    slowma_label = QLabel("Slow EMA Period")
+    slowma_spinbox = QSpinBox()
+    slowma_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.kama")][2][2] if kama_checkbox.isChecked() else 30)
+    slowma_widget.layout().addWidget(slowma_label)
+    slowma_widget.layout().addWidget(slowma_spinbox)
+    wnd.layout().addWidget(slowma_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        er_spinbox.setValue(12)
+        fastma_spinbox.setValue(26)
+        slowma_spinbox.setValue(9)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if kama_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+            er_spinbox.value(),
+            fastma_spinbox.value(),
+            slowma_spinbox.value()
+        ]
+        settings_tuple = (
+            "ta.momentum.kama",
+            kama_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if kama_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.momentum.kama")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            kama_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+kama_settings_button.clicked.connect(kama_button_clicked)
+kama_widget.layout().addWidget(kama_settings_button)
 kama_checkbox = QCheckBox()
 kama_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.momentum.kama", kama_panel_combobox.currentIndex(
-    ))) if kama_checkbox.isChecked() else remove_indicator("ta.momentum.kama")
+    lambda: indicator_box_clicked(
+        kama_checkbox,
+        kama_panel_combobox.currentIndex(),
+        "ta.momentum.kama",
+        [10, 2, 30],
+        selected_ta
+    )
 )
 kama_widget.layout().addWidget(kama_checkbox)
 momentum_widget.layout().addWidget(kama_widget)
+
 # add percentage volume oscillator to momentum indicator scrollable
 pvo_widget = QWidget()
 pvo_widget.setLayout(QHBoxLayout())
 pvo_label = QLabel()
 pvo_label.setText("Percentage Volume Oscillator")
 pvo_widget.layout().addWidget(pvo_label)
+pvo_label.setAutoFillBackground(False)
 pvo_panel_combobox = QComboBox()
 pvo_panel_combobox.addItems(ta_combobox_items)
 pvo_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("ta.momentum.pvo", state))
+    lambda state: change_indicator_panel(
+        "ta.momentum.pvo",
+        state,
+        selected_ta[get_indicator_index("ta.momentum.pvo")][2]
+    )
+    if pvo_checkbox.isChecked()
+    else None
+)
 pvo_widget.layout().addWidget(pvo_panel_combobox)
+pvo_settings_button = QPushButton()
+pvo_settings_button.setVisible(False)
+size_retain = pvo_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+pvo_settings_button.setSizePolicy(size_retain)
+pvo_settings_button.setIcon(QIcon('icons/gear.jpg'))
+pvo_widget.enterEvent = lambda event: on_enter(
+    event, pvo_widget, pvo_settings_button)
+pvo_widget.leaveEvent = lambda event: on_exit(
+    event, pvo_widget, pvo_settings_button)
+def pvo_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the pvo indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Percentage Volume Oscillator")
+    wnd.setLayout(QVBoxLayout())
+    slowma_widget = QWidget()
+    slowma_widget.setLayout(QHBoxLayout())
+    slowma_label = QLabel("Slow MA Period")
+    slowma_spinbox = QSpinBox()
+    slowma_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.pvo")][2][0] if pvo_checkbox.isChecked() else 12)
+    slowma_widget.layout().addWidget(slowma_label)
+    slowma_widget.layout().addWidget(slowma_spinbox)
+    wnd.layout().addWidget(slowma_widget)
+    fastma_widget = QWidget()
+    fastma_widget.setLayout(QHBoxLayout())
+    fastma_label = QLabel("Fast MA Period")
+    fastma_spinbox = QSpinBox()
+    fastma_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.pvo")][2][1] if pvo_checkbox.isChecked() else 26)
+    fastma_widget.layout().addWidget(fastma_label)
+    fastma_widget.layout().addWidget(fastma_spinbox)
+    wnd.layout().addWidget(fastma_widget)
+    signal_widget = QWidget()
+    signal_widget.setLayout(QHBoxLayout())
+    signal_label = QLabel("Signal Period")
+    signal_spinbox = QSpinBox()
+    signal_spinbox.setValue(selected_ta[get_indicator_index(
+        "ta.momentum.pvo")][2][2] if pvo_checkbox.isChecked() else 9)
+    signal_widget.layout().addWidget(signal_label)
+    signal_widget.layout().addWidget(signal_spinbox)
+    wnd.layout().addWidget(signal_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        slowma_spinbox.setValue(12)
+        fastma_spinbox.setValue(26)
+        signal_spinbox.setValue(9)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if pvo_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+            slowma_spinbox.value(),
+            fastma_spinbox.value(),
+            signal_spinbox.value()
+        ]
+        settings_tuple = (
+            "ta.momentum.pvo",
+            pvo_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if pvo_checkbox.isChecked():
+            selected_ta[get_indicator_index("ta.momentum.pvo")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            pvo_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+pvo_settings_button.clicked.connect(pvo_button_clicked)
+pvo_widget.layout().addWidget(pvo_settings_button)
 pvo_checkbox = QCheckBox()
 pvo_checkbox.clicked.connect(
-    lambda: selected_ta.append(("ta.momentum.pvo", pvo_panel_combobox.currentIndex(
-    ))) if pvo_checkbox.isChecked() else remove_indicator("ta.momentum.pvo")
+    lambda: indicator_box_clicked(
+        pvo_checkbox,
+        pvo_panel_combobox.currentIndex(),
+        "ta.momentum.pvo",
+        [12, 26, 9],
+        selected_ta
+    )
 )
 pvo_widget.layout().addWidget(pvo_checkbox)
 momentum_widget.layout().addWidget(pvo_widget)
+
 # add rate of change indicator to momentum indicator scrollable
 roc_widget = QWidget()
 roc_widget.setLayout(QHBoxLayout())
 roc_label = QLabel()
 roc_label.setText("Rate of Change")
 roc_widget.layout().addWidget(roc_label)
+roc_label.setAutoFillBackground(False)
 roc_panel_combobox = QComboBox()
 roc_panel_combobox.addItems(ta_combobox_items)
 roc_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ROC", state))
+    lambda state: change_indicator_panel(
+        "talib.ROC",
+        state,
+        selected_ta[get_indicator_index("talib.ROC")][2]
+    )
+    if roc_checkbox.isChecked()
+    else None
+)
 roc_widget.layout().addWidget(roc_panel_combobox)
+roc_settings_button = QPushButton()
+roc_settings_button.setVisible(False)
+size_retain = roc_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+roc_settings_button.setSizePolicy(size_retain)
+roc_settings_button.setIcon(QIcon('icons/gear.jpg'))
+roc_widget.enterEvent = lambda event: on_enter(
+    event, roc_widget, roc_settings_button)
+roc_widget.leaveEvent = lambda event: on_exit(
+    event, roc_widget, roc_settings_button)
+def roc_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the roc indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Rate of Change")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ROC")][2][0] if roc_checkbox.isChecked() else 10)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if roc_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ROC",
+            roc_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if roc_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ROC")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            roc_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+roc_settings_button.clicked.connect(roc_button_clicked)
+roc_widget.layout().addWidget(roc_settings_button)
 roc_checkbox = QCheckBox()
 roc_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ROC", roc_panel_combobox.currentIndex(
-    ))) if roc_checkbox.isChecked() else remove_indicator("talib.ROC")
+    lambda: indicator_box_clicked(
+        roc_checkbox,
+        roc_panel_combobox.currentIndex(),
+        "talib.ROC",
+        [10],
+        selected_ta
+    )
 )
 roc_widget.layout().addWidget(roc_checkbox)
 momentum_widget.layout().addWidget(roc_widget)
+
 # add ROC percentage to momentum indicator scrollable
 rocp_widget = QWidget()
 rocp_widget.setLayout(QHBoxLayout())
 rocp_label = QLabel()
-rocp_label.setText("Rate of Change (%)")
+rocp_label.setText("ROC Percentage")
 rocp_widget.layout().addWidget(rocp_label)
+rocp_label.setAutoFillBackground(False)
 rocp_panel_combobox = QComboBox()
 rocp_panel_combobox.addItems(ta_combobox_items)
 rocp_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ROCP", state))
+    lambda state: change_indicator_panel(
+        "talib.ROCP",
+        state,
+        selected_ta[get_indicator_index("talib.ROCP")][2]
+    )
+    if rocp_checkbox.isChecked()
+    else None
+)
 rocp_widget.layout().addWidget(rocp_panel_combobox)
+rocp_settings_button = QPushButton()
+rocp_settings_button.setVisible(False)
+size_retain = rocp_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+rocp_settings_button.setSizePolicy(size_retain)
+rocp_settings_button.setIcon(QIcon('icons/gear.jpg'))
+rocp_widget.enterEvent = lambda event: on_enter(
+    event, rocp_widget, rocp_settings_button)
+rocp_widget.leaveEvent = lambda event: on_exit(
+    event, rocp_widget, rocp_settings_button)
+def rocp_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the rocp indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("ROC Percentage")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ROCP")][2][0] if rocp_checkbox.isChecked() else 10)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if rocp_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ROCP",
+            rocp_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if rocp_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ROCP")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            rocp_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+rocp_settings_button.clicked.connect(rocp_button_clicked)
+rocp_widget.layout().addWidget(rocp_settings_button)
 rocp_checkbox = QCheckBox()
 rocp_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ROCP", rocp_panel_combobox.currentIndex(
-    ))) if rocp_checkbox.isChecked() else remove_indicator("talib.ROCP")
+    lambda: indicator_box_clicked(
+        rocp_checkbox,
+        rocp_panel_combobox.currentIndex(),
+        "talib.ROCP",
+        [10],
+        selected_ta
+    )
 )
 rocp_widget.layout().addWidget(rocp_checkbox)
 momentum_widget.layout().addWidget(rocp_widget)
+
 # add rate of change ratio to momentum indicator scrollable
 rocr_widget = QWidget()
 rocr_widget.setLayout(QHBoxLayout())
 rocr_label = QLabel()
-rocr_label.setText("Rate of Change Ratio")
+rocr_label.setText("ROCR Ratio")
 rocr_widget.layout().addWidget(rocr_label)
+rocr_label.setAutoFillBackground(False)
 rocr_panel_combobox = QComboBox()
 rocr_panel_combobox.addItems(ta_combobox_items)
 rocr_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ROCR", state))
+    lambda state: change_indicator_panel(
+        "talib.ROCR",
+        state,
+        selected_ta[get_indicator_index("talib.ROCR")][2]
+    )
+    if rocr_checkbox.isChecked()
+    else None
+)
 rocr_widget.layout().addWidget(rocr_panel_combobox)
+rocr_settings_button = QPushButton()
+rocr_settings_button.setVisible(False)
+size_retain = rocr_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+rocr_settings_button.setSizePolicy(size_retain)
+rocr_settings_button.setIcon(QIcon('icons/gear.jpg'))
+rocr_widget.enterEvent = lambda event: on_enter(
+    event, rocr_widget, rocr_settings_button)
+rocr_widget.leaveEvent = lambda event: on_exit(
+    event, rocr_widget, rocr_settings_button)
+def rocr_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the rocr indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("ROCR Ratio")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ROCR")][2][0] if rocr_checkbox.isChecked() else 10)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if rocr_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ROCR",
+            rocr_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if rocr_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ROCR")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            rocr_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+rocr_settings_button.clicked.connect(rocr_button_clicked)
+rocr_widget.layout().addWidget(rocr_settings_button)
 rocr_checkbox = QCheckBox()
 rocr_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ROCR", rocr_panel_combobox.currentIndex(
-    ))) if rocr_checkbox.isChecked() else remove_indicator("talib.ROCR")
+    lambda: indicator_box_clicked(
+        rocr_checkbox,
+        rocr_panel_combobox.currentIndex(),
+        "talib.ROCR",
+        [10],
+        selected_ta
+    )
 )
 rocr_widget.layout().addWidget(rocr_checkbox)
 momentum_widget.layout().addWidget(rocr_widget)
+
 # add 100-scale ROCR to momentum indicator scrollable
 rocr100_widget = QWidget()
 rocr100_widget.setLayout(QHBoxLayout())
 rocr100_label = QLabel()
 rocr100_label.setText("ROCR Indexed to 100")
 rocr100_widget.layout().addWidget(rocr100_label)
+rocr100_label.setAutoFillBackground(False)
 rocr100_panel_combobox = QComboBox()
 rocr100_panel_combobox.addItems(ta_combobox_items)
 rocr100_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.ROCR100", state))
+    lambda state: change_indicator_panel(
+        "talib.ROCR100",
+        state,
+        selected_ta[get_indicator_index("talib.ROCR100")][2]
+    )
+    if rocr100_checkbox.isChecked()
+    else None
+)
 rocr100_widget.layout().addWidget(rocr100_panel_combobox)
+rocr100_settings_button = QPushButton()
+rocr100_settings_button.setVisible(False)
+size_retain = rocr100_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+rocr100_settings_button.setSizePolicy(size_retain)
+rocr100_settings_button.setIcon(QIcon('icons/gear.jpg'))
+rocr100_widget.enterEvent = lambda event: on_enter(
+    event, rocr100_widget, rocr100_settings_button)
+rocr100_widget.leaveEvent = lambda event: on_exit(
+    event, rocr100_widget, rocr100_settings_button)
+def rocr100_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the rocr100 indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("ROCR Indexed to 100")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.ROCR100")][2][0] if rocr100_checkbox.isChecked() else 10)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(10))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if rocr100_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.ROCR100",
+            rocr100_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if rocr100_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.ROCR100")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            rocr100_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+rocr100_settings_button.clicked.connect(rocr100_button_clicked)
+rocr100_widget.layout().addWidget(rocr100_settings_button)
 rocr100_checkbox = QCheckBox()
 rocr100_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.ROCR100", rocr100_panel_combobox.currentIndex(
-    ))) if rocr100_checkbox.isChecked() else remove_indicator("talib.ROCR100")
+    lambda: indicator_box_clicked(
+        rocr100_checkbox,
+        rocr100_panel_combobox.currentIndex(),
+        "talib.ROCR100",
+        [10],
+        selected_ta
+    )
 )
 rocr100_widget.layout().addWidget(rocr100_checkbox)
 momentum_widget.layout().addWidget(rocr100_widget)
+
 # add relative strength index to momentum indicator scrollable
 rsi_widget = QWidget()
 rsi_widget.setLayout(QHBoxLayout())
 rsi_label = QLabel()
 rsi_label.setText("Relative Strength Index")
 rsi_widget.layout().addWidget(rsi_label)
+rsi_label.setAutoFillBackground(False)
 rsi_panel_combobox = QComboBox()
 rsi_panel_combobox.addItems(ta_combobox_items)
 rsi_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.RSI", state))
+    lambda state: change_indicator_panel(
+        "talib.RSI",
+        state,
+        selected_ta[get_indicator_index("talib.RSI")][2]
+    )
+    if rsi_checkbox.isChecked()
+    else None
+)
 rsi_widget.layout().addWidget(rsi_panel_combobox)
+rsi_settings_button = QPushButton()
+rsi_settings_button.setVisible(False)
+size_retain = rsi_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+rsi_settings_button.setSizePolicy(size_retain)
+rsi_settings_button.setIcon(QIcon('icons/gear.jpg'))
+rsi_widget.enterEvent = lambda event: on_enter(
+    event, rsi_widget, rsi_settings_button)
+rsi_widget.leaveEvent = lambda event: on_exit(
+    event, rsi_widget, rsi_settings_button)
+def rsi_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the rsi indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Relative Strength Index")
+    wnd.setLayout(QVBoxLayout())
+    period_widget = QWidget()
+    period_widget.setLayout(QHBoxLayout())
+    period_label = QLabel("Period")
+    period_spinbox = QSpinBox()
+    period_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.RSI")][2][0] if rsi_checkbox.isChecked() else 20)
+    period_widget.layout().addWidget(period_label)
+    period_widget.layout().addWidget(period_spinbox)
+    wnd.layout().addWidget(period_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    defaults_button.clicked.connect(lambda: period_spinbox.setValue(20))
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if rsi_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        settings_tuple = (
+            "talib.RSI",
+            rsi_panel_combobox.currentIndex(),
+            [period_spinbox.value()]
+        )
+
+        if rsi_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.RSI")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            rsi_checkbox.setChecked(True)
+
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+rsi_settings_button.clicked.connect(rsi_button_clicked)
+rsi_widget.layout().addWidget(rsi_settings_button)
 rsi_checkbox = QCheckBox()
 rsi_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.RSI", rsi_panel_combobox.currentIndex(
-    ))) if rsi_checkbox.isChecked() else remove_indicator("talib.RSI")
+    lambda: indicator_box_clicked(
+        rsi_checkbox,
+        rsi_panel_combobox.currentIndex(),
+        "talib.RSI",
+        [20],
+        selected_ta
+    )
 )
 rsi_widget.layout().addWidget(rsi_checkbox)
 momentum_widget.layout().addWidget(rsi_widget)
+
 # add slow stochastic indicator to momentum indicator scrollable
 slowstoch_widget = QWidget()
 slowstoch_widget.setLayout(QHBoxLayout())
 slowstoch_label = QLabel()
 slowstoch_label.setText("Slow Stochastic")
 slowstoch_widget.layout().addWidget(slowstoch_label)
+slowstoch_label.setAutoFillBackground(False)
 slowstoch_panel_combobox = QComboBox()
 slowstoch_panel_combobox.addItems(ta_combobox_items)
 slowstoch_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.STOCH", state))
+    lambda state: change_indicator_panel(
+        "talib.STOCH",
+        state,
+        selected_ta[get_indicator_index("talib.STOCH")][2]
+    )
+    if slowstoch_checkbox.isChecked()
+    else None
+)
 slowstoch_widget.layout().addWidget(slowstoch_panel_combobox)
+slowstoch_settings_button = QPushButton()
+slowstoch_settings_button.setVisible(False)
+size_retain = slowstoch_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+slowstoch_settings_button.setSizePolicy(size_retain)
+slowstoch_settings_button.setIcon(QIcon('icons/gear.jpg'))
+slowstoch_widget.enterEvent = lambda event: on_enter(
+    event, slowstoch_widget, slowstoch_settings_button)
+slowstoch_widget.leaveEvent = lambda event: on_exit(
+    event, slowstoch_widget, slowstoch_settings_button)
+def slowstoch_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the slowstoch indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Parabolic SAR")
+    wnd.setLayout(QVBoxLayout())
+    fastk_widget = QWidget()
+    fastk_widget.setLayout(QHBoxLayout())
+    fastk_label = QLabel("Fast %k Period")
+    fastk_spinbox = QSpinBox()
+    fastk_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCH")][2][0] if slowstoch_checkbox.isChecked() else 5)
+    fastk_widget.layout().addWidget(fastk_label)
+    fastk_widget.layout().addWidget(fastk_spinbox)
+    wnd.layout().addWidget(fastk_widget)
+    slowk_widget = QWidget()
+    slowk_widget.setLayout(QHBoxLayout())
+    slowk_label = QLabel("Slow %k Period")
+    slowk_spinbox = QSpinBox()
+    slowk_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCH")][2][1] if slowstoch_checkbox.isChecked() else 3)
+    slowk_widget.layout().addWidget(slowk_label)
+    slowk_widget.layout().addWidget(slowk_spinbox)
+    wnd.layout().addWidget(slowk_widget)
+    slowk_matype_widget = QWidget()
+    slowk_matype_widget.setLayout(QHBoxLayout())
+    slowk_matype_label = QLabel("Slow %k MA Type")
+    slowk_matype_spinbox = QSpinBox()
+    slowk_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCH")][2][2] if slowstoch_checkbox.isChecked() else 0)
+    slowk_matype_widget.layout().addWidget(slowk_matype_label)
+    slowk_matype_widget.layout().addWidget(slowk_matype_spinbox)
+    wnd.layout().addWidget(slowk_matype_widget)
+    slowd_widget = QWidget()
+    slowd_widget.setLayout(QHBoxLayout())
+    slowd_label = QLabel("Slow %d Period")
+    slowd_spinbox = QSpinBox()
+    slowd_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCH")][2][3] if slowstoch_checkbox.isChecked() else 3)
+    slowd_widget.layout().addWidget(slowd_label)
+    slowd_widget.layout().addWidget(slowd_spinbox)
+    wnd.layout().addWidget(slowd_widget)
+    slowd_matype_widget = QWidget()
+    slowd_matype_widget.setLayout(QHBoxLayout())
+    slowd_matype_label = QLabel("Slow %d MA Type")
+    slowd_matype_spinbox = QSpinBox()
+    slowd_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCH")][2][4] if slowstoch_checkbox.isChecked() else 0)
+    slowd_matype_widget.layout().addWidget(slowd_matype_label)
+    slowd_matype_widget.layout().addWidget(slowd_matype_spinbox)
+    wnd.layout().addWidget(slowd_matype_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        fastk_spinbox.setValue(5)
+        slowk_spinbox.setValue(3)
+        slowk_matype_spinbox.setValue(0)
+        slowd_spinbox.setValue(3)
+        slowd_matype_spinbox.setValue(0)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if slowstoch_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+            fastk_spinbox.value(),
+            slowk_spinbox.value(),
+            slowk_matype_spinbox.value(),
+            slowd_spinbox.value(),
+            slowd_matype_spinbox.value()
+        ]
+        settings_tuple = (
+            "talib.STOCH",
+            slowstoch_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if slowstoch_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.STOCH")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            slowstoch_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+slowstoch_settings_button.clicked.connect(slowstoch_button_clicked)
+slowstoch_widget.layout().addWidget(slowstoch_settings_button)
 slowstoch_checkbox = QCheckBox()
 slowstoch_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.STOCH", slowstoch_panel_combobox.currentIndex(
-    ))) if slowstoch_checkbox.isChecked() else remove_indicator("talib.STOCH")
+    lambda: indicator_box_clicked(
+        slowstoch_checkbox,
+        slowstoch_panel_combobox.currentIndex(),
+        "talib.STOCH",
+        [5, 3, 0, 3, 0],
+        selected_ta
+    )
 )
 slowstoch_widget.layout().addWidget(slowstoch_checkbox)
 momentum_widget.layout().addWidget(slowstoch_widget)
+
 # add fast stochastic to momentum indicator scrollable
 faststoch_widget = QWidget()
 faststoch_widget.setLayout(QHBoxLayout())
 faststoch_label = QLabel()
 faststoch_label.setText("Fast Stochastic")
 faststoch_widget.layout().addWidget(faststoch_label)
+faststoch_label.setAutoFillBackground(False)
 faststoch_panel_combobox = QComboBox()
 faststoch_panel_combobox.addItems(ta_combobox_items)
 faststoch_panel_combobox.currentTextChanged.connect(
-    lambda state: change_indicator_panel("talib.STOCHF", state))
+    lambda state: change_indicator_panel(
+        "talib.STOCHF",
+        state,
+        selected_ta[get_indicator_index("talib.STOCHF")][2]
+    )
+    if faststoch_checkbox.isChecked()
+    else None
+)
 faststoch_widget.layout().addWidget(faststoch_panel_combobox)
+faststoch_settings_button = QPushButton()
+faststoch_settings_button.setVisible(False)
+size_retain = faststoch_settings_button.sizePolicy()
+size_retain.setRetainSizeWhenHidden(True)
+faststoch_settings_button.setSizePolicy(size_retain)
+faststoch_settings_button.setIcon(QIcon('icons/gear.jpg'))
+faststoch_widget.enterEvent = lambda event: on_enter(
+    event, faststoch_widget, faststoch_settings_button)
+faststoch_widget.leaveEvent = lambda event: on_exit(
+    event, faststoch_widget, faststoch_settings_button)
+def faststoch_button_clicked():
+    """
+    Displays a separate window with adjustable settings for the faststoch indicator
+    """
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Fast Stochastic")
+    wnd.setLayout(QVBoxLayout())
+    fastk_widget = QWidget()
+    fastk_widget.setLayout(QHBoxLayout())
+    fastk_label = QLabel("Fast %k Period")
+    fastk_spinbox = QSpinBox()
+    fastk_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCHF")][2][0] if faststoch_checkbox.isChecked() else 5)
+    fastk_widget.layout().addWidget(fastk_label)
+    fastk_widget.layout().addWidget(fastk_spinbox)
+    wnd.layout().addWidget(fastk_widget)
+    fastd_widget = QWidget()
+    fastd_widget.setLayout(QHBoxLayout())
+    fastd_label = QLabel("Fast %d Period")
+    fastd_spinbox = QSpinBox()
+    fastd_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCHF")][2][1] if faststoch_checkbox.isChecked() else 3)
+    fastd_widget.layout().addWidget(fastd_label)
+    fastd_widget.layout().addWidget(fastd_spinbox)
+    wnd.layout().addWidget(fastd_widget)
+    fastd_matype_widget = QWidget()
+    fastd_matype_widget.setLayout(QHBoxLayout())
+    fastd_matype_label = QLabel("Fast %d MA Type")
+    fastd_matype_spinbox = QSpinBox()
+    fastd_matype_spinbox.setValue(selected_ta[get_indicator_index(
+        "talib.STOCHF")][2][2] if faststoch_checkbox.isChecked() else 0)
+    fastd_matype_widget.layout().addWidget(fastd_matype_label)
+    fastd_matype_widget.layout().addWidget(fastd_matype_spinbox)
+    wnd.layout().addWidget(fastd_matype_widget)
+    defaults_button = QPushButton("Reset to Defaults")
+    defaults_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def restore_defaults():
+        fastk_spinbox.setValue(5)
+        fastd_spinbox.setValue(3)
+        fastd_matype_spinbox.setValue(0)
+    defaults_button.clicked.connect(restore_defaults)
+    cancel_button = QPushButton("Cancel")
+    cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    cancel_button.clicked.connect(lambda: wnd.done(0))
+    ok_button = QPushButton(
+        "Save" if faststoch_checkbox.isChecked() else "Save and Add")
+    ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
+    def ok_button_clicked():
+        new_vals = [
+            fastk_spinbox.value(),
+            fastd_spinbox.value(),
+            fastd_matype_spinbox.value()
+        ]
+        settings_tuple = (
+            "talib.STOCHF",
+            faststoch_panel_combobox.currentIndex(),
+            new_vals
+        )
+        if faststoch_checkbox.isChecked():
+            selected_ta[get_indicator_index("talib.STOCHF")] = settings_tuple
+        else:
+            selected_ta.append(settings_tuple)
+            faststoch_checkbox.setChecked(True)
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    buttons_widget = QWidget()
+    buttons_widget.setLayout(QHBoxLayout())
+    buttons_widget.layout().addWidget(defaults_button)
+    buttons_widget.layout().addWidget(cancel_button)
+    buttons_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(buttons_widget)
+    wnd.exec_()
+faststoch_settings_button.clicked.connect(faststoch_button_clicked)
+faststoch_widget.layout().addWidget(faststoch_settings_button)
 faststoch_checkbox = QCheckBox()
 faststoch_checkbox.clicked.connect(
-    lambda: selected_ta.append(("talib.STOCHF", faststoch_panel_combobox.currentIndex(
-    ))) if faststoch_checkbox.isChecked() else remove_indicator("talib.STOCHF")
+    lambda: indicator_box_clicked(
+        faststoch_checkbox,
+        faststoch_panel_combobox.currentIndex(),
+        "talib.STOCHF",
+        [5, 3, 0],
+        selected_ta
+    )
 )
 faststoch_widget.layout().addWidget(faststoch_checkbox)
 momentum_widget.layout().addWidget(faststoch_widget)
+
 # add stochastic RSI to momentum indicator scrollable
 stochrsi_widget = QWidget()
 stochrsi_widget.setLayout(QHBoxLayout())
@@ -2408,7 +4416,7 @@ def stochrsi_button_clicked():
     Displays a separate window with adjustable settings for the stochrsi indicator
     """
     wnd = QDialog(widget)
-    wnd.setWindowTitle("Parabolic SAR")
+    wnd.setWindowTitle("Stochastic RSI")
     wnd.setLayout(QVBoxLayout())
     fastk_widget = QWidget()
     fastk_widget.setLayout(QHBoxLayout())
@@ -2626,7 +4634,7 @@ def ultosc_button_clicked():
     Displays a separate window with adjustable settings for the ultosc indicator
     """
     wnd = QDialog(widget)
-    wnd.setWindowTitle("Parabolic SAR")
+    wnd.setWindowTitle("Ultimate Oscillator")
     wnd.setLayout(QVBoxLayout())
     fast_widget = QWidget()
     fast_widget.setLayout(QHBoxLayout())
@@ -2811,7 +4819,7 @@ trend_widget.setLayout(QVBoxLayout())
 technical_indicators_dialog.trend_groupbox.trend_scrollarea.setWidget(
     trend_widget)
 technical_indicators_dialog.trend_groupbox.trend_scrollarea.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 
 # add dpo to trend indicator scrollable
 dpo_widget = QWidget()
@@ -2847,7 +4855,7 @@ def dpo_button_clicked():
     Displays a separate window with adjustable settings for the dpo indicator
     """
     wnd = QDialog(widget)
-    wnd.setWindowTitle("Trix Indicator")
+    wnd.setWindowTitle("Detrended Price Oscillator")
     wnd.setLayout(QVBoxLayout())
     period_widget = QWidget()
     period_widget.setLayout(QHBoxLayout())
@@ -3117,7 +5125,7 @@ def ichimoku_button_clicked():
     Displays a separate window with adjustable settings for the ichimoku indicator
     """
     wnd = QDialog(widget)
-    wnd.setWindowTitle("Schaff Indicator")
+    wnd.setWindowTitle("Ichimoku Indicator")
     wnd.setLayout(QVBoxLayout())
     low_period_widget = QWidget()
     low_period_widget.setLayout(QHBoxLayout())
@@ -3773,14 +5781,18 @@ ma_widget.resize(280, 1500)
 ma_widget.setLayout(QVBoxLayout())
 technical_indicators_dialog.ma_groupbox.ma_scrollarea.setWidget(ma_widget)
 technical_indicators_dialog.ma_groupbox.ma_scrollarea.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 chart_dialog.addTab(chart_configs, "Chart Configurations")
 chart_dialog.addTab(technical_indicators_dialog, "Technical Indicators")
+
+
 ################
 # trade dialog #
 ################
 trade_dialog = QDialog()
 trade_dialog.setStyleSheet('background-color: deepskyblue;')
+
+
 #####################
 # stock info dialog #
 #####################
@@ -3831,7 +5843,7 @@ stockinfo_dialog_main.asset_info_groupbox.content_container.setWidget(
 stockinfo_dialog_main.asset_info_groupbox.content_container.setGeometry(
     5, 15, 305, 520)
 stockinfo_dialog_main.asset_info_groupbox.content_container.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 
 stockinfo_dialog_main.about_groupbox = QGroupBox(stockinfo_dialog_main)
 stockinfo_dialog_main.about_groupbox.setStyleSheet(
@@ -3850,7 +5862,7 @@ stockinfo_dialog_main.about_groupbox.content_container.setWidget(
 stockinfo_dialog_main.about_groupbox.content_container.setGeometry(
     5, 15, 530, 520)
 stockinfo_dialog_main.about_groupbox.content_container.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 
 stockinfo_dialog_main.news_groupbox = QGroupBox(stockinfo_dialog_main)
 stockinfo_dialog_main.news_groupbox.setStyleSheet(
@@ -3899,7 +5911,7 @@ prediction_chart_widget.setLayout(QVBoxLayout())
 stockinfo_dialog_forecasts.chart_groupbox.content_container.setWidget(
     prediction_chart_widget)
 stockinfo_dialog_forecasts.chart_groupbox.content_container.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 stockinfo_dialog_forecasts.chart_groupbox.content_container.setGeometry(
     5, 15, 1290, 650)
 ptchart = QChart()
@@ -4001,7 +6013,7 @@ financials_chart_widget.setLayout(QVBoxLayout())
 stockinfo_dialog_financials.content_container.setWidget(
     financials_chart_widget)
 stockinfo_dialog_financials.content_container.setVerticalScrollBarPolicy(
-    Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    SCROLLBAR_ALWAYSON)
 stockinfo_dialog_financials.content_container.setGeometry(5, 15, 1290, 650)
 financials_chart = QChart()
 financials_chart.setTitle("Financial Statements")

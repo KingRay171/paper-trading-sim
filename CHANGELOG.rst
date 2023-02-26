@@ -1,6 +1,12 @@
 Changelog
 =========
 
+0.12.4
+------
+- all technical indicators shown on the TA tab in the chart dialog are now fully customizable
+- optimized performance icon updating and rendering
+- misc. code cleanups and quality improvements
+
 0.12.3
 ------
 - fixed bug that caused crypto wallet NAV to not update

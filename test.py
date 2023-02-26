@@ -15,19 +15,14 @@ import pandas as pd
 import yahooquery as yq
 import time
 from yahooquery import Ticker
+from yahooquery import screener
 import dis
 
-def append_list(ls):
-        ls.append(2)
-
 t1 = time.perf_counter()
-ls = [0, 2, 5]
-append_list(ls)
-print(ls)
 print(yq.Ticker('BTC-USD').history('1wk').iloc[-2][5])
 print(stock_info.get_day_gainers())
 t2 = time.perf_counter()
-
+print(screener.Screener().get_screeners('day_losers'))
 t3 = time.perf_counter()
 
 print(f"yfinance: {t2 - t1}")

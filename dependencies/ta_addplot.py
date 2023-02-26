@@ -4,10 +4,9 @@ from ta import momentum, trend
 
 import pandas as pd
 import mplfinance as mpf
-import math
 
-def adx_addplot(data, ax=None, panel=None,  timeperiod=14):
-    adx = talib.ADX(data['High'], data['Low'], data['Close'], timeperiod)
+def adx_addplot(data, settings, ax=None, panel=None):
+    adx = talib.ADX(data['High'], data['Low'], data['Close'], settings[0])
     adx_talib = pd.DataFrame(index=data.index,
                             data={"adx": adx})
 
@@ -22,8 +21,8 @@ def adx_addplot(data, ax=None, panel=None,  timeperiod=14):
         ]
     return plot
 
-def adxr_addplot(data, ax=None, panel=None, timeperiod=14):
-    adxr = talib.ADXR(data['High'], data['Low'], data['Close'], timeperiod)
+def adxr_addplot(data, settings, ax=None, panel=None):
+    adxr = talib.ADXR(data['High'], data['Low'], data['Close'], settings[0])
     adxr_talib = pd.DataFrame(index=data.index,
                             data={"adxr": adxr})
 
@@ -38,44 +37,44 @@ def adxr_addplot(data, ax=None, panel=None, timeperiod=14):
         ]
     return plot
 
-def apo_addplot(data, ax=None, panel=None, fastperiod=12, slowperiod=26, matype=0):
-    apo = talib.APO(data['Close'], fastperiod, slowperiod, matype)
+def apo_addplot(data, settings, ax=None, panel=None):
+    apo = talib.APO(data['Close'], settings[0], settings[1], settings[2])
     apo_talib = pd.DataFrame(index=data.index,
                             data={"apo": apo})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((apo_talib["apo"]),  panel=panel, ylabel='Absolute Price Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((apo_talib["apo"]),  ax=ax, ylabel='Absolute Price Oscillator')
         ]
     return plot
 
-def aroon_addplot(data, ax=None, panel=None, timeperiod=14):
-    aroondown, aroonup = talib.AROON(data['High'], data['Low'], timeperiod)
+def aroon_addplot(data, settings, ax=None, panel=None):
+    aroondown, aroonup = talib.AROON(data['High'], data['Low'], settings[0])
     aroon_talib = pd.DataFrame(index=data.index,
                             data={"aroon_down": aroondown,
                                   "aroon_up" : aroonup})
-    
+
     if(ax == None):
         plot = [
-            mpf.make_addplot((aroon_talib["aroon_down"]),  panel=panel, ylabel='Aroon'), 
+            mpf.make_addplot((aroon_talib["aroon_down"]),  panel=panel, ylabel='Aroon'),
             mpf.make_addplot((aroon_talib["aroon_up"]),  panel=panel)
         ]
 
     elif(panel == None):
         plot = [
-            mpf.make_addplot((aroon_talib["aroon_down"]), ax=ax, ylabel='Aroon'), 
+            mpf.make_addplot((aroon_talib["aroon_down"]), ax=ax, ylabel='Aroon'),
             mpf.make_addplot((aroon_talib["aroon_up"]), ax=ax)
         ]
 
     return plot
 
-def aroonosc_addplot(data, ax=None, panel=None, timeperiod=14):
-    aroonosc = talib.AROONOSC(data['High'], data['Low'], timeperiod)
+def aroonosc_addplot(data, settings, ax=None, panel=None):
+    aroonosc = talib.AROONOSC(data['High'], data['Low'], settings[0])
     aroon_talib = pd.DataFrame(index=data.index,
                             data={"aroonosc": aroonosc})
 
@@ -108,7 +107,7 @@ def ao_addplot(data, ax=None, panel=None, fastma_period=5, slowma_period=34):
 
     return plot
 
-def bop_addplot(data, ax=None, panel=None):
+def bop_addplot(data, settings, ax=None, panel=None):
     bop = talib.BOP(data['Open'], data['High'], data['Low'], data['Close'])
     bop_talib = pd.DataFrame(index=data.index,
                             data={"bop": bop})
@@ -124,11 +123,11 @@ def bop_addplot(data, ax=None, panel=None):
 
     return plot
 
-def cci_addplot(data, ax=None, panel=None, timeperiod=14):
-    cci = talib.CCI(data['High'], data['Low'], data['Close'], timeperiod)
+def cci_addplot(data, settings, ax=None, panel=None):
+    cci = talib.CCI(data['High'], data['Low'], data['Close'], settings[0])
     cci_talib = pd.DataFrame(index=data.index,
                             data={"cci": cci})
-    
+
     if(ax == None):
         plot = [
             mpf.make_addplot((cci_talib["cci"]), panel=panel, ylabel='Commodity Channel Index')
@@ -141,8 +140,8 @@ def cci_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def cmo_addplot(data, ax=None, panel=None, timeperiod=14):
-    cmo = talib.CMO(data['Close'], timeperiod)
+def cmo_addplot(data, settings, ax=None, panel=None):
+    cmo = talib.CMO(data['Close'], settings[0])
     cmo_talib = pd.DataFrame(index=data.index,
                             data={"cmo": cmo})
 
@@ -158,8 +157,8 @@ def cmo_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def dx_addplot(data, ax=None, panel=None, timeperiod=14):
-    dx = talib.DX(data['High'], data['Low'], data['Close'], timeperiod)
+def dx_addplot(data, settings, ax=None, panel=None):
+    dx = talib.DX(data['High'], data['Low'], data['Close'], settings[0])
     dx_talib = pd.DataFrame(index=data.index,
                             data={"dx": dx})
 
@@ -175,8 +174,8 @@ def dx_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def kama_addplot(data, ax=None, panel=None, efficiency_ratio_periods=10, fastema_periods=2, slowema_periods=30):
-    kama = momentum.kama(data['Close'], efficiency_ratio_periods, fastema_periods, slowema_periods)
+def kama_addplot(data, settings, ax=None, panel=None):
+    kama = momentum.kama(data['Close'], settings[0], settings[1], settings[2])
     kama_ta = pd.DataFrame(index=data.index,
                             data={"kama": kama})
 
@@ -192,34 +191,12 @@ def kama_addplot(data, ax=None, panel=None, efficiency_ratio_periods=10, fastema
 
     return plot
 
-def macd_addplot(data, ax=None, panel=None, fastperiod=12, slowperiod=26, signalperiod=9):
-    macd, macdsignal, macdhist = talib.MACD(data['Close'], fastperiod, slowperiod, signalperiod)
+
+def macdext_addplot(data, settings, ax=None, panel=None):
+    macd, macdsignal, macdhist = talib.MACDEXT(data['Close'], settings[0], settings[1], settings[2], settings[3], settings[4], settings[5])
     macd_talib = pd.DataFrame(index=data.index,
-                            data={"macd": macd, 
-                                  "macd_signal" : macdsignal, 
-                                  "macd_hist" : macdhist})
-
-    if(ax == None):
-        plot = [
-            mpf.make_addplot((macd_talib["macd"]),  panel=panel, ylabel='MACD'),
-            mpf.make_addplot((macd_talib["macd_signal"]),  panel=panel),
-            mpf.make_addplot((macd_talib["macd_hist"]), type='bar',  panel=panel)
-        ]
-
-    elif(panel == None):
-        plot = [
-            mpf.make_addplot((macd_talib["macd"]), ax=ax, ylabel='MACD'),
-            mpf.make_addplot((macd_talib["macd_signal"]),  ax=ax),
-            mpf.make_addplot((macd_talib["macd_hist"]), type='bar', ax=ax)
-        ]
-
-    return plot
-
-def macdext_addplot(data, ax=None, panel=None, fastperiod=12, fastmatype=0, slowperiod=26, slowmatype=0, signalperiod=9, signalmatype=0):
-    macd, macdsignal, macdhist = talib.MACDEXT(data['Close'], fastperiod, fastmatype, slowperiod, slowmatype, signalperiod, signalmatype)
-    macd_talib = pd.DataFrame(index=data.index,
-                            data={"macd": macd, 
-                                  "macd_signal" : macdsignal, 
+                            data={"macd": macd,
+                                  "macd_signal" : macdsignal,
                                   "macd_hist" : macdhist})
 
     if(ax == None):
@@ -241,8 +218,8 @@ def macdext_addplot(data, ax=None, panel=None, fastperiod=12, fastmatype=0, slow
 def macdfix_addplot(data, ax=None, panel=None, signalperiod=9):
     macd, macdsignal, macdhist = talib.MACDFIX(data['Close'], signalperiod)
     macd_talib = pd.DataFrame(index=data.index,
-                            data={"macd": macd, 
-                                  "macd_signal" : macdsignal, 
+                            data={"macd": macd,
+                                  "macd_signal" : macdsignal,
                                   "macd_hist" : macdhist})
 
     if(ax == None):
@@ -261,8 +238,8 @@ def macdfix_addplot(data, ax=None, panel=None, signalperiod=9):
 
     return plot
 
-def mfi_addplot(data, ax=None, panel=None, timeperiod=14):
-    mfi = talib.MFI(data['High'], data['Low'], data['Close'], data['Volume'], timeperiod)
+def mfi_addplot(data, settings, ax=None, panel=None):
+    mfi = talib.MFI(data['High'], data['Low'], data['Close'], data['Volume'], settings[0])
     mfi_talib = pd.DataFrame(index=data.index,
                             data={"mfi": mfi})
 
@@ -278,8 +255,8 @@ def mfi_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def minusdi_addplot(data, ax=None, panel=None, timeperiod=14):
-    minusdi = talib.MINUS_DI(data['High'], data['Low'], data['Close'], timeperiod)
+def minusdi_addplot(data, settings, ax=None, panel=None):
+    minusdi = talib.MINUS_DI(data['High'], data['Low'], data['Close'], settings[0])
     minusdi_talib = pd.DataFrame(index=data.index,
                             data={"minus_di": minusdi})
 
@@ -295,8 +272,8 @@ def minusdi_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def minusdm_addplot(data, ax=None, panel=None, timeperiod=14):
-    minusdm = talib.MINUS_DM(data['High'], data['Low'], timeperiod)
+def minusdm_addplot(data, settings, ax=None, panel=None):
+    minusdm = talib.MINUS_DM(data['High'], data['Low'], settings[0])
     minusdm_talib = pd.DataFrame(index=data.index,
                             data={"minus_dm": minusdm})
 
@@ -312,8 +289,8 @@ def minusdm_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def mom_addplot(data, ax=None, panel=None, timeperiod=14):
-    mom = talib.MOM(data['Close'], timeperiod)
+def mom_addplot(data, settings, ax=None, panel=None):
+    mom = talib.MOM(data['Close'], settings[0])
     mom_talib = pd.DataFrame(index=data.index,
                             data={"mom": mom})
 
@@ -329,8 +306,8 @@ def mom_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def plusdi_addplot(data, ax=None, panel=None, timeperiod=14):
-    plusdi = talib.PLUS_DI(data['High'], data['Low'], data['Close'], timeperiod)
+def plusdi_addplot(data, settings, ax=None, panel=None):
+    plusdi = talib.PLUS_DI(data['High'], data['Low'], data['Close'], settings[0])
     plusdi_talib = pd.DataFrame(index=data.index,
                             data={"plusdi": plusdi})
 
@@ -346,8 +323,8 @@ def plusdi_addplot(data, ax=None, panel=None, timeperiod=14):
 
     return plot
 
-def plusdm_addplot(data, ax=None, panel=None, timeperiod=14):
-    plusdm = talib.PLUS_DM(data['High'], data['Low'], timeperiod)
+def plusdm_addplot(data, settings, ax=None, panel=None):
+    plusdm = talib.PLUS_DM(data['High'], data['Low'], settings[0])
     plusdm_talib = pd.DataFrame(index=data.index,
                             data={"plusdm": plusdm})
 
@@ -380,8 +357,8 @@ def ppo_addplot(data, ax=None, panel=None, fastperiod=12, slowperiod=26, matype=
 
     return plot
 
-def pvo_addplot(data, ax=None, panel=None, slowma_period=12, fastma_period=26, signal_period=9):
-    pvo = momentum.pvo(data['Volume'], slowma_period, fastma_period, signal_period)
+def pvo_addplot(data, settings, ax=None, panel=None):
+    pvo = momentum.pvo(data['Volume'], settings[0], settings[1], settings[2])
     pvo_ta = pd.DataFrame(index=data.index,
                             data={"pvo": pvo})
 
@@ -392,13 +369,13 @@ def pvo_addplot(data, ax=None, panel=None, slowma_period=12, fastma_period=26, s
 
     elif(panel == None):
         plot = [
-            mpf.make_addplot((pvo_ta["ppo"]), ax=ax, ylabel='Percentage Volume Oscillator')
+            mpf.make_addplot((pvo_ta["pvo"]), ax=ax, ylabel='Percentage Volume Oscillator')
         ]
 
     return plot
 
-def roc_addplot(data, ax=None, panel=None, timeperiod=10):
-    roc = talib.ROC(data['Close'], timeperiod)
+def roc_addplot(data, settings, ax=None, panel=None):
+    roc = talib.ROC(data['Close'], settings[0])
     roc_talib = pd.DataFrame(index=data.index,
                             data={"roc": roc})
 
@@ -414,8 +391,8 @@ def roc_addplot(data, ax=None, panel=None, timeperiod=10):
 
     return plot
 
-def rocpercentage_addplot(data, ax=None, panel=None, timeperiod=10):
-    rocp = talib.ROCP(data['Close'], timeperiod)
+def rocpercentage_addplot(data, settings, ax=None, panel=None):
+    rocp = talib.ROCP(data['Close'], settings[0])
     rocp_talib = pd.DataFrame(index=data.index,
                             data={"rocp": rocp})
 
@@ -431,8 +408,8 @@ def rocpercentage_addplot(data, ax=None, panel=None, timeperiod=10):
 
     return plot
 
-def rocratio_addplot(data, ax=None, panel=None, timeperiod=10):
-    rocr = talib.ROCR(data['Close'], timeperiod)
+def rocratio_addplot(data, settings, ax=None, panel=None):
+    rocr = talib.ROCR(data['Close'], settings[0])
     rocr_talib = pd.DataFrame(index=data.index,
                             data={"rocr": rocr})
 
@@ -448,8 +425,8 @@ def rocratio_addplot(data, ax=None, panel=None, timeperiod=10):
 
     return plot
 
-def rocratio100_addplot(data, ax=None, panel=None, timeperiod=10):
-    rocr = talib.ROCR100(data['Close'], timeperiod)
+def rocratio100_addplot(data, settings, ax=None, panel=None):
+    rocr = talib.ROCR100(data['Close'], settings[0])
     rocr_talib = pd.DataFrame(index=data.index,
                             data={"rocr": rocr})
 
@@ -465,8 +442,8 @@ def rocratio100_addplot(data, ax=None, panel=None, timeperiod=10):
 
     return plot
 
-def rsi_addplot(data, ax=None, panel=None, timeperiod=10):
-    rsi = talib.RSI(data['Close'], timeperiod)
+def rsi_addplot(data, settings, ax=None, panel=None):
+    rsi = talib.RSI(data['Close'], settings[0])
     rsi_talib = pd.DataFrame(index=data.index,
                             data={"rsi": rsi})
 
@@ -482,10 +459,10 @@ def rsi_addplot(data, ax=None, panel=None, timeperiod=10):
 
     return plot
 
-def slowstoch_addplot(data, ax=None, panel=None, fastk_period=5, slowk_period=3, slowk_matype=0, slowd_period=3, slowd_matype=0):
-    slowk, slowd = talib.STOCH(data['High'], data['Low'], data['Close'], fastk_period, slowk_period, slowk_matype, slowd_period, slowd_matype)
+def slowstoch_addplot(data, settings, ax=None, panel=None):
+    slowk, slowd = talib.STOCH(data['High'], data['Low'], data['Close'], settings[0], settings[1], settings[2], settings[3], settings[4])
     stoch_talib = pd.DataFrame(index=data.index,
-                            data={"slowk" : slowk, 
+                            data={"slowk" : slowk,
                                   "slowd" : slowd})
 
     if(ax == None):
@@ -502,10 +479,10 @@ def slowstoch_addplot(data, ax=None, panel=None, fastk_period=5, slowk_period=3,
 
     return plot
 
-def faststoch_addplot(data, settings, ax=None, panel=None, fastk_period=5, fastd_period=3, fastd_matype=0):
+def faststoch_addplot(data, settings, ax=None, panel=None):
     fastk, fastd = talib.STOCHF(data['High'], data['Low'], data['Close'], settings[0], settings[1], settings[2])
     stoch_talib = pd.DataFrame(index=data.index,
-                            data={"fastk" : fastk, 
+                            data={"fastk" : fastk,
                                   "fastd" : fastd})
 
     if(ax == None):
@@ -522,10 +499,10 @@ def faststoch_addplot(data, settings, ax=None, panel=None, fastk_period=5, fastd
 
     return plot
 
-def stochrsi_addplot(data, settings, ax=None, panel=None, fastk_period=5, fastd_period=3, fastd_matype=0):
-    fastk, fastd = talib.STOCHRSI(data['Close'], fastk_period, fastd_period, fastd_matype)
+def stochrsi_addplot(data, settings, ax=None, panel=None):
+    fastk, fastd = talib.STOCHRSI(data['Close'], settings[0], settings[1], settings[2])
     stoch_talib = pd.DataFrame(index=data.index,
-                            data={"fastk" : fastk, 
+                            data={"fastk" : fastk,
                                   "fastd" : fastd})
 
     if(ax == None):
@@ -584,7 +561,7 @@ def willr_addplot(data, settings, ax=None, panel=None):
     if(ax == None):
         plot = [
             mpf.make_addplot((willr_talib["willr"]), panel=panel, ylabel="Williams' %R")
-        ] 
+        ]
 
     elif(panel == None):
         plot = [
@@ -618,7 +595,7 @@ def dpo_addplot(data, settings, ax=None, panel=None):
 def ichimoku_addplot(data, settings, ax=None, panel=None):
     ichimoku = trend.IchimokuIndicator(data['High'], data['Low'], settings[0], settings[1], settings[2], settings[3])
     ichimoku_ta = pd.DataFrame(index=data.index,
-                            data={"ichimoku_a" : ichimoku.ichimoku_a(), 
+                            data={"ichimoku_a" : ichimoku.ichimoku_a(),
                                   "ichimoku_b" : ichimoku.ichimoku_b(),
                                   "ichimoku_conversion" : ichimoku.ichimoku_conversion_line(),
                                   "ichimoku_baseline" : ichimoku.ichimoku_base_line()})
@@ -725,7 +702,7 @@ def mi_addplot(data, settings, ax=None, panel=None):
     """
     settings: a list with two items (the fast window value and the slow window value)
     """
-    
+
     mi = trend.mass_index(data['High'], data['Low'], settings[0], settings[1])
     mi_ta = pd.DataFrame(index=data.index,
                             data={"mi": mi})

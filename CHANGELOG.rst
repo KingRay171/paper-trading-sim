@@ -1,6 +1,16 @@
 Changelog
 =========
 
+1.0.0
+------
+- market, limit, and stop orders are now available
+- portfolio menu now handles short positions properly
+- optimized background updates of stock portfolio and crypto wallet
+- optimized the creation and update of performance icons
+- all portfolio and trade information is stored at close
+- implemented scanner for stocks that are up the most on the day
+- 
+
 0.12.4
 ------
 - all technical indicators shown on the TA tab in the chart dialog are now fully customizable

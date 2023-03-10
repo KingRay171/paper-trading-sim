@@ -1,28 +1,27 @@
 import sys
-import numpy as np
 import talib
 import ta
 from yahoo_fin import stock_info
-from ta.volatility import BollingerBands
-from ta.momentum import tsi
-from matplotlib.backends.qt_compat import QtWidgets
-from matplotlib.backends.backend_qt5agg import (
-        FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 from bs4 import BeautifulSoup
 from matplotlib.figure import Figure
 from matplotlib import animation
 import pandas as pd
 import yahooquery as yq
-import time
 from yahooquery import Ticker
-from yahooquery import screener
+from yahooquery import Screener
+from selenium import webdriver
+from selenium.webdriver.common.by import By
 import dis
 
-t1 = time.perf_counter()
-print(yq.Ticker('BTC-USD').history('1wk').iloc[-2][5])
-print(stock_info.get_day_gainers())
-t2 = time.perf_counter()
-print(screener.Screener().get_screeners('day_losers'))
-t3 = time.perf_counter()
 
-print(f"yfinance: {t2 - t1}")
+options = webdriver.FirefoxOptions()
+options.add_argument('-headless')
+
+webd = webdriver.Firefox(options=options)
+webd.get('https://www.cboe.com/us/equities/market_statistics/book/AMZN/?mkt=edgx')
+webd.implicitly_wait(1)
+for element in webd.find_elements(By.TAG_NAME, 'td'):
+    if len(element.text) > 0:
+        print(element.text)
+        print(element.get_attribute('id'))
+

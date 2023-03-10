@@ -1,18 +1,6 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<portfolio>
-    <equity>
-        <type>Liquidity</type>
-        <name>US Dollars</name>
-        <amount>10000</amount>
-    </equity>
-
-    <equity>
-        <type>ETF</type>
-        <name>spy</name>
-        <amount>10</amount>
-        <costbasis>400.00</costbasis>
-    </equity>
-
-
-
-</portfolio>
+<?xml version="1.0" encoding="utf-8"?>
+<portfolio> <equity>
+<type>Liquidity</type>
+<name>US Dollars</name>
+<amount>10000.00</amount>
+</equity></portfolio>

@@ -1,21 +1,21 @@
-
-import yfinance as yf
-import pandas as pd
-pd.options.mode.chained_assignment = None
+import math
+import sys
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.widgets import MultiCursor
 from matplotlib import axes
-import argparse
-import sys
+
 import ta_addplot
-import yahooquery as yq
-import math
+import readassets as ra
+# pylint: disable-msg=E1101
+# pylint: disable-msg=W0123
 import talib
 import ta
+import yfinance as yf
+import pandas as pd
 
-import readassets as ra
+pd.options.mode.chained_assignment = None
 
 isclosed = False
 data = None
@@ -23,7 +23,7 @@ xlims = None
 scaled_xlims = None
 default_xlims = (0, 0)
 
-# pylint: disable-msg=E0611
+
 func_map = {
     talib.ADX : ta_addplot.adx_addplot,
     talib.ADXR : ta_addplot.adxr_addplot,
@@ -85,7 +85,10 @@ def on_xlims_change(event_ax):
         if(scaled_xlims[0] < 0 and event_ax.get_xlim()[0] > 0):
             scaled_xlims = (math.ceil(event_ax.get_xlim()[0]), math.ceil(event_ax.get_xlim()[1]))
         else:
-            scaled_xlims = (round(scaled_xlims[0]) + math.ceil(event_ax.get_xlim()[0]), round(scaled_xlims[0]) + math.floor(event_ax.get_xlim()[0]) + (math.ceil(event_ax.get_xlim()[1]) - math.floor(event_ax.get_xlim()[0])))
+            scaled_xlims = (
+                round(scaled_xlims[0]) + math.ceil(event_ax.get_xlim()[0]),
+                round(scaled_xlims[0]) + math.floor(event_ax.get_xlim()[0]) + (math.ceil(event_ax.get_xlim()[1]) - math.floor(event_ax.get_xlim()[0]))
+            )
     else: # if user is zooming out
         scaled_xlims = event_ax.get_xlim()
 
@@ -128,9 +131,22 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
 
 
         if period is not None:
-            data = yf.download(tickers=ticker_symbol, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+            data = yf.download(
+                tickers=ticker_symbol,
+                period=period,
+                interval=interval,
+                prepost=prepost,
+                auto_adjust=adjust_ohlc
+            )
         else:
-            data = yf.download(tickers=ticker_symbol, start=start_date, end=end_date, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+            data = yf.download(
+                tickers=ticker_symbol,
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                prepost=prepost,
+                auto_adjust=adjust_ohlc
+            )
 
         if(data['Close'].size > old_data_size):
             scaled_xlims = (scaled_xlims[0], scaled_xlims[1] + 1)
@@ -178,7 +194,7 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
                 indicator_plot_isempty = False
                 break
 
-        if(indicator_plot_isempty):
+        if indicator_plot_isempty:
             for i in range(ta_indicators.index(indicator), len(ta_indicators)):
                 ta_indicators[i] = (ta_indicators[i][0], ta_indicators[i][1] - 1)
             ta_indicators[idx] = None
@@ -204,6 +220,25 @@ print(sys.argv)
 
 
 if len(sys.argv) == 9:
-    startChart(sys.argv[1], sys.argv[2], eval(sys.argv[3]), eval(sys.argv[5]), eval(sys.argv[6]), eval(sys.argv[7]), eval(sys.argv[8]), period=sys.argv[4])
+    startChart(
+        sys.argv[1],
+        sys.argv[2],
+        eval(sys.argv[3]),
+        eval(sys.argv[5]),
+        eval(sys.argv[6]),
+        eval(sys.argv[7]),
+        eval(sys.argv[8]),
+        period=sys.argv[4]
+    )
 elif len(sys.argv) == 10:
-    startChart(sys.argv[1], sys.argv[2], eval(sys.argv[3]), eval(sys.argv[6]), eval(sys.argv[7]), eval(sys.argv[8]), eval(sys.argv[9]), start_date=sys.argv[4], end_date=sys.argv[5])
+    startChart(
+        sys.argv[1],
+        sys.argv[2],
+        eval(sys.argv[3]),
+        eval(sys.argv[6]),
+        eval(sys.argv[7]),
+        eval(sys.argv[8]),
+        eval(sys.argv[9]),
+        start_date=sys.argv[4],
+        end_date=sys.argv[5]
+    )

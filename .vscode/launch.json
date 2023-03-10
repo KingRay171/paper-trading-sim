@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["MSFT", "1d", "[('ta.momentum.pvo', 1, [12, 26, 9])]", "1y", "False", "False", "False", "True"]
+            "args": ["MSFT", "1d", "[('ta.momentum.pvo', 2, [12, 26, 9])]", "1y", "False", "False", "False", "True"]
         }
     ]
 }

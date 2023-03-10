@@ -3,11 +3,11 @@ paper-trading-sim will be a game where the goal is to generate the highest retur
 
 [Changelog »](https://github.com/KingRay171/paper-trading-sim/blob/main/CHANGELOG.rst)
 
-What's new in version 0.12
+What's new in version 1.0
 -------------------------
-- stock charts are now interactive, update automatically, and are zoomable
-- added support for several technical indicators to charting dialog
-- stock information for the information dialog is retrieved using the yahooquery library instead of yfinance
-- stock info dialog is now much faster
-- technical indicators now have customizable setting
-- general code quality improvements
+- market, limit, and stop orders are now available
+- portfolio menu now handles short positions properly
+- optimized background updates of stock portfolio and crypto wallet
+- optimized the creation and update of performance icons
+- all portfolio and trade information is stored at close
+- implemented scanner for stocks that are up the most on the day

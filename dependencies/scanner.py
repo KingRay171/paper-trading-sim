@@ -15,4 +15,3 @@ def get_results(search_criteria, sort_field=None) -> list[dict]:
         results.append(quote_dict)
 
     return results
-

@@ -5,6 +5,7 @@ from locale import atof, setlocale, LC_NUMERIC
 from threading import Thread
 import time
 import xml.etree.ElementTree as et
+from datetime import datetime
 
 import pandas as pd
 # pylint: disable-msg=E0611
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
                                QSplashScreen, QPushButton, QDialog, QLineEdit, QComboBox,
                                QRadioButton, QCalendarWidget, QCheckBox, QApplication,
                                QProgressBar, QVBoxLayout, QScrollArea, QButtonGroup,
-                               QSlider, QSpinBox, QDoubleSpinBox)
+                               QSlider, QSpinBox, QDoubleSpinBox, QSizePolicy, QGridLayout)
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor
 from PySide6.QtCore import QRect, QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation
 import yahooquery as yq
@@ -27,7 +28,9 @@ from dependencies import dcfmodel as dcf
 from dependencies import numberformat as nf
 from dependencies import finviznews as fn
 from dependencies import readassets as ra
-
+from dependencies import savetrades as st
+from dependencies import saveport as sp
+from dependencies import scanner as sc
 app = QApplication(sys.argv)
 
 CWD = os.getcwd() + '\\'
@@ -38,11 +41,21 @@ CURRENT_TICKER = ''
 
 selected_ta = []
 
+OPEN_ORDERS = []
+
+TOKEN_OBJECTS = []
+
+PORTFOLIO_OBJECTS = []
+
+WATCHLIST_OBJECTS = []
+
 ARIAL_10 = QFont('arial', 10)
 
 SETTINGS_DIALOG_BTN_STYLESHEET = "QPushButton::hover{background-color: deepskyblue; color: white;}"
 
 SCROLLBAR_ALWAYSON = Qt.ScrollBarPolicy.ScrollBarAlwaysOn
+
+CURRENT_TRADE_STOCK = None
 
 # performance icons
 GREENARROW_GREENBOX = QIcon(f"{CWD}icons/greenarrowgreenbox.png")
@@ -54,6 +67,7 @@ FLATARROW_REDBOX = QIcon(f"{CWD}icons/flatarrowredbox.png")
 REDARROW_GREENBOX = QIcon(f"{CWD}icons/redarrowgreenbox.png")
 REDARROW_FLATBOX = QIcon(f"{CWD}icons/redarrowflatbox.png")
 REDARROW_REDBOX = QIcon(f"{CWD}icons/redarrowredbox.png")
+
 
 def spy_button_clicked():
     """
@@ -111,16 +125,181 @@ def update_ui():
             update_wallet_nav()
             update_wallet_table()
             time.sleep(5)
+        if widget.currentWidget() == trade_dialog and CURRENT_TRADE_STOCK is not None:
+            update_trade_dialog()
         if mktopen.isMarketOpen():
-            if widget.currentWidget() == portfolio_dialog:
+            if widget.currentWidget() == port_dialog:
                 update_portfolio_table()
                 update_watchlist_tickers()
                 update_portfolio_nav()
                 update_portfolio_piechart()
-            else:
-                time.sleep(1)
+            update_trades()
         else:
             time.sleep(1)
+
+
+
+
+def update_trades():
+    global OPEN_ORDERS
+
+    for order in OPEN_ORDERS:
+
+        cash = float(portfolio_amts[0])
+        ticker = yq.Ticker(order[0])
+        asset_type = ""
+        match ticker.quote_type[order[0]]['quoteType']:
+            case 'EQUITY':
+                asset_type = 'Stock'
+            case 'ETF':
+                asset_type = 'ETF'
+
+        if order[2] == 'Market' and order[1] == 'Buy':
+            execute_buy(order, ticker, asset_type, cash)
+
+        elif order[2] == 'Market' and order[1] == 'Sell':
+            execute_sell(order, ticker, asset_type, cash)
+
+        elif order[2] == 'Limit' and order[1] == 'Buy':
+            if yq.Ticker(order[0]).summary_detail[order[0]]['ask'] < float(order[3]):
+                execute_buy(order, ticker, asset_type, cash)
+
+        elif order[2] == 'Limit' and order[1] == 'Sell':
+            if yq.Ticker(order[0]).summary_detail[order[0]]['bid'] > float(order[3]):
+                execute_sell(order, ticker, asset_type, cash)
+
+        elif order[2] == 'Stop' and order[1] == 'Buy':
+            if yq.Ticker(order[0]).summary_detail[order[0]]['ask'] > float(order[3]):
+                execute_buy(order, ticker, asset_type, cash)
+
+        elif order[2] == 'Stop' and order[1] == 'Sell':
+            if yq.Ticker(order[0]).summary_detail[order[0]]['bid'] < float(order[3]):
+                execute_sell(order, ticker, asset_type, cash)
+
+
+
+
+def execute_buy(order: list, ticker: yq.Ticker, asset_type: str, cash: float, trade_price=None):
+    global portfolio_cash
+    if trade_price is None:
+        trade_price = ticker.summary_detail[order[0]]['ask']
+
+    cash -= float(order[4]) * float(trade_price)
+    portfolio_amts[0] = str(cash)
+    portfolio_cash = cash
+
+    if order[0] in portfolio_tickers:
+        idx = portfolio_tickers.index(order[0])
+
+        if -1 * int(order[4]) == int(portfolio_amts[idx]):
+            portfolio_tickers.remove(order[0])
+            portfolio_amts.remove(str(-1 * int(order[4])))
+            purchase_prices.remove(purchase_prices[idx - 1])
+            portfolio_asset_types.remove(portfolio_asset_types[idx])
+            PORTFOLIO_OBJECTS.remove(ticker)
+            try:
+                port_dialog.positions_view_groupbox.positions_view.setRowCount(
+                    len(portfolio_amts) - 1
+                )
+
+
+            except Exception:
+                pass
+
+        elif int(order[4]) < int(portfolio_amts[idx]):
+
+
+            stock_amt = int(portfolio_amts[idx])
+            stock_amt += int(order[4])
+            portfolio_amts[idx] = str(stock_amt)
+
+            purchase_price = float(purchase_prices[idx - 1])
+            new_cb = round((purchase_price * (int(portfolio_amts[idx]) - int(order[4])) + trade_price * int(order[4])) / int(portfolio_amts[idx]), 2)
+            purchase_prices[idx - 1] = str(new_cb)
+        elif int(order[4]) > int(portfolio_amts[idx]):
+            stock_amt = int(portfolio_amts[idx])
+            stock_amt += int(order[4])
+            portfolio_amts[idx] = str(stock_amt)
+
+            purchase_prices[idx - 1] = str(trade_price)
+
+    else:
+        portfolio_tickers.append(order[0])
+        portfolio_amts.append(order[4])
+        portfolio_asset_types.append(asset_type)
+        purchase_prices.append(str(trade_price))
+        PORTFOLIO_OBJECTS.append(ticker)
+        try:
+            port_dialog.positions_view_groupbox.positions_view.setRowCount(
+                len(portfolio_amts) - 1
+            )
+            column_count = port_dialog.positions_view_groupbox.positions_view.columnCount()
+            for k in range(column_count):
+                port_dialog.positions_view_groupbox.positions_view.setItem(column_count - 1, k, QTableWidgetItem())
+
+        except Exception:
+            pass
+    OPEN_ORDERS.remove(order)
+
+
+
+def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, trade_price=None):
+    global portfolio_cash
+    if trade_price is None:
+        trade_price = ticker.summary_detail[order[0]]['bid']
+    cash += float(order[4]) * float(trade_price)
+    portfolio_amts[0] = str(cash)
+    portfolio_cash = cash
+
+    if order[0] in portfolio_tickers:
+        idx = portfolio_tickers.index(order[0])
+
+        if int(order[4]) < int(portfolio_amts[idx]):
+            stock_amt = int(portfolio_amts[idx])
+            stock_amt -= int(order[4])
+            portfolio_amts[idx] = str(stock_amt)
+
+
+        elif int(order[4]) == int(portfolio_amts[idx]):
+            portfolio_tickers.remove(order[0])
+            portfolio_amts.remove(order[4])
+            purchase_prices.remove(purchase_prices[idx - 1])
+            portfolio_asset_types.remove(portfolio_asset_types[idx])
+            PORTFOLIO_OBJECTS.remove(ticker)
+            try:
+                port_dialog.positions_view_groupbox.positions_view.setRowCount(
+                    len(portfolio_amts) - 1
+                )
+            except Exception:
+                pass
+        else:
+            stock_amt = int(portfolio_amts[idx])
+            stock_amt -= int(order[4])
+            portfolio_amts[idx] = str(stock_amt)
+            purchase_prices[idx - 1] = str(trade_price)
+
+            purchase_price = float(purchase_prices[idx - 1])
+            new_cb = round((purchase_price * (int(portfolio_amts[idx]) - int(order[4])) + trade_price * int(order[4])) / int(portfolio_amts[idx]), 2)
+            purchase_prices[idx - 1] = str(new_cb)
+
+
+    else:
+        portfolio_tickers.append(order[0])
+        portfolio_amts.append(str(-1 * int(order[4])))
+        portfolio_asset_types.append(asset_type)
+        purchase_prices.append(str(trade_price))
+        PORTFOLIO_OBJECTS.append(ticker)
+        try:
+            port_dialog.positions_view_groupbox.positions_view.setRowCount(
+                len(portfolio_amts) - 1
+            )
+            column_count = port_dialog.positions_view_groupbox.positions_view.columnCount()
+            for j in range(column_count):
+                port_dialog.positions_view_groupbox.positions_view.setItem(column_count - 1, j, QTableWidgetItem())
+        except Exception:
+            pass
+    OPEN_ORDERS.remove(order)
+
 
 
 def update_portfolio_piechart():
@@ -129,131 +308,143 @@ def update_portfolio_piechart():
     """
 
     # gets the present value of the portfolio broken down by asset type
+    long_etfs = 0
+    short_etfs = 0
+    long_stocks = 0
+    short_stocks = 0
+    long_options = 0
+    short_options = 0
     cash_amount = 0
-    etf_amount = 0
-    stock_amount = 0
-    option_amount = 0
-    futures_amount = 0
 
     for idx, amount in enumerate(portfolio_amts):
-        if portfolio_asset_types[idx].text != 'Liquidity':
+        if portfolio_asset_types[idx] != 'Liquidity':
             asset_price = float(
-                portfolio_dialog.positions_view_groupbox.positions_view.item(idx - 1, 2).text()[1:]
+                port_dialog.positions_view_groupbox.positions_view.item(idx - 1, 2).text()[1:]
             )
 
-        match portfolio_asset_types[idx].text:
+        match portfolio_asset_types[idx]:
             case "ETF":
-                etf_amount += int(amount.text) * asset_price
+                if int(amount) > 0:
+                    long_etfs += int(amount) * asset_price
+                else:
+                    short_etfs -= int(amount) * asset_price
             case "Liquidity":
-                cash_amount += float(amount.text)
+                cash_amount += float(amount)
             case "Stock":
-                stock_amount += int(amount.text) * asset_price
-            case "Futures":
-                futures_amount += int(amount.text) * asset_price
+                if int(amount) > 0:
+                    long_stocks += int(amount) * asset_price
+                else:
+                    short_stocks -= int(amount) * asset_price
             case "Option":
-                option_amount += int(amount.text) * asset_price
+                if int(amount) > 0:
+                    long_options += int(amount) * asset_price
+                else:
+                    short_options -= int(amount) * asset_price
 
+    cash_amount -= 2 * float(port_dialog.currentNAV.liabilities.text()[2:].replace(",", ""))
     # loads values into pie chart and displays them
-    asset_class_chart.slices()[0].setValue(
-        round(etf_amount / portfolio_nav * 100, 2))
-    if etf_amount != 0:
+
+    asset_class_chart.slices()[0].setValue(round(long_etfs / portfolio_nav * 100, 2))
+    if long_etfs != 0:
         asset_class_chart.slices()[0].setLabel(
-            f"ETFs: {round(etf_amount / portfolio_nav * 100, 2)}%"
+            f"Long ETFs: {round(long_etfs / portfolio_nav * 100, 2)}%"
         )
         asset_class_chart.slices()[0].setLabelVisible(True)
 
-    asset_class_chart.slices()[1].setValue(
-        round(stock_amount / portfolio_nav * 100, 2)
-    )
-    if stock_amount != 0:
+    asset_class_chart.slices()[1].setValue(round(short_etfs / portfolio_nav * 100, 2))
+    if short_etfs != 0:
         asset_class_chart.slices()[1].setLabel(
-            f"Stocks: {round(stock_amount / portfolio_nav * 100, 2)}%"
+            f"Short ETFs: {round(short_etfs / portfolio_nav * 100, 2)}%"
         )
         asset_class_chart.slices()[1].setLabelVisible(True)
 
-    asset_class_chart.slices()[2].setValue(option_amount / portfolio_nav * 100)
-    if option_amount != 0:
+    asset_class_chart.slices()[2].setValue(round(long_stocks / portfolio_nav * 100, 2))
+    if long_stocks != 0:
         asset_class_chart.slices()[2].setLabel(
-            f"Options: {round(option_amount / portfolio_nav * 100, 2)}%"
+            f"Long Stocks: {round(long_stocks / portfolio_nav * 100, 2)}%"
         )
         asset_class_chart.slices()[2].setLabelVisible(True)
 
-    asset_class_chart.slices()[3].setValue(
-        futures_amount / portfolio_nav * 100)
-    if futures_amount != 0:
+    asset_class_chart.slices()[3].setValue(round(short_stocks / portfolio_nav * 100, 2))
+    if short_stocks != 0:
         asset_class_chart.slices()[3].setLabel(
-            f"Futures: {round(futures_amount / portfolio_nav * 100, 2)}%"
+            f"Short Stocks: {round(short_stocks / portfolio_nav * 100, 2)}%"
         )
         asset_class_chart.slices()[3].setLabelVisible(True)
 
-    asset_class_chart.slices()[4].setValue(cash_amount / portfolio_nav * 100)
-    if cash_amount != 0:
+    asset_class_chart.slices()[4].setValue(long_options / portfolio_nav * 100)
+    if long_options != 0:
         asset_class_chart.slices()[4].setLabel(
-            f"Cash: {round(cash_amount / portfolio_nav * 100, 2)}%"
+            f"Long Options: {round(long_options / portfolio_nav * 100, 2)}%"
         )
         asset_class_chart.slices()[4].setLabelVisible(True)
+
+    asset_class_chart.slices()[5].setValue(short_options / portfolio_nav * 100)
+    if short_options != 0:
+        asset_class_chart.slices()[5].setLabel(
+            f"Short Options: {round(short_options / portfolio_nav * 100, 2)}%"
+        )
+        asset_class_chart.slices()[5].setLabelVisible(True)
+
+    asset_class_chart.slices()[6].setValue(cash_amount / portfolio_nav * 100)
+    if cash_amount != 0:
+        asset_class_chart.slices()[6].setLabel(
+            f"Cash: {round(cash_amount / portfolio_nav * 100, 2)}%"
+        )
+        asset_class_chart.slices()[6].setLabelVisible(True)
 
 
 def update_wallet_table():
     """
     Updates the positions table on the crypto wallet dialog.
     """
-    wallet_zip = zip(wallet_tickers[1:], wallet_costbases, wallet_amts[1:])
-    for idx, (ticker, basis, amt) in enumerate(wallet_zip):
+    wallet_zip = zip(wallet_tickers[1:], TOKEN_OBJECTS, wallet_costbases, wallet_amts[1:])
+    for idx, (ticker, obj, basis, amt) in enumerate(wallet_zip):
 
         # get the current price and the price it last closed at
-        ticker_data = yq.Ticker(ticker.text).history('1wk')
+        ticker_data = obj.history('1wk')
         current_price = ticker_data.iloc[-1][5]
         last_close_price = ticker_data.iloc[-2][5]
 
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (current_price - float(basis.text)) * float(amt.text)
-        percent_change = round(total_return / (float(basis.text) * float(amt.text)) * 100, 2)
+        total_return = (current_price - float(basis)) * float(amt)
+        percent_change = round(total_return / (float(basis) * float(amt)) * 100, 2)
 
         # update the table with the new information
 
         # first cell in the row is the coin symbol
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 0, QTableWidgetItem(ticker.text.upper())
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 0).setText(ticker)
 
         # second cell is the coin's performance icon
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 1, update_ticker_icon(ticker_data)
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 1).setIcon(update_ticker_icon(ticker_data))
 
         # third cell is the coin's current price
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 2, QTableWidgetItem(f'${current_price:0,.2f}')
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 2).setText(f'${current_price:0,.2f}')
+
 
         # fourth cell is the change in the coin's price from it's last close,
         # in dollar and percent terms
         last_close_change = current_price - last_close_price
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(idx, 3, QTableWidgetItem(
-            f'${last_close_change:0,.2f} ({round(last_close_change / last_close_price * 100, 2)}%)')
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 3).setText(
+            f'${last_close_change:0,.2f} ({round(last_close_change / last_close_price * 100, 2)}%)'
         )
 
 
         # fifth cell is the user's costbasis for the token
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 4, QTableWidgetItem(f'${float(basis.text):0,.2f}')
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 4).setText(f'${float(basis):0,.2f}')
 
 
         # sixth cell is the amount of the coin the user has (or is short)
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 5, QTableWidgetItem(amt.text)
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 5).setText(amt)
+
 
         # seventh cell is the NLV the user has in the coin
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 6, QTableWidgetItem(f'${(current_price * float(amt.text)):0,.2f}')
-        )
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 6).setText(f'${(current_price * float(amt)):0,.2f}')
+
 
         # eighth cell is the user's net P/L on the position from when it was opened
-        wallet_dialog.positions_view_groupbox.positions_view.setItem(idx, 7, QTableWidgetItem(
-            f'${total_return:0,.2f} ({percent_change}%)')
+        wallet_dialog.positions_view_groupbox.positions_view.item(idx, 7).setText(
+            f'${total_return:0,.2f} ({percent_change}%)'
         )
 
 
@@ -262,53 +453,43 @@ def update_portfolio_table():
     Updates the table with all the user's positions in the portfolio dialog
     """
     # for each asset in the portfolio
-    port_zip = zip(portfolio_tickers[1:], purchase_prices, portfolio_amts[1:])
-    for idx, (ticker, basis, amt) in enumerate(port_zip):
+    port_zip = zip(portfolio_tickers[1:], PORTFOLIO_OBJECTS, purchase_prices, portfolio_amts[1:])
+    for idx, (ticker, obj, basis, amt) in enumerate(port_zip):
 
         # get the current price and the price it last closed at
 
-        ticker_data = yq.Ticker(ticker.text).history(period='5d')
+        ticker_data = obj.history(period='5d')
         ticker_current = ticker_data.iloc[-1][5]
         ticker_last_close = ticker_data.iloc[-2][5]
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (
-            ticker_current - float(basis.text)) * int(amt.text)
-        percent_change = round(
-            total_return / (float(basis.text) * float(amt.text)) * 100, 2)
+        total_return = (ticker_current - float(basis)) * int(amt)
+        percent_change = round(total_return / (float(basis) * float(amt)) * 100, 2)
         # update the table with the new information
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 0, QTableWidgetItem(ticker.text.upper())
-        )
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 1, update_ticker_icon(ticker_data)
-        )
+        if port_dialog.positions_view_groupbox.positions_view.item(idx, 0) is None:
+            column_count = port_dialog.positions_view_groupbox.positions_view.columnCount()
+            for k in range(column_count):
+                port_dialog.positions_view_groupbox.positions_view.setItem(idx, k, QTableWidgetItem())
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}')
-        )
+
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 0).setText(ticker)
+
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 1).setIcon(update_ticker_icon(ticker_data))
+
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 2).setText(f'${ticker_current:0,.2f}')
 
         last_close_change = ticker_current - ticker_last_close
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(idx, 3, QTableWidgetItem(
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 3).setText(
             f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
-            )
         )
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(idx, 4, QTableWidgetItem(
-            f'${float(basis.text):0,.2f}')
-        )
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 4).setText(f'${float(basis):0,.2f}')
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 5, QTableWidgetItem(amt.text)
-        )
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 5).setText(amt)
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 6, QTableWidgetItem(f'${(ticker_current * int(amt.text)):0,.2f}')
-        )
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 6).setText(f'${(ticker_current * int(amt)):0,.2f}')
 
-        portfolio_dialog.positions_view_groupbox.positions_view.setItem(
-            idx, 7, QTableWidgetItem(f'${total_return:0,.2f} ({percent_change}%)')
-        )
+        port_dialog.positions_view_groupbox.positions_view.item(idx, 7).setText(f'${total_return:0,.2f} ({percent_change}%)')
 
 
 def update_watchlist_tickers():
@@ -317,28 +498,23 @@ def update_watchlist_tickers():
     """
 
     # for each ticker in the watchlist
-    for idx, item in enumerate(watchlist_tickers):
+    watchlist_zip = zip(watchlist_tickers, WATCHLIST_OBJECTS)
+    for idx, (item, obj) in enumerate(watchlist_zip):
 
-        ticker = yq.Ticker(item.text).history(period='5d')
+        ticker = obj.history(period='5d')
         ticker_current = ticker.iloc[-1][5]
         ticker_last_close = ticker.iloc[-2][5]
 
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 0, QTableWidgetItem(item.text.upper())
-        )
+        port_dialog.watchlist_groupbox.watchlist_view.item(idx, 0).setText(item)
 
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 1, update_ticker_icon(ticker)
-        )
+        port_dialog.watchlist_groupbox.watchlist_view.item(idx, 1).setIcon(update_ticker_icon(ticker))
 
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(
-            idx, 2, QTableWidgetItem(f'${ticker_current:0,.2f}')
-        )
+        port_dialog.watchlist_groupbox.watchlist_view.item(idx, 2).setText(f'${ticker_current:0,.2f}')
 
         last_close_change = ticker_current - ticker_last_close
-        portfolio_dialog.watchlist_groupbox.watchlist_view.setItem(idx, 3, QTableWidgetItem(
-            f'{last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
-            )
+        port_dialog.watchlist_groupbox.watchlist_view.item(idx, 3).setText(
+            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+
         )
 
 
@@ -444,7 +620,7 @@ def chart_by_period(ticker: str, interval: str, prepost: str, ohlc: str, split_d
     Thread(daemon=True, target=thread_worker, args=(ticker, period, interval)).start()
 
 
-def update_ticker_icon(ticker) -> QTableWidgetItem:
+def update_ticker_icon(ticker) -> QIcon:
     """
     Updates the performance icon for the given stock
 
@@ -454,7 +630,7 @@ def update_ticker_icon(ticker) -> QTableWidgetItem:
         Returns a QTableWidgetItem with the new performance icon
     """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
-    tw_item = QTableWidgetItem()
+
     ticker_open = ticker.iloc[-1][0]
     ticker_current = ticker.iloc[-1][5]
     ticker_last_close = ticker.iloc[-2][5]
@@ -482,32 +658,31 @@ def update_ticker_icon(ticker) -> QTableWidgetItem:
         case "UP":
             match close_pos:
                 case "UP":
-                    tw_item.setIcon(GREENARROW_GREENBOX)
+                    return GREENARROW_GREENBOX
                 case "FLAT":
-                    tw_item.setIcon(GREENARROW_FLATBOX)
+                    return GREENARROW_FLATBOX
                 case "DOWN":
-                    tw_item.setIcon(GREENARROW_REDBOX)
+                    return GREENARROW_REDBOX
 
         case "FLAT":
             match close_pos:
                 case "UP":
-                    tw_item.setIcon(FLATARROW_GREENBOX)
+                    return FLATARROW_GREENBOX
                 case "FLAT":
-                    tw_item.setIcon(FLATARROW_FLATBOX)
+                    return FLATARROW_FLATBOX
                 case "DOWN":
-                    tw_item.setIcon(FLATARROW_REDBOX)
+                    return FLATARROW_REDBOX
 
         case "DOWN":
             match close_pos:
                 case "UP":
-                    tw_item.setIcon(REDARROW_GREENBOX)
+                    return REDARROW_GREENBOX
                 case "FLAT":
-                    tw_item.setIcon(REDARROW_FLATBOX)
+                    return REDARROW_FLATBOX
                 case "DOWN":
-                    tw_item.setIcon(REDARROW_REDBOX)
+                    return REDARROW_REDBOX
 
     # returns a tablewidgetitem containing the new icon
-    return tw_item
 
 
 def update_portfolio_nav():
@@ -518,37 +693,37 @@ def update_portfolio_nav():
     """
 
     # sets buying power to user's cash
-    new_val = float(portfolio_amts[0].text)
+    new_val = float(portfolio_amts[0])
     liabilities = 0
     assets = 0
 
     # for each stock in the portfolio, get its price and check if it's held long or sold short
     for idx, amt in enumerate(portfolio_amts[1:]):
         # slice returns only the dollar value without the '$'
-        cur_val = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
+        cur_val = float(port_dialog.positions_view_groupbox.positions_view.item(
             idx, 2).text()[1:])
 
-        if int(amt.text) > 0:
+        if int(amt) > 0:
             # if it's long, add its value to the new value and to the assets tally
-            new_val += float(cur_val) * int(amt.text)
-            assets += float(cur_val) * float(amt.text)
-        elif int(amt.text) < 0:
+            new_val += float(cur_val) * int(amt)
+            assets += float(cur_val) * float(amt)
+        elif int(amt) < 0:
             # if it's short, subtract its value from the new value and add to the liabilities tally
-            new_val -= float(cur_val) * int(amt.text)
-            liabilites += float(cur_val) * float(amt.text)
+            new_val += float(cur_val) * int(amt)
+            liabilities += float(cur_val) * float(amt)
 
     buying_power = get_portfolio_bp()
-    portfolio_dialog.currentNAV.liq.setText(f'${new_val:0,.2f}')
+    port_dialog.currentNAV.liq.setText(f'${new_val:0,.2f}')
 
-    portfolio_dialog.currentNAV.buyingPower.setText(f'${buying_power:0,.2f}')
+    port_dialog.currentNAV.buyingPower.setText(f'${buying_power:0,.2f}')
 
-    portfolio_dialog.currentNAV.cash.setText(f'${portfolio_cash:0,.2f}')
+    port_dialog.currentNAV.cash.setText(f'${portfolio_cash:0,.2f}')
 
-    portfolio_dialog.currentNAV.assets.setText(f'${assets:0,.2f}')
+    port_dialog.currentNAV.assets.setText(f'${assets:0,.2f}')
 
-    portfolio_dialog.currentNAV.liabilities.setText(f'${liabilities:0,.2f}')
+    port_dialog.currentNAV.liabilities.setText(f'${liabilities:0,.2f}')
 
-    portfolio_dialog.currentNAV.returnSinceInception.setText(
+    port_dialog.currentNAV.returnSinceInception.setText(
         f'{((new_val / 10000 - 1) * 100):0,.2f}%')
 
 
@@ -557,18 +732,18 @@ def update_wallet_nav():
     (1.5 * value of all short positions)."""
 
     # sets buying power to user's cash
-    new_val = float(wallet_amts[0].text)
+    new_val = float(wallet_amts[0])
     liabilities = 0
     assets = 0
     for idx, amt in enumerate(wallet_amts[1:]):
         cur_val = atof(wallet_dialog.positions_view_groupbox.positions_view.item(
             idx, 2).text()[1:])
-        if float(amt.text) > 0:
-            new_val += float(cur_val) * float(amt.text)
-            assets += float(cur_val) * float(amt.text)
-        elif float(amt.text) < 0:
-            new_val -= float(cur_val) * float(amt.text)
-            liabilites += float(cur_val) * float(amt.text)
+        if float(amt) > 0:
+            new_val += float(cur_val) * float(amt)
+            assets += float(cur_val) * float(amt)
+        elif float(amt) < 0:
+            new_val -= float(cur_val) * float(amt)
+            liabilites += float(cur_val) * float(amt)
 
     buying_power = get_wallet_bp()
     wallet_dialog.currentNAV.liq.setText(f'${new_val:0,.2f}')
@@ -595,15 +770,15 @@ def get_portfolio_bp() -> float:
     total_short = 0
 
     for idx, amt in enumerate(portfolio_amts[1:]):
-        cur_val = float(portfolio_dialog.positions_view_groupbox.positions_view.item(
+        cur_val = float(port_dialog.positions_view_groupbox.positions_view.item(
             idx, 2).text()[1:])
-        if int(amt.text) > 0:
-            total_long += float(cur_val) * int(amt.text)
-        elif int(amt.text) < 0:
-            total_short += float(cur_val) * int(amt.text)
+        if int(amt) > 0:
+            total_long += float(cur_val) * int(amt)
+        elif int(amt) < 0:
+            total_short += float(cur_val) * int(amt)
 
     buying_power += .5 * total_long
-    buying_power -= 1.5 * total_short
+    buying_power += 1.5 * total_short
     return buying_power
 
 
@@ -624,6 +799,7 @@ def apply_settings_changes():
 
     # parses XML file into an ElementTree
     tree = et.parse('assets/settings.xml')
+
 
     # replaces old data in the file with the current data
     for color in tree.getroot().iter('upcolor'):
@@ -1460,11 +1636,13 @@ def get_indicator_index(indicator_fn: str) -> int:
     raise ValueError(f"Indicator '{str}' is not in the list of TA")
 
 
-def close_event(event):
-    """Function that is called when the user exits the game. WIP"""
-    print("closed")
+def close_event():
+    st.save(OPEN_ORDERS)
+    sp.save_port(portfolio_asset_types, portfolio_tickers, portfolio_amts, purchase_prices)
 
+    print('closed')
 
+app.aboutToQuit.connect(close_event)
 widget = QTabWidget()
 widget.setWindowTitle("Ray's Paper Trading Game")
 splash = QSplashScreen(
@@ -1475,6 +1653,7 @@ progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
 splash.show()
 progressBar.setValue(10)
+
 progressBar.setValue(20)
 setlocale(LC_NUMERIC, '')
 progressBar.setValue(30)
@@ -1488,14 +1667,75 @@ progressBar.setValue(40)
 up_color = ra.get_xml_data(r'assets\settings.xml', 'upcolor')
 down_color = ra.get_xml_data(r'assets\settings.xml', 'downcolor')
 base_style = ra.get_xml_data(r'assets\settings.xml', 'basestyle')
-portfolio_tickers = ra.get_xml_data(r'assets\portfolio.xml', 'name')
-portfolio_asset_types = ra.get_xml_data(r'assets\portfolio.xml', 'type')
-portfolio_amts = ra.get_xml_data(r'assets\portfolio.xml', 'amount')
-purchase_prices = ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')
-wallet_tickers = ra.get_xml_data(r'assets\wallet.xml', 'name')
-wallet_amts = ra.get_xml_data(r'assets\wallet.xml', 'amount')
-wallet_costbases = ra.get_xml_data(r'assets\wallet.xml', 'costbasis')
-watchlist_tickers = ra.get_xml_data(r'assets\watchlist.xml', 'name')
+portfolio_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\portfolio.xml', 'name')]
+portfolio_asset_types = [type.text for type in ra.get_xml_data(r'assets\portfolio.xml', 'type')]
+portfolio_amts = [amt.text for amt in ra.get_xml_data(r'assets\portfolio.xml', 'amount')]
+purchase_prices = [price.text for price in ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')]
+wallet_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\wallet.xml', 'name')]
+wallet_amts = [amt.text for amt in ra.get_xml_data(r'assets\wallet.xml', 'amount')]
+wallet_costbases = [basis.text for basis in ra.get_xml_data(r'assets\wallet.xml', 'costbasis')]
+watchlist_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\watchlist.xml', 'name')]
+
+TOKEN_OBJECTS = [yq.Ticker(symbol) for symbol in wallet_tickers[1:]]
+PORTFOLIO_OBJECTS = [yq.Ticker(symbol) for symbol in portfolio_tickers[1:]]
+WATCHLIST_OBJECTS = [yq.Ticker(symbol) for symbol in watchlist_tickers]
+
+trades = ra.get_xml_data(r'assets\trades.xml', 'trade')
+
+for trade in trades:
+    trade_list_item = []
+    trade_list_item.append(trade.contents[1].text)
+    trade_list_item.append(trade.contents[3].text)
+    trade_list_item.append(trade.contents[5].text)
+    trade_list_item.append(trade.contents[7].text)
+    trade_list_item.append(trade.contents[9].text)
+    OPEN_ORDERS.append(trade_list_item)
+
+    ticker_obj = yq.Ticker(trade.contents[1].text)
+    prices = ticker_obj.history(
+        interval='1m',
+        start=datetime.strptime(trade.contents[11].text, '%Y-%m-%d %H:%M:%S.%f'),
+        end=datetime.now()
+    )
+    cash = float(portfolio_amts[0])
+
+
+    asset_type = ""
+    match ticker_obj.quote_type[trade.contents[1].text]['quoteType']:
+        case 'EQUITY':
+            asset_type = 'Stock'
+        case 'ETF':
+            asset_type = 'ETF'
+    if trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Limit':
+        for row in prices.iterrows():
+            if row[1].iloc[3] < float(trade.contents[7].text):
+                execute_buy(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+                break
+    elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Limit':
+        for row in prices.iterrows():
+            if row[1].iloc[2] > float(trade.contents[7].text):
+                execute_sell(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+                break
+    elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Stop':
+        for row in prices.iterrows():
+            if row[1].iloc[2] > float(trade.contents[7].text):
+                execute_buy(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+                break
+    elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Stop':
+        for row in prices.iterrows():
+            if row[1].iloc[3] < float(trade.contents[7].text):
+                execute_sell(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+                break
+    elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Market':
+        if prices.size > 1:
+            execute_buy(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+            break
+    elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Market':
+        if prices.size > 1:
+            execute_sell(trade_list_item, ticker_obj, asset_type, cash, float(trade.contents[7].text))
+            break
+
+
 
 TAB2_ISLOADED = False
 TAB3_ISLOADED = False
@@ -1515,18 +1755,18 @@ all_tickers_list = [f"{ticker} - {name}" for (ticker, name) in tickers_names_zip
 
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
-portfolio_nav = float(portfolio_amts[0].text)
-portfolio_cash = float(portfolio_amts[0].text)
+portfolio_nav = float(portfolio_amts[0])
+portfolio_cash = float(portfolio_amts[0])
 
 for port_ticker, port_amt in zip(portfolio_tickers[1:], portfolio_amts[1:]):
-    price = yq.Ticker(port_ticker.text).history(period='5d').iloc[4][3]
-    portfolio_nav += float(price) * int(port_amt.text)
+    price = yq.Ticker(port_ticker).history(period='5d').iloc[4][3]
+    portfolio_nav += float(price) * int(port_amt)
 
-wallet_nav = float(wallet_amts[0].text)
-wallet_cash = float(wallet_amts[0].text)
+wallet_nav = float(wallet_amts[0])
+wallet_cash = float(wallet_amts[0])
 for wallet_ticker, wallet_amt in zip(wallet_tickers[1:], wallet_amts[1:]):
-    price = yq.Ticker(wallet_ticker.text).history('5d').iloc[-1][5]
-    wallet_nav += float(price) * float(wallet_amt.text)
+    price = yq.Ticker(wallet_ticker).history('5d').iloc[-1][5]
+    wallet_nav += float(price) * float(wallet_amt)
 
 # add genius font to database
 QFontDatabase.addApplicationFont('fonts/genius.ttf')
@@ -1538,171 +1778,178 @@ progressBar.setValue(50)
 ####################
 
 # dialog settings
-portfolio_dialog = QWidget()
-portfolio_dialog.setObjectName("Dialog")
-portfolio_dialog.resize(1000, 600)
-portfolio_dialog.setAutoFillBackground(True)
-portfolio_dialog.setStyleSheet('background-color: deepskyblue;')
+port_dialog = QWidget()
+port_dialog.setObjectName("Dialog")
+port_dialog.resize(1000, 600)
+port_dialog.setAutoFillBackground(True)
+port_dialog.setStyleSheet('background-color: deepskyblue;')
 
 # positions table settings
-portfolio_dialog.positions_view_groupbox = QGroupBox(portfolio_dialog)
-portfolio_dialog.positions_view_groupbox.setGeometry(10, 300, 900, 250)
-portfolio_dialog.positions_view_groupbox.setTitle("Your Portfolio")
-portfolio_dialog.positions_view_groupbox.setStyleSheet(
+port_dialog.positions_view_groupbox = QGroupBox(port_dialog)
+port_dialog.positions_view_groupbox.setGeometry(10, 300, 900, 250)
+port_dialog.positions_view_groupbox.setTitle("Your Portfolio")
+port_dialog.positions_view_groupbox.setStyleSheet(
     'background-color: white;'
 )
 
-portfolio_dialog.positions_view_groupbox.positions_view = QTableWidget(
-    portfolio_dialog.positions_view_groupbox)
-portfolio_dialog.positions_view_groupbox.positions_view.setEditTriggers(
+port_dialog.positions_view_groupbox.positions_view = QTableWidget(
+    port_dialog.positions_view_groupbox)
+port_dialog.positions_view_groupbox.positions_view.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
-portfolio_dialog.positions_view_groupbox.positions_view.setFont(
+port_dialog.positions_view_groupbox.positions_view.setFont(
     ARIAL_10)
-portfolio_dialog.positions_view_groupbox.positions_view.setRowCount(
+port_dialog.positions_view_groupbox.positions_view.setRowCount(
     len(portfolio_amts) - 1)
-portfolio_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
-portfolio_dialog.positions_view_groupbox.positions_view.setGeometry(
+port_dialog.positions_view_groupbox.positions_view.setColumnCount(8)
+port_dialog.positions_view_groupbox.positions_view.setGeometry(
     10, 20, 850, 200)
-portfolio_dialog.positions_view_groupbox.positions_view.setStyleSheet(
+port_dialog.positions_view_groupbox.positions_view.setStyleSheet(
     'background-color: white;')
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     0, QTableWidgetItem("Ticker"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     1, QTableWidgetItem("Today's Performance"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     2, QTableWidgetItem("Current Price"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     3, QTableWidgetItem("Gain/Loss Per Share"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     4, QTableWidgetItem("Purchase Price"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     5, QTableWidgetItem("# of Shares"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     6, QTableWidgetItem("Total Value"))
-portfolio_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
+port_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
     7, QTableWidgetItem("Position Gain/Loss"))
 for i in range(8):
-    portfolio_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(
+    port_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(
         i).setFont(ARIAL_10)
-for i in range(portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
-    portfolio_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(
-        0, QTableWidgetItem("1"))
-    portfolio_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(
+for i in range(port_dialog.positions_view_groupbox.positions_view.rowCount()):
+    port_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(
+        i, QTableWidgetItem("1"))
+    port_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(
         i).setFont(ARIAL_10)
+    for j in range(port_dialog.positions_view_groupbox.positions_view.columnCount()):
+        port_dialog.positions_view_groupbox.positions_view.setItem(i, j, QTableWidgetItem())
 update_portfolio_table()
-portfolio_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
+port_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 progressBar.setValue(60)
 
 # user's nav settings
-portfolio_dialog.currentNAV = QGroupBox(portfolio_dialog)
-portfolio_dialog.currentNAV.setTitle("Your NAV")
-portfolio_dialog.currentNAV.setGeometry(10, 10, 250, 250)
-portfolio_dialog.currentNAV.setStyleSheet('background-color: white;')
+port_dialog.currentNAV = QGroupBox(port_dialog)
+port_dialog.currentNAV.setTitle("Your NAV")
+port_dialog.currentNAV.setGeometry(10, 10, 250, 250)
+port_dialog.currentNAV.setStyleSheet('background-color: white;')
 # net liquidation value labels
-portfolio_dialog.currentNAV.netLiq = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.netLiq.setText("Net Liq: ")
-portfolio_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
-portfolio_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
-portfolio_dialog.currentNAV.liq = QLabel(portfolio_dialog.currentNAV)
+port_dialog.currentNAV.netLiq = QLabel(port_dialog.currentNAV)
+port_dialog.currentNAV.netLiq.setText("Net Liq: ")
+port_dialog.currentNAV.netLiq.setGeometry(10, 20, 80, 20)
+port_dialog.currentNAV.netLiq.setFont(QFont('genius', 10))
+port_dialog.currentNAV.liq = QLabel(port_dialog.currentNAV)
 
 
-portfolio_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
-portfolio_dialog.currentNAV.liq.setFont(QFont('genius', 20))
+port_dialog.currentNAV.liq.setGeometry(10, 40, 160, 40)
+port_dialog.currentNAV.liq.setFont(QFont('genius', 20))
 # cash value labels
-portfolio_dialog.currentNAV.cashLabel = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cashLabel.setText("Cash: ")
-portfolio_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
-portfolio_dialog.currentNAV.cash = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
+port_dialog.currentNAV.cashLabel = QLabel(port_dialog.currentNAV)
+port_dialog.currentNAV.cashLabel.setText("Cash: ")
+port_dialog.currentNAV.cashLabel.setGeometry(10, 90, 80, 20)
+port_dialog.currentNAV.cash = QLabel(port_dialog.currentNAV)
+port_dialog.currentNAV.cash.setGeometry(100, 90, 80, 20)
 progressBar.setValue(70)
 # buying power labels
-portfolio_dialog.currentNAV.buyingPowerLabel = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
-portfolio_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
-portfolio_dialog.currentNAV.buyingPower = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
+port_dialog.currentNAV.buyingPowerLabel = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.buyingPowerLabel.setText("Buying Power: ")
+port_dialog.currentNAV.buyingPowerLabel.setGeometry(10, 110, 80, 20)
+port_dialog.currentNAV.buyingPower = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.buyingPower.setGeometry(100, 110, 80, 20)
 # assets labels
-portfolio_dialog.currentNAV.assetsLabel = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
-portfolio_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
-portfolio_dialog.currentNAV.assets = QLabel(portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
+port_dialog.currentNAV.assetsLabel = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.assetsLabel.setText("Long Assets: ")
+port_dialog.currentNAV.assetsLabel.setGeometry(10, 130, 80, 20)
+port_dialog.currentNAV.assets = QLabel(port_dialog.currentNAV)
+port_dialog.currentNAV.assets.setGeometry(100, 130, 80, 20)
 # liabilities labels
-portfolio_dialog.currentNAV.liabilitiesLabel = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
-portfolio_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
-portfolio_dialog.currentNAV.liabilities = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
+port_dialog.currentNAV.liabilitiesLabel = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.liabilitiesLabel.setText("Short Assets: ")
+port_dialog.currentNAV.liabilitiesLabel.setGeometry(10, 150, 80, 20)
+port_dialog.currentNAV.liabilities = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.liabilities.setGeometry(100, 150, 80, 20)
 # return since inception labels
-portfolio_dialog.currentNAV.returnSinceInceptionLabel = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.returnSinceInceptionLabel.setText(
+port_dialog.currentNAV.returnSinceInceptionLabel = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.returnSinceInceptionLabel.setText(
     "Return Since Inception: ")
-portfolio_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(
+port_dialog.currentNAV.returnSinceInceptionLabel.setGeometry(
     10, 170, 120, 20)
-portfolio_dialog.currentNAV.returnSinceInception = QLabel(
-    portfolio_dialog.currentNAV)
-portfolio_dialog.currentNAV.returnSinceInception.setFont(
+port_dialog.currentNAV.returnSinceInception = QLabel(
+    port_dialog.currentNAV)
+port_dialog.currentNAV.returnSinceInception.setFont(
     QFont('genius', 20))
-portfolio_dialog.currentNAV.returnSinceInception.setGeometry(
+port_dialog.currentNAV.returnSinceInception.setGeometry(
     10, 190, 120, 30)
 update_portfolio_nav()
 progressBar.setValue(80)
 # watchlist table settings
-portfolio_dialog.watchlist_groupbox = QGroupBox(portfolio_dialog)
-portfolio_dialog.watchlist_groupbox.setTitle("Your Watchlist")
-portfolio_dialog.watchlist_groupbox.setGeometry(270, 10, 500, 250)
-portfolio_dialog.watchlist_groupbox.setStyleSheet(
+port_dialog.watchlist_groupbox = QGroupBox(port_dialog)
+port_dialog.watchlist_groupbox.setTitle("Your Watchlist")
+port_dialog.watchlist_groupbox.setGeometry(270, 10, 500, 250)
+port_dialog.watchlist_groupbox.setStyleSheet(
     'background-color: white;')
-portfolio_dialog.watchlist_groupbox.watchlist_view = QTableWidget(
-    portfolio_dialog.watchlist_groupbox)
-portfolio_dialog.watchlist_groupbox.watchlist_view.setEditTriggers(
+port_dialog.watchlist_groupbox.watchlist_view = QTableWidget(
+    port_dialog.watchlist_groupbox)
+port_dialog.watchlist_groupbox.watchlist_view.setEditTriggers(
     QAbstractItemView.EditTrigger.NoEditTriggers)
-portfolio_dialog.watchlist_groupbox.watchlist_view.setRowCount(
+port_dialog.watchlist_groupbox.watchlist_view.setRowCount(
     len(watchlist_tickers))
-portfolio_dialog.watchlist_groupbox.watchlist_view.setColumnCount(4)
-portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
+port_dialog.watchlist_groupbox.watchlist_view.setColumnCount(4)
+port_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
     0, QTableWidgetItem("Ticker"))
-portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
+port_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
     1, QTableWidgetItem("Today's Performance"))
-portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
+port_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
     2, QTableWidgetItem("Current Price"))
-portfolio_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
+port_dialog.watchlist_groupbox.watchlist_view.setHorizontalHeaderItem(
     3, QTableWidgetItem("Gain/Loss Per Share"))
 for i in range(4):
-    portfolio_dialog.watchlist_groupbox.watchlist_view.horizontalHeaderItem(
+    port_dialog.watchlist_groupbox.watchlist_view.horizontalHeaderItem(
         i).setFont(ARIAL_10)
-for i in range(portfolio_dialog.watchlist_groupbox.watchlist_view.rowCount()):
-    portfolio_dialog.watchlist_groupbox.watchlist_view.setVerticalHeaderItem(
+for i in range(port_dialog.watchlist_groupbox.watchlist_view.rowCount()):
+    port_dialog.watchlist_groupbox.watchlist_view.setVerticalHeaderItem(
         i, QTableWidgetItem(str(i + 1)))
-    portfolio_dialog.watchlist_groupbox.watchlist_view.verticalHeaderItem(
+    port_dialog.watchlist_groupbox.watchlist_view.verticalHeaderItem(
         i).setFont(ARIAL_10)
-portfolio_dialog.watchlist_groupbox.watchlist_view.setFont(
+    for j in range(port_dialog.watchlist_groupbox.watchlist_view.columnCount()):
+        port_dialog.watchlist_groupbox.watchlist_view.setItem(i, j, QTableWidgetItem())
+
+port_dialog.watchlist_groupbox.watchlist_view.setFont(
     ARIAL_10)
-portfolio_dialog.watchlist_groupbox.watchlist_view.setGeometry(
+port_dialog.watchlist_groupbox.watchlist_view.setGeometry(
     10, 20, 500, 200)
 update_watchlist_tickers()
-portfolio_dialog.watchlist_groupbox.watchlist_view.resizeColumnsToContents()
+port_dialog.watchlist_groupbox.watchlist_view.resizeColumnsToContents()
 # asset class pie chart
 asset_class_chart = QPieSeries()
-asset_class_chart.append("ETFs", 1)
-asset_class_chart.append("Stocks", 2)
-asset_class_chart.append("Options", 3)
-asset_class_chart.append("Futures", 4)
-asset_class_chart.append("Cash", 5)
+asset_class_chart.append("Long ETFs", 1)
+asset_class_chart.append("Short ETFs", 2)
+asset_class_chart.append("Long Stocks", 3)
+asset_class_chart.append("Short Stocks", 4)
+asset_class_chart.append("Long Options", 5)
+asset_class_chart.append("Short Options", 6)
+asset_class_chart.append("Cash", 7)
 chart = QChart()
 chart.addSeries(asset_class_chart)
 chart.setTitle("Positions by Asset Class")
 chart.setVisible(True)
-portfolio_dialog.chart_view = QChartView(chart)
-portfolio_dialog.chart_view.setParent(portfolio_dialog)
-portfolio_dialog.chart_view.setGeometry(780, 2, 500, 270)
-portfolio_dialog.chart_view.setVisible(True)
+port_dialog.chart_view = QChartView(chart)
+port_dialog.chart_view.setParent(port_dialog)
+port_dialog.chart_view.setGeometry(780, 2, 500, 270)
+port_dialog.chart_view.setVisible(True)
 update_portfolio_piechart()
 
 
@@ -1939,10 +2186,8 @@ size_retain = adx_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 adx_settings_button.setSizePolicy(size_retain)
 adx_settings_button.setIcon(QIcon('icons/gear.jpg'))
-adx_widget.enterEvent = lambda event: on_enter(
-    event, adx_widget, adx_settings_button)
-adx_widget.leaveEvent = lambda event: on_exit(
-    event, adx_widget, adx_settings_button)
+adx_widget.enterEvent = lambda event: on_enter(event, adx_widget, adx_settings_button)
+adx_widget.leaveEvent = lambda event: on_exit(event, adx_widget, adx_settings_button)
 def adx_button_clicked():
     """
     Displays a separate window with adjustable settings for the adx indicator
@@ -2030,10 +2275,8 @@ size_retain = adxr_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 adxr_settings_button.setSizePolicy(size_retain)
 adxr_settings_button.setIcon(QIcon('icons/gear.jpg'))
-adxr_widget.enterEvent = lambda event: on_enter(
-    event, adxr_widget, adxr_settings_button)
-adxr_widget.leaveEvent = lambda event: on_exit(
-    event, adxr_widget, adxr_settings_button)
+adxr_widget.enterEvent = lambda event: on_enter(event, adxr_widget, adxr_settings_button)
+adxr_widget.leaveEvent = lambda event: on_exit(event, adxr_widget, adxr_settings_button)
 def adxr_button_clicked():
     """
     Displays a separate window with adjustable settings for the adxr indicator
@@ -2121,10 +2364,8 @@ size_retain = apo_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 apo_settings_button.setSizePolicy(size_retain)
 apo_settings_button.setIcon(QIcon('icons/gear.jpg'))
-apo_widget.enterEvent = lambda event: on_enter(
-    event, apo_widget, apo_settings_button)
-apo_widget.leaveEvent = lambda event: on_exit(
-    event, apo_widget, apo_settings_button)
+apo_widget.enterEvent = lambda event: on_enter(event, apo_widget, apo_settings_button)
+apo_widget.leaveEvent = lambda event: on_exit(event, apo_widget, apo_settings_button)
 def apo_button_clicked():
     """
     Displays a separate window with adjustable settings for the apo indicator
@@ -2237,10 +2478,8 @@ size_retain = aroon_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 aroon_settings_button.setSizePolicy(size_retain)
 aroon_settings_button.setIcon(QIcon('icons/gear.jpg'))
-aroon_widget.enterEvent = lambda event: on_enter(
-    event, aroon_widget, aroon_settings_button)
-aroon_widget.leaveEvent = lambda event: on_exit(
-    event, aroon_widget, aroon_settings_button)
+aroon_widget.enterEvent = lambda event: on_enter(event, aroon_widget, aroon_settings_button)
+aroon_widget.leaveEvent = lambda event: on_exit(event, aroon_widget, aroon_settings_button)
 def aroon_button_clicked():
     """
     Displays a separate window with adjustable settings for the aroon indicator
@@ -2328,10 +2567,8 @@ size_retain = aroonosc_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 aroonosc_settings_button.setSizePolicy(size_retain)
 aroonosc_settings_button.setIcon(QIcon('icons/gear.jpg'))
-aroonosc_widget.enterEvent = lambda event: on_enter(
-    event, aroonosc_widget, aroonosc_settings_button)
-aroonosc_widget.leaveEvent = lambda event: on_exit(
-    event, aroonosc_widget, aroonosc_settings_button)
+aroonosc_widget.enterEvent = lambda e: on_enter(e, aroonosc_widget, aroonosc_settings_button)
+aroonosc_widget.leaveEvent = lambda e: on_exit(e, aroonosc_widget, aroonosc_settings_button)
 def aroonosc_button_clicked():
     """
     Displays a separate window with adjustable settings for the aroonosc indicator
@@ -2419,10 +2656,8 @@ size_retain = bop_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 bop_settings_button.setSizePolicy(size_retain)
 bop_settings_button.setIcon(QIcon('icons/gear.jpg'))
-bop_widget.enterEvent = lambda event: on_enter(
-    event, bop_widget, bop_settings_button)
-bop_widget.leaveEvent = lambda event: on_exit(
-    event, bop_widget, bop_settings_button)
+bop_widget.enterEvent = lambda event: on_enter(event, bop_widget, bop_settings_button)
+bop_widget.leaveEvent = lambda event: on_exit(event, bop_widget, bop_settings_button)
 def bop_button_clicked():
     """
     Displays a separate window with adjustable settings for the bop indicator
@@ -2501,10 +2736,8 @@ size_retain = cci_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 cci_settings_button.setSizePolicy(size_retain)
 cci_settings_button.setIcon(QIcon('icons/gear.jpg'))
-cci_widget.enterEvent = lambda event: on_enter(
-    event, cci_widget, cci_settings_button)
-cci_widget.leaveEvent = lambda event: on_exit(
-    event, cci_widget, cci_settings_button)
+cci_widget.enterEvent = lambda event: on_enter(event, cci_widget, cci_settings_button)
+cci_widget.leaveEvent = lambda event: on_exit(event, cci_widget, cci_settings_button)
 def cci_button_clicked():
     """
     Displays a separate window with adjustable settings for the cci indicator
@@ -2592,10 +2825,8 @@ size_retain = cmo_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 cmo_settings_button.setSizePolicy(size_retain)
 cmo_settings_button.setIcon(QIcon('icons/gear.jpg'))
-cmo_widget.enterEvent = lambda event: on_enter(
-    event, cmo_widget, cmo_settings_button)
-cmo_widget.leaveEvent = lambda event: on_exit(
-    event, cmo_widget, cmo_settings_button)
+cmo_widget.enterEvent = lambda event: on_enter(event, cmo_widget, cmo_settings_button)
+cmo_widget.leaveEvent = lambda event: on_exit(event, cmo_widget, cmo_settings_button)
 def cmo_button_clicked():
     """
     Displays a separate window with adjustable settings for the cmo indicator
@@ -2683,10 +2914,8 @@ size_retain = dx_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 dx_settings_button.setSizePolicy(size_retain)
 dx_settings_button.setIcon(QIcon('icons/gear.jpg'))
-dx_widget.enterEvent = lambda event: on_enter(
-    event, dx_widget, dx_settings_button)
-dx_widget.leaveEvent = lambda event: on_exit(
-    event, dx_widget, dx_settings_button)
+dx_widget.enterEvent = lambda event: on_enter(event, dx_widget, dx_settings_button)
+dx_widget.leaveEvent = lambda event: on_exit(event, dx_widget, dx_settings_button)
 def dx_button_clicked():
     """
     Displays a separate window with adjustable settings for the dx indicator
@@ -2774,10 +3003,8 @@ size_retain = macdext_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 macdext_settings_button.setSizePolicy(size_retain)
 macdext_settings_button.setIcon(QIcon('icons/gear.jpg'))
-macdext_widget.enterEvent = lambda event: on_enter(
-    event, macdext_widget, macdext_settings_button)
-macdext_widget.leaveEvent = lambda event: on_exit(
-    event, macdext_widget, macdext_settings_button)
+macdext_widget.enterEvent = lambda event: on_enter(event, macdext_widget, macdext_settings_button)
+macdext_widget.leaveEvent = lambda event: on_exit(event, macdext_widget, macdext_settings_button)
 def macdext_button_clicked():
     """
     Displays a separate window with adjustable settings for the macdext indicator
@@ -2920,10 +3147,8 @@ size_retain = mfi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 mfi_settings_button.setSizePolicy(size_retain)
 mfi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-mfi_widget.enterEvent = lambda event: on_enter(
-    event, mfi_widget, mfi_settings_button)
-mfi_widget.leaveEvent = lambda event: on_exit(
-    event, mfi_widget, mfi_settings_button)
+mfi_widget.enterEvent = lambda event: on_enter(event, mfi_widget, mfi_settings_button)
+mfi_widget.leaveEvent = lambda event: on_exit(event, mfi_widget, mfi_settings_button)
 def mfi_button_clicked():
     """
     Displays a separate window with adjustable settings for the mfi indicator
@@ -3011,10 +3236,8 @@ size_retain = minusdi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 minusdi_settings_button.setSizePolicy(size_retain)
 minusdi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-minusdi_widget.enterEvent = lambda event: on_enter(
-    event, minusdi_widget, minusdi_settings_button)
-minusdi_widget.leaveEvent = lambda event: on_exit(
-    event, minusdi_widget, minusdi_settings_button)
+minusdi_widget.enterEvent = lambda event: on_enter(event, minusdi_widget, minusdi_settings_button)
+minusdi_widget.leaveEvent = lambda event: on_exit(event, minusdi_widget, minusdi_settings_button)
 def minusdi_button_clicked():
     """
     Displays a separate window with adjustable settings for the minusdi indicator
@@ -3102,10 +3325,8 @@ size_retain = minusdm_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 minusdm_settings_button.setSizePolicy(size_retain)
 minusdm_settings_button.setIcon(QIcon('icons/gear.jpg'))
-minusdm_widget.enterEvent = lambda event: on_enter(
-    event, minusdm_widget, minusdm_settings_button)
-minusdm_widget.leaveEvent = lambda event: on_exit(
-    event, minusdm_widget, minusdm_settings_button)
+minusdm_widget.enterEvent = lambda event: on_enter(event, minusdm_widget, minusdm_settings_button)
+minusdm_widget.leaveEvent = lambda event: on_exit(event, minusdm_widget, minusdm_settings_button)
 def minusdm_button_clicked():
     """
     Displays a separate window with adjustable settings for the minusdm indicator
@@ -3193,10 +3414,8 @@ size_retain = mom_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 mom_settings_button.setSizePolicy(size_retain)
 mom_settings_button.setIcon(QIcon('icons/gear.jpg'))
-mom_widget.enterEvent = lambda event: on_enter(
-    event, mom_widget, mom_settings_button)
-mom_widget.leaveEvent = lambda event: on_exit(
-    event, mom_widget, mom_settings_button)
+mom_widget.enterEvent = lambda event: on_enter(event, mom_widget, mom_settings_button)
+mom_widget.leaveEvent = lambda event: on_exit(event, mom_widget, mom_settings_button)
 def mom_button_clicked():
     """
     Displays a separate window with adjustable settings for the mom indicator
@@ -3284,10 +3503,8 @@ size_retain = plusdi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 plusdi_settings_button.setSizePolicy(size_retain)
 plusdi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-plusdi_widget.enterEvent = lambda event: on_enter(
-    event, plusdi_widget, plusdi_settings_button)
-plusdi_widget.leaveEvent = lambda event: on_exit(
-    event, plusdi_widget, plusdi_settings_button)
+plusdi_widget.enterEvent = lambda event: on_enter(event, plusdi_widget, plusdi_settings_button)
+plusdi_widget.leaveEvent = lambda event: on_exit(event, plusdi_widget, plusdi_settings_button)
 def plusdi_button_clicked():
     """
     Displays a separate window with adjustable settings for the plusdi indicator
@@ -3375,10 +3592,8 @@ size_retain = plusdm_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 plusdm_settings_button.setSizePolicy(size_retain)
 plusdm_settings_button.setIcon(QIcon('icons/gear.jpg'))
-plusdm_widget.enterEvent = lambda event: on_enter(
-    event, plusdm_widget, plusdm_settings_button)
-plusdm_widget.leaveEvent = lambda event: on_exit(
-    event, plusdm_widget, plusdm_settings_button)
+plusdm_widget.enterEvent = lambda event: on_enter(event, plusdm_widget, plusdm_settings_button)
+plusdm_widget.leaveEvent = lambda event: on_exit(event, plusdm_widget, plusdm_settings_button)
 def plusdm_button_clicked():
     """
     Displays a separate window with adjustable settings for the plusdm indicator
@@ -3466,10 +3681,8 @@ size_retain = kama_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 kama_settings_button.setSizePolicy(size_retain)
 kama_settings_button.setIcon(QIcon('icons/gear.jpg'))
-kama_widget.enterEvent = lambda event: on_enter(
-    event, kama_widget, kama_settings_button)
-kama_widget.leaveEvent = lambda event: on_exit(
-    event, kama_widget, kama_settings_button)
+kama_widget.enterEvent = lambda event: on_enter(event, kama_widget, kama_settings_button)
+kama_widget.leaveEvent = lambda event: on_exit(event, kama_widget, kama_settings_button)
 def kama_button_clicked():
     """
     Displays a separate window with adjustable settings for the kama indicator
@@ -3582,10 +3795,8 @@ size_retain = pvo_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 pvo_settings_button.setSizePolicy(size_retain)
 pvo_settings_button.setIcon(QIcon('icons/gear.jpg'))
-pvo_widget.enterEvent = lambda event: on_enter(
-    event, pvo_widget, pvo_settings_button)
-pvo_widget.leaveEvent = lambda event: on_exit(
-    event, pvo_widget, pvo_settings_button)
+pvo_widget.enterEvent = lambda event: on_enter(event, pvo_widget, pvo_settings_button)
+pvo_widget.leaveEvent = lambda event: on_exit(event, pvo_widget, pvo_settings_button)
 def pvo_button_clicked():
     """
     Displays a separate window with adjustable settings for the pvo indicator
@@ -3698,10 +3909,8 @@ size_retain = roc_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 roc_settings_button.setSizePolicy(size_retain)
 roc_settings_button.setIcon(QIcon('icons/gear.jpg'))
-roc_widget.enterEvent = lambda event: on_enter(
-    event, roc_widget, roc_settings_button)
-roc_widget.leaveEvent = lambda event: on_exit(
-    event, roc_widget, roc_settings_button)
+roc_widget.enterEvent = lambda event: on_enter(event, roc_widget, roc_settings_button)
+roc_widget.leaveEvent = lambda event: on_exit(event, roc_widget, roc_settings_button)
 def roc_button_clicked():
     """
     Displays a separate window with adjustable settings for the roc indicator
@@ -3789,10 +3998,8 @@ size_retain = rocp_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 rocp_settings_button.setSizePolicy(size_retain)
 rocp_settings_button.setIcon(QIcon('icons/gear.jpg'))
-rocp_widget.enterEvent = lambda event: on_enter(
-    event, rocp_widget, rocp_settings_button)
-rocp_widget.leaveEvent = lambda event: on_exit(
-    event, rocp_widget, rocp_settings_button)
+rocp_widget.enterEvent = lambda event: on_enter(event, rocp_widget, rocp_settings_button)
+rocp_widget.leaveEvent = lambda event: on_exit(event, rocp_widget, rocp_settings_button)
 def rocp_button_clicked():
     """
     Displays a separate window with adjustable settings for the rocp indicator
@@ -3880,10 +4087,8 @@ size_retain = rocr_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 rocr_settings_button.setSizePolicy(size_retain)
 rocr_settings_button.setIcon(QIcon('icons/gear.jpg'))
-rocr_widget.enterEvent = lambda event: on_enter(
-    event, rocr_widget, rocr_settings_button)
-rocr_widget.leaveEvent = lambda event: on_exit(
-    event, rocr_widget, rocr_settings_button)
+rocr_widget.enterEvent = lambda event: on_enter(event, rocr_widget, rocr_settings_button)
+rocr_widget.leaveEvent = lambda event: on_exit(event, rocr_widget, rocr_settings_button)
 def rocr_button_clicked():
     """
     Displays a separate window with adjustable settings for the rocr indicator
@@ -3971,10 +4176,8 @@ size_retain = rocr100_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 rocr100_settings_button.setSizePolicy(size_retain)
 rocr100_settings_button.setIcon(QIcon('icons/gear.jpg'))
-rocr100_widget.enterEvent = lambda event: on_enter(
-    event, rocr100_widget, rocr100_settings_button)
-rocr100_widget.leaveEvent = lambda event: on_exit(
-    event, rocr100_widget, rocr100_settings_button)
+rocr100_widget.enterEvent = lambda event: on_enter(event, rocr100_widget, rocr100_settings_button)
+rocr100_widget.leaveEvent = lambda event: on_exit(event, rocr100_widget, rocr100_settings_button)
 def rocr100_button_clicked():
     """
     Displays a separate window with adjustable settings for the rocr100 indicator
@@ -4062,10 +4265,8 @@ size_retain = rsi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 rsi_settings_button.setSizePolicy(size_retain)
 rsi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-rsi_widget.enterEvent = lambda event: on_enter(
-    event, rsi_widget, rsi_settings_button)
-rsi_widget.leaveEvent = lambda event: on_exit(
-    event, rsi_widget, rsi_settings_button)
+rsi_widget.enterEvent = lambda event: on_enter(event, rsi_widget, rsi_settings_button)
+rsi_widget.leaveEvent = lambda event: on_exit(event, rsi_widget, rsi_settings_button)
 def rsi_button_clicked():
     """
     Displays a separate window with adjustable settings for the rsi indicator
@@ -4153,10 +4354,8 @@ size_retain = slowstoch_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 slowstoch_settings_button.setSizePolicy(size_retain)
 slowstoch_settings_button.setIcon(QIcon('icons/gear.jpg'))
-slowstoch_widget.enterEvent = lambda event: on_enter(
-    event, slowstoch_widget, slowstoch_settings_button)
-slowstoch_widget.leaveEvent = lambda event: on_exit(
-    event, slowstoch_widget, slowstoch_settings_button)
+slowstoch_widget.enterEvent = lambda e: on_enter(e, slowstoch_widget, slowstoch_settings_button)
+slowstoch_widget.leaveEvent = lambda e: on_exit(e, slowstoch_widget, slowstoch_settings_button)
 def slowstoch_button_clicked():
     """
     Displays a separate window with adjustable settings for the slowstoch indicator
@@ -4291,10 +4490,8 @@ size_retain = faststoch_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 faststoch_settings_button.setSizePolicy(size_retain)
 faststoch_settings_button.setIcon(QIcon('icons/gear.jpg'))
-faststoch_widget.enterEvent = lambda event: on_enter(
-    event, faststoch_widget, faststoch_settings_button)
-faststoch_widget.leaveEvent = lambda event: on_exit(
-    event, faststoch_widget, faststoch_settings_button)
+faststoch_widget.enterEvent = lambda e: on_enter(e, faststoch_widget, faststoch_settings_button)
+faststoch_widget.leaveEvent = lambda e: on_exit(e, faststoch_widget, faststoch_settings_button)
 def faststoch_button_clicked():
     """
     Displays a separate window with adjustable settings for the faststoch indicator
@@ -4407,10 +4604,8 @@ size_retain = stochrsi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 stochrsi_settings_button.setSizePolicy(size_retain)
 stochrsi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-stochrsi_widget.enterEvent = lambda event: on_enter(
-    event, stochrsi_widget, stochrsi_settings_button)
-stochrsi_widget.leaveEvent = lambda event: on_exit(
-    event, stochrsi_widget, stochrsi_settings_button)
+stochrsi_widget.enterEvent = lambda e: on_enter(e, stochrsi_widget, stochrsi_settings_button)
+stochrsi_widget.leaveEvent = lambda e: on_exit(e, stochrsi_widget, stochrsi_settings_button)
 def stochrsi_button_clicked():
     """
     Displays a separate window with adjustable settings for the stochrsi indicator
@@ -4523,10 +4718,8 @@ size_retain = tsi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 tsi_settings_button.setSizePolicy(size_retain)
 tsi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-tsi_widget.enterEvent = lambda event: on_enter(
-    event, tsi_widget, tsi_settings_button)
-tsi_widget.leaveEvent = lambda event: on_exit(
-    event, tsi_widget, tsi_settings_button)
+tsi_widget.enterEvent = lambda e: on_enter(e, tsi_widget, tsi_settings_button)
+tsi_widget.leaveEvent = lambda e: on_exit(e, tsi_widget, tsi_settings_button)
 def tsi_button_clicked():
     """
     Displays a separate window with adjustable settings for the tsi indicator
@@ -4625,10 +4818,8 @@ size_retain = ultosc_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 ultosc_settings_button.setSizePolicy(size_retain)
 ultosc_settings_button.setIcon(QIcon('icons/gear.jpg'))
-ultosc_widget.enterEvent = lambda event: on_enter(
-    event, ultosc_widget, ultosc_settings_button)
-ultosc_widget.leaveEvent = lambda event: on_exit(
-    event, ultosc_widget, ultosc_settings_button)
+ultosc_widget.enterEvent = lambda e: on_enter(e, ultosc_widget, ultosc_settings_button)
+ultosc_widget.leaveEvent = lambda e: on_exit(e, ultosc_widget, ultosc_settings_button)
 def ultosc_button_clicked():
     """
     Displays a separate window with adjustable settings for the ultosc indicator
@@ -4737,10 +4928,8 @@ size_retain = willr_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 willr_settings_button.setSizePolicy(size_retain)
 willr_settings_button.setIcon(QIcon('icons/gear.jpg'))
-willr_widget.enterEvent = lambda event: on_enter(
-    event, willr_widget, willr_settings_button)
-willr_widget.leaveEvent = lambda event: on_exit(
-    event, willr_widget, willr_settings_button)
+willr_widget.enterEvent = lambda e: on_enter(e, willr_widget, willr_settings_button)
+willr_widget.leaveEvent = lambda e: on_exit(e, willr_widget, willr_settings_button)
 def willr_button_clicked():
     """
     Displays a separate window with adjustable settings for the willr indicator
@@ -4846,10 +5035,8 @@ size_retain = dpo_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 dpo_settings_button.setSizePolicy(size_retain)
 dpo_settings_button.setIcon(QIcon('icons/gear.jpg'))
-dpo_widget.enterEvent = lambda event: on_enter(
-    event, dpo_widget, dpo_settings_button)
-dpo_widget.leaveEvent = lambda event: on_exit(
-    event, dpo_widget, dpo_settings_button)
+dpo_widget.enterEvent = lambda e: on_enter(e, dpo_widget, dpo_settings_button)
+dpo_widget.leaveEvent = lambda e: on_exit(e, dpo_widget, dpo_settings_button)
 def dpo_button_clicked():
     """
     Displays a separate window with adjustable settings for the dpo indicator
@@ -4937,10 +5124,8 @@ size_retain = kst_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 kst_settings_button.setSizePolicy(size_retain)
 kst_settings_button.setIcon(QIcon('icons/gear.jpg'))
-kst_widget.enterEvent = lambda event: on_enter(
-    event, kst_widget, kst_settings_button)
-kst_widget.leaveEvent = lambda event: on_exit(
-    event, kst_widget, kst_settings_button)
+kst_widget.enterEvent = lambda e: on_enter(e, kst_widget, kst_settings_button)
+kst_widget.leaveEvent = lambda e: on_exit(e, kst_widget, kst_settings_button)
 def kst_button_clicked():
     """
     Displays a separate window with adjustable settings for the kst indicator
@@ -5116,10 +5301,8 @@ size_retain = ichimoku_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 ichimoku_settings_button.setSizePolicy(size_retain)
 ichimoku_settings_button.setIcon(QIcon('icons/gear.jpg'))
-ichimoku_widget.enterEvent = lambda event: on_enter(
-    event, ichimoku_widget, ichimoku_settings_button)
-ichimoku_widget.leaveEvent = lambda event: on_exit(
-    event, ichimoku_widget, ichimoku_settings_button)
+ichimoku_widget.enterEvent = lambda e: on_enter(e, ichimoku_widget, ichimoku_settings_button)
+ichimoku_widget.leaveEvent = lambda e: on_exit(e, ichimoku_widget, ichimoku_settings_button)
 def ichimoku_button_clicked():
     """
     Displays a separate window with adjustable settings for the ichimoku indicator
@@ -5244,10 +5427,8 @@ size_retain = mi_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 mi_settings_button.setSizePolicy(size_retain)
 mi_settings_button.setIcon(QIcon('icons/gear.jpg'))
-mi_widget.enterEvent = lambda event: on_enter(
-    event, mi_widget, mi_settings_button)
-mi_widget.leaveEvent = lambda event: on_exit(
-    event, mi_widget, mi_settings_button)
+mi_widget.enterEvent = lambda e: on_enter(e, mi_widget, mi_settings_button)
+mi_widget.leaveEvent = lambda e: on_exit(e, mi_widget, mi_settings_button)
 def mi_button_clicked():
     """
     Displays a separate window with adjustable settings for the mass index
@@ -5349,12 +5530,8 @@ size_retain = schaff_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 schaff_settings_button.setSizePolicy(size_retain)
 schaff_settings_button.setIcon(QIcon('icons/gear.jpg'))
-schaff_widget.enterEvent = lambda event: on_enter(
-    event, schaff_widget, schaff_settings_button
-)
-schaff_widget.leaveEvent = lambda event: on_exit(
-    event, schaff_widget, schaff_settings_button
-)
+schaff_widget.enterEvent = lambda e: on_enter(e, schaff_widget, schaff_settings_button)
+schaff_widget.leaveEvent = lambda e: on_exit(e, schaff_widget, schaff_settings_button)
 def schaff_button_clicked():
     """
     Displays a separate window with adjustable settings for the schaff indicator
@@ -5489,10 +5666,8 @@ size_retain = trix_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 trix_settings_button.setSizePolicy(size_retain)
 trix_settings_button.setIcon(QIcon('icons/gear.jpg'))
-trix_widget.enterEvent = lambda event: on_enter(
-    event, trix_widget, trix_settings_button)
-trix_widget.leaveEvent = lambda event: on_exit(
-    event, trix_widget, trix_settings_button)
+trix_widget.enterEvent = lambda e: on_enter(e, trix_widget, trix_settings_button)
+trix_widget.leaveEvent = lambda e: on_exit(e, trix_widget, trix_settings_button)
 def trix_button_clicked():
     """
     Displays a separate window with adjustable settings for the trix indicator
@@ -5578,10 +5753,8 @@ size_retain = psar_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 psar_settings_button.setSizePolicy(size_retain)
 psar_settings_button.setIcon(QIcon('icons/gear.jpg'))
-psar_widget.enterEvent = lambda event: on_enter(
-    event, psar_widget, psar_settings_button)
-psar_widget.leaveEvent = lambda event: on_exit(
-    event, psar_widget, psar_settings_button)
+psar_widget.enterEvent = lambda e: on_enter(e, psar_widget, psar_settings_button)
+psar_widget.leaveEvent = lambda e: on_exit(e, psar_widget, psar_settings_button)
 def psar_button_clicked():
     """
     Displays a separate window with adjustable settings for the PSAR indicator
@@ -5683,10 +5856,8 @@ size_retain = vortex_settings_button.sizePolicy()
 size_retain.setRetainSizeWhenHidden(True)
 vortex_settings_button.setSizePolicy(size_retain)
 vortex_settings_button.setIcon(QIcon('icons/gear.jpg'))
-vortex_widget.enterEvent = lambda event: on_enter(
-    event, vortex_widget, vortex_settings_button)
-vortex_widget.leaveEvent = lambda event: on_exit(
-    event, vortex_widget, vortex_settings_button)
+vortex_widget.enterEvent = lambda e: on_enter(e, vortex_widget, vortex_settings_button)
+vortex_widget.leaveEvent = lambda e: on_exit(e, vortex_widget, vortex_settings_button)
 def vortex_button_clicked():
     """
     Displays a separate window with adjustable settings for the trix indicator
@@ -5792,6 +5963,293 @@ chart_dialog.addTab(technical_indicators_dialog, "Technical Indicators")
 trade_dialog = QDialog()
 trade_dialog.setStyleSheet('background-color: deepskyblue;')
 
+trade_dialog.search_bar_groupbox = QGroupBox(trade_dialog)
+trade_dialog.search_bar_groupbox.setStyleSheet('background-color: white;')
+trade_dialog.search_bar_groupbox.setTitle("Find a Stock")
+trade_dialog.search_bar_groupbox.setGeometry(10, 10, 960, 70)
+trade_dialog.search_bar_groupbox.searchBar = QLineEdit(trade_dialog.search_bar_groupbox)
+trade_dialog.search_bar_groupbox.searchBar.setGeometry(10, 20, 850, 40)
+trade_dialog.search_bar_groupbox.searchBar.textChanged.connect(search_text_changed)
+trade_dialog.search_bar_groupbox.searchBar.setFont(ARIAL_10)
+trade_dialog.search_bar_groupbox.searchBar.setCompleter(completer)
+trade_dialog.search_bar_groupbox.search_button = QPushButton(trade_dialog.search_bar_groupbox)
+trade_dialog.search_bar_groupbox.search_button.setGeometry(870, 20, 80, 40)
+trade_dialog.search_bar_groupbox.search_button.setText("Trade")
+
+trade_dialog.basic_info_groupbox = QGroupBox(trade_dialog)
+trade_dialog.basic_info_groupbox.setStyleSheet('background-color: white;')
+trade_dialog.basic_info_groupbox.setTitle("Information")
+trade_dialog.basic_info_groupbox.setGeometry(980, 10, 300, 70)
+
+trade_dialog.basic_info_groupbox.full_name_label = QLabel(trade_dialog.basic_info_groupbox)
+trade_dialog.basic_info_groupbox.full_name_label.setText("")
+trade_dialog.basic_info_groupbox.full_name_label.setGeometry(10, 15, 150, 15)
+
+trade_dialog.basic_info_groupbox.price_label = QLabel(trade_dialog.basic_info_groupbox)
+trade_dialog.basic_info_groupbox.price_label.setText("Price (+/-)")
+trade_dialog.basic_info_groupbox.price_label.setGeometry(160, 15, 100, 20)
+
+trade_dialog.basic_info_groupbox.bid_label = QLabel(trade_dialog.basic_info_groupbox)
+trade_dialog.basic_info_groupbox.bid_label.setText("Bid: <bid_price> (bid_size)")
+trade_dialog.basic_info_groupbox.bid_label.setGeometry(10, 30, 140, 20)
+
+trade_dialog.basic_info_groupbox.ask_label = QLabel(trade_dialog.basic_info_groupbox)
+trade_dialog.basic_info_groupbox.ask_label.setText("Ask: <ask_price> (ask_size)")
+trade_dialog.basic_info_groupbox.ask_label.setGeometry(160, 30, 140, 20)
+
+trade_dialog.order_groupbox = QGroupBox(trade_dialog)
+trade_dialog.order_groupbox.setStyleSheet('background-color: white;')
+trade_dialog.order_groupbox.setTitle("Create Order")
+trade_dialog.order_groupbox.setGeometry(10, 90, 450, 400)
+
+trade_dialog.order_groupbox.action_label = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.action_label.setText("Action")
+trade_dialog.order_groupbox.action_label.setGeometry(10, 50, 100, 15)
+
+trade_dialog.order_groupbox.action_combobox = QComboBox(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.action_combobox.addItems(['Buy', 'Sell'])
+trade_dialog.order_groupbox.action_combobox.setGeometry(10, 70, 100, 40)
+
+trade_dialog.order_groupbox.qty_label = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.qty_label.setText("Quantity")
+trade_dialog.order_groupbox.qty_label.setGeometry(10, 150, 100, 15)
+
+trade_dialog.order_groupbox.qty_spinbox = QSpinBox(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.qty_spinbox.setGeometry(10, 170, 100, 40)
+
+trade_dialog.order_groupbox.max_btn = QPushButton(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.max_btn.setText("Max")
+trade_dialog.order_groupbox.max_btn.setGeometry(120, 170, 100, 40)
+trade_dialog.order_groupbox.max_btn.setEnabled(False)
+
+trade_dialog.order_groupbox.type_label = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.type_label.setText("Order Type")
+trade_dialog.order_groupbox.type_label.setGeometry(10, 230, 100, 15)
+
+def trade_searchbar_click():
+    global CURRENT_TRADE_STOCK
+
+    ticker = trade_dialog.search_bar_groupbox.searchBar.text().split(' ')[0]
+    CURRENT_TRADE_STOCK = ticker
+    trade_dialog.order_groupbox.max_btn.setEnabled(True)
+
+    prices = yq.Ticker(ticker).history('1d', '1m')
+    day_chart.removeAllSeries()
+    day_lineseries = QLineSeries()
+    for idx, close in enumerate(prices.loc[:, 'close']):
+        datetime = QDateTime().fromString(str(prices.index[idx][1])[0:19], "yyyy-MM-dd hh:mm:ss")
+        epoch_dt = float(datetime.toMSecsSinceEpoch())
+        day_lineseries.append(epoch_dt, close)
+
+    day_chart.addSeries(day_lineseries)
+
+    day_chart.createDefaultAxes()
+    day_chart.axes(Qt.Orientation.Horizontal)[0].hide()
+
+    day_chart_x_axis = QDateTimeAxis()
+    day_chart_x_axis.setTickCount(7)
+    day_chart_x_axis.setFormat("h:mm")
+    day_chart_x_axis.setTitleText("Date")
+    day_chart_x_axis.setVisible(True)
+
+    day_chart.addAxis(day_chart_x_axis, Qt.AlignmentFlag.AlignBottom)
+    day_lineseries.attachAxis(day_chart_x_axis)
+
+
+def update_trade_dialog():
+    ticker_symbol = CURRENT_TRADE_STOCK
+    yq_ticker = yq.Ticker(ticker_symbol)
+    all_modules = yq_ticker.all_modules[ticker_symbol]
+
+    quote_type = all_modules['quoteType']
+    prices = all_modules['price']
+    summary_detail = all_modules['summaryDetail']
+
+    trade_dialog.basic_info_groupbox.full_name_label.setText(quote_type['shortName'])
+    trade_dialog.basic_info_groupbox.price_label.setText(f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})")
+    trade_dialog.basic_info_groupbox.bid_label.setText(f"Bid: {summary_detail['bid']} ({summary_detail['bidSize']})")
+    trade_dialog.basic_info_groupbox.ask_label.setText(f"Ask: {summary_detail['ask']} ({summary_detail['askSize']})")
+
+    trade_dialog.order_groupbox.limit_stop_bid.setText(f"Bid:\n{summary_detail['bid']}\n({summary_detail['bidSize']})")
+    trade_dialog.order_groupbox.limit_stop_ask.setText(f"Ask:\n{summary_detail['ask']}\n({summary_detail['askSize']})")
+    trade_dialog.order_groupbox.limit_stop_mid.setText(f"Mid:\n{(summary_detail['bid'] + summary_detail['ask']) / 2}")
+    slider_range = (summary_detail['ask'] - summary_detail['bid']) * 100
+    trade_dialog.order_groupbox.price_slider.setRange(0, slider_range)
+
+
+def on_ordertype_change(value):
+    match value:
+        case 'Market':
+            trade_dialog.order_groupbox.price_slider.setVisible(False)
+            trade_dialog.order_groupbox.limit_stop_bid.setVisible(False)
+            trade_dialog.order_groupbox.limit_stop_ask.setVisible(False)
+            trade_dialog.order_groupbox.limit_stop_mid.setVisible(False)
+        case _:
+            trade_dialog.order_groupbox.price_slider.setVisible(True)
+            trade_dialog.order_groupbox.limit_stop_bid.setVisible(True)
+            trade_dialog.order_groupbox.limit_stop_ask.setVisible(True)
+            trade_dialog.order_groupbox.limit_stop_mid.setVisible(True)
+
+
+def on_previeworder_click():
+    global CURRENT_TRADE_STOCK
+    global OPEN_ORDERS
+
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Preview Order")
+    wnd.setLayout(QVBoxLayout())
+
+    ticker_widget = QWidget()
+    ticker_widget.setLayout(QHBoxLayout())
+    ticker_widget.layout().addWidget(QLabel('Ticker:'))
+    ticker_label = QLabel(CURRENT_TRADE_STOCK)
+    ticker_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ticker_widget.layout().addWidget(ticker_label)
+    wnd.layout().addWidget(ticker_widget)
+
+    transaction_widget = QWidget()
+    transaction_widget.setLayout(QHBoxLayout())
+    transaction_widget.layout().addWidget(QLabel('Transaction:'))
+    transaction_label = QLabel(trade_dialog.order_groupbox.action_combobox.currentText())
+    transaction_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    transaction_widget.layout().addWidget(transaction_label)
+    wnd.layout().addWidget(transaction_widget)
+
+
+    ordertype_widget = QWidget()
+    ordertype_widget.setLayout(QHBoxLayout())
+    ordertype_widget.layout().addWidget(QLabel('Order Type:'))
+    ordertype_label = QLabel(trade_dialog.order_groupbox.type_combobox.currentText())
+    ordertype_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ordertype_widget.layout().addWidget(ordertype_label)
+    wnd.layout().addWidget(ordertype_widget)
+
+    estprice_widget = QWidget()
+    estprice_widget.setLayout(QHBoxLayout())
+    estprice_widget.layout().addWidget(QLabel('Estimated Price'))
+    estprice_label = QLabel()
+    if trade_dialog.order_groupbox.type_combobox.currentText() == 'Market':
+        if trade_dialog.order_groupbox.action_combobox.currentText() == 'Buy':
+            estprice_label.setText(trade_dialog.order_groupbox.limit_stop_ask.text().split('\n')[1])
+        else:
+            estprice_label.setText(trade_dialog.order_groupbox.limit_stop_bid.text().split('\n')[1])
+    else:
+        # change to limit/stop price
+        estprice_label.setText(trade_dialog.order_groupbox.limit_stop_bid.text())
+    estprice_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    estprice_widget.layout().addWidget(estprice_label)
+    wnd.layout().addWidget(estprice_widget)
+
+    qty_widget = QWidget()
+    qty_widget.setLayout(QHBoxLayout())
+    qty_widget.layout().addWidget(QLabel('Quantity:'))
+    qty_label = QLabel(str(trade_dialog.order_groupbox.qty_spinbox.value()))
+    qty_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    qty_widget.layout().addWidget(qty_label)
+    wnd.layout().addWidget(qty_widget)
+
+    est_cost_widget = QWidget()
+    est_cost_widget.setLayout(QHBoxLayout())
+    est_cost_widget.layout().addWidget(
+        QLabel(
+            "Estimated Net Debit"
+            if transaction_label.text() == "Buy"
+            else "Estimated Net Credit"
+        )
+    )
+
+    est_cost_label = QLabel(str(int(qty_label.text()) * float(estprice_label.text())))
+    est_cost_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    est_cost_widget.layout().addWidget(est_cost_label)
+    wnd.layout().addWidget(est_cost_widget)
+
+    actions_widget = QWidget()
+    actions_widget.setLayout(QHBoxLayout())
+    cancel_button = QPushButton('Change Order')
+    cancel_button.clicked.connect(wnd.done(0))
+    actions_widget.layout().addWidget(cancel_button)
+    ok_button = QPushButton('Confirm Order')
+    def ok_button_clicked():
+        OPEN_ORDERS.append(
+            [
+                CURRENT_TRADE_STOCK,
+                transaction_label.text(),
+                ordertype_label.text(),
+                estprice_label.text(),
+                qty_label.text()
+            ]
+        )
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    actions_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(actions_widget)
+
+    wnd.exec()
+
+trade_dialog.order_groupbox.type_combobox = QComboBox(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.type_combobox.addItems(['Market', 'Limit', 'Stop'])
+trade_dialog.order_groupbox.type_combobox.setGeometry(10, 250, 100, 40)
+trade_dialog.order_groupbox.type_combobox.currentTextChanged.connect(on_ordertype_change)
+
+trade_dialog.order_groupbox.price_slider = QSlider(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.price_slider.setOrientation(Qt.Orientation.Horizontal)
+trade_dialog.order_groupbox.price_slider.setRange(0, 10)
+trade_dialog.order_groupbox.price_slider.setGeometry(120, 250, 250, 40)
+trade_dialog.order_groupbox.price_slider.setVisible(False)
+
+trade_dialog.order_groupbox.limit_stop_bid = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.limit_stop_bid.setText("<bid>")
+trade_dialog.order_groupbox.limit_stop_bid.setGeometry(120, 300, 50, 50)
+trade_dialog.order_groupbox.limit_stop_bid.setVisible(False)
+
+
+trade_dialog.order_groupbox.limit_stop_ask = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.limit_stop_ask.setText("<ask>")
+trade_dialog.order_groupbox.limit_stop_ask.setGeometry(350, 300, 50, 50)
+trade_dialog.order_groupbox.limit_stop_ask.setVisible(False)
+
+
+trade_dialog.order_groupbox.limit_stop_mid = QLabel(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.limit_stop_mid.setText("<mid>")
+trade_dialog.order_groupbox.limit_stop_mid.setGeometry(240, 300, 50, 50)
+trade_dialog.order_groupbox.limit_stop_mid.setVisible(False)
+
+trade_dialog.order_groupbox.preview_order = QPushButton(trade_dialog.order_groupbox)
+trade_dialog.order_groupbox.preview_order.setText("Preview Order")
+trade_dialog.order_groupbox.preview_order.setGeometry(50, 340, 360, 50)
+trade_dialog.order_groupbox.preview_order.clicked.connect(on_previeworder_click)
+
+trade_dialog.search_bar_groupbox.search_button.clicked.connect(
+    trade_searchbar_click
+)
+
+trade_dialog.chart_groupbox = QGroupBox(trade_dialog)
+trade_dialog.chart_groupbox.setTitle('Chart')
+trade_dialog.chart_groupbox.setStyleSheet('background-color: white')
+trade_dialog.chart_groupbox.setGeometry(500, 90, 650, 400)
+
+day_chart = QChart()
+
+day_chartview = QChartView(trade_dialog.chart_groupbox)
+day_lineseries = QLineSeries()
+day_chart.addSeries(day_lineseries)
+day_lineseries.setName('Stock')
+
+
+x_axis = QDateTimeAxis()
+x_axis.setFormat('h:mm')
+x_axis.setTitleText('Time')
+x_axis.setVisible(True)
+day_chart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
+day_lineseries.attachAxis(x_axis)
+
+y_axis = QValueAxis()
+day_chart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
+day_lineseries.attachAxis(y_axis)
+
+
+day_chartview.setGeometry(10, 20, 600, 400)
+day_chartview.setChart(day_chart)
 
 #####################
 # stock info dialog #
@@ -5800,8 +6258,7 @@ stockinfo_dialog = QTabWidget()
 stockinfo_dialog.setStyleSheet('background-color: deepskyblue;')
 stockinfo_dialog_main = QDialog()
 stockinfo_dialog_main.setStyleSheet('background-color: deepskyblue')
-stockinfo_dialog_main.search_bar_groupbox = QGroupBox(
-    stockinfo_dialog_main)
+stockinfo_dialog_main.search_bar_groupbox = QGroupBox(stockinfo_dialog_main)
 stockinfo_dialog_main.search_bar_groupbox.setStyleSheet(
     'background-color: white;')
 stockinfo_dialog_main.search_bar_groupbox.setTitle("Find a Stock")
@@ -6038,6 +6495,7 @@ stockinfo_dialog.addTab(stockinfo_dialog_forecasts, "Forecasts")
 stockinfo_dialog.addTab(stockinfo_dialog_financials, "Financials")
 stockinfo_dialog.connect(stockinfo_dialog, SIGNAL(
     'currentChanged(int)'), lambda: stockinfo_dialog_changed(stockinfo_dialog.currentIndex()))
+
 ####################
 # DCF model dialog #
 ####################
@@ -6238,9 +6696,80 @@ dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate = QLabel(
     dcf_dialog.outputs_groupbox.graham_model_output)
 dcf_dialog.outputs_groupbox.graham_model_output.graham_growth_estimate.setGeometry(
     490, 80, 100, 50)
+
+######################
+# trade ideas dialog #
+######################
+ideas_dialog = QTabWidget()
+ideas_dialog.setStyleSheet('background-color: deepskyblue')
+
+scanner_dialog = QDialog()
+scanner_dialog.setStyleSheet('background-color: deepskyblue')
+scanner_dialog.setLayout(QGridLayout())
+
+day_gain_groupbox = QGroupBox(scanner_dialog)
+day_gain_groupbox.setTitle("Day Gainers")
+day_gain_groupbox.setStyleSheet('background-color: white')
+
+day_gain_groupbox.desc_label = QLabel(day_gain_groupbox)
+day_gain_groupbox.desc_label.setText(
+    "Find stocks that have gained the most relative to their close yesterday"
+)
+day_gain_groupbox.desc_label.setWordWrap(True)
+day_gain_groupbox.desc_label.setGeometry(10, 15, 130, 90)
+
+day_gain_groupbox.run_button = QPushButton(day_gain_groupbox)
+day_gain_groupbox.run_button.setText('Run')
+day_gain_groupbox.run_button.setGeometry(25, 110, 100, 20)
+
+def day_gain_button_clicked():
+    new_scanner_dialog = QDialog()
+    new_scanner_dialog.setStyleSheet('background-color: deepskyblue')
+
+    new_scanner_dialog.results_scroll = QScrollArea(new_scanner_dialog)
+    new_scanner_dialog.results_scroll.setGeometry(10, 20, 1200, 550)
+    new_scanner_dialog.results_scroll.setStyleSheet('background-color: white')
+    new_scanner_dialog.results_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    new_scanner_dialog.results_widget = QWidget(new_scanner_dialog)
+    new_scanner_dialog.results_widget.setLayout(QVBoxLayout())
+    new_scanner_dialog.setMinimumWidth(1000)
+
+    for result in sc.get_results('day_gainers', 'regularMarketChangePercent'):
+        result_widget = QWidget()
+        result_widget.setLayout(QHBoxLayout())
+        for key in result.keys():
+            result_widget.layout().addWidget(QLabel(str(result[key])))
+
+        new_scanner_dialog.results_widget.layout().addWidget(result_widget)
+
+    new_scanner_dialog.results_scroll.setWidget(new_scanner_dialog.results_widget)
+    ideas_dialog.removeTab(0)
+    ideas_dialog.insertTab(0, new_scanner_dialog, 'Scanner')
+    ideas_dialog.setCurrentIndex(0)
+
+day_gain_groupbox.run_button.clicked.connect(
+    day_gain_button_clicked
+)
+
+scanner_dialog.layout().addWidget(day_gain_groupbox, 0, 0)
+
+
+
+uncon_strats_dialog = QDialog()
+uncon_strats_dialog.setStyleSheet('background-color: deepskyblue')
+
+ideas_dialog.addTab(scanner_dialog, "Scanner")
+
+ideas_dialog.addTab(uncon_strats_dialog, "Unconventional Strategies")
+
+
+
 ###################
 # settings dialog #
 ###################
+
+
 # create lists of colors for up and down candles and chart styles
 up_colors = ['Green', 'Red', 'Cyan', 'Purple']
 down_colors = ['Green', 'Red', 'Cyan', 'Purple']
@@ -6283,9 +6812,12 @@ settings_dialog.apply_button.setGeometry(450, 500, 100, 50)
 settings_dialog.apply_button.clicked.connect(
     apply_settings_changes
 )
+
+
 #################
 # wallet dialog #
 #################
+
 wallet_dialog = QDialog()
 wallet_dialog.setStyleSheet('background-color: goldenrod')
 # user's crypto wallet NAV
@@ -6343,11 +6875,13 @@ wallet_dialog.positions_view_groupbox.positions_view.setHorizontalHeaderItem(
 for i in range(8):
     wallet_dialog.positions_view_groupbox.positions_view.horizontalHeaderItem(
         i).setFont(ARIAL_10)
-for i in range(portfolio_dialog.positions_view_groupbox.positions_view.rowCount()):
+for i in range(wallet_dialog.positions_view_groupbox.positions_view.rowCount()):
     wallet_dialog.positions_view_groupbox.positions_view.setVerticalHeaderItem(
         0, QTableWidgetItem("1"))
     wallet_dialog.positions_view_groupbox.positions_view.verticalHeaderItem(
         i).setFont(ARIAL_10)
+    for j in range(wallet_dialog.positions_view_groupbox.positions_view.columnCount()):
+        wallet_dialog.positions_view_groupbox.positions_view.setItem(i, j, QTableWidgetItem())
 update_wallet_table()
 # cash labels
 wallet_dialog.currentNAV.cashLabel = QLabel(wallet_dialog.currentNAV)
@@ -6388,15 +6922,23 @@ wallet_dialog.currentNAV.returnSinceInception.setFont(QFont('genius', 20))
 wallet_dialog.currentNAV.returnSinceInception.setGeometry(10, 190, 120, 30)
 wallet_dialog.positions_view_groupbox.positions_view.resizeColumnsToContents()
 update_wallet_nav()
+
+##################
+# resolve trades #
+##################
+
+
+
 ######################
 # end of dialog init #
 ######################
 # adding tabs to main window
-widget.addTab(portfolio_dialog, "Your Portfolio")
+widget.addTab(port_dialog, "Your Portfolio")
 widget.addTab(chart_dialog, "Chart Stocks")
 widget.addTab(trade_dialog, "Trade Stocks")
 widget.addTab(stockinfo_dialog, "Get Stock Info")
 widget.addTab(dcf_dialog, "DCF Modelling")
+widget.addTab(ideas_dialog, "Trade Ideas")
 widget.addTab(wallet_dialog, "Your Crypto Wallet")
 widget.addTab(settings_dialog, "Settings")
 widget.resize(1300, 700)

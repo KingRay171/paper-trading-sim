@@ -1,50 +1,17 @@
-def main():
-  stock_list = Volume()
-  # EXPORTING RESULTS IS OPTIONAL
-  # Export the screener results to .csv
-  stock_list.to_csv("stock.csv")
+import yahooquery as yq
 
-  # Create a SQLite database
-  stock_list.to_sqlite("stock.sqlite3")
-  #
-  for stock in stock_list[0:19]:  # Loop through 10th - 20th stocks
-    print(stock['Ticker'], stock['Volume']) # Print symbol
+def get_results(search_criteria, sort_field=None) -> list[dict]:
+    results = []
+    scan_results = yq.Screener().get_screeners(search_criteria, 100)[search_criteria]['quotes']
+    for quote in scan_results:
+        quote_dict = {}
+        quote_dict['symbol'] = quote['symbol']
+        quote_dict['name'] = quote['shortName']
+        quote_dict['price'] = quote['regularMarketPrice']
+        quote_dict['price_chg'] = quote['regularMarketChange']
+        quote_dict['price_chg_pct'] = quote['regularMarketChangePercent']
+        if sort_field:
+            quote_dict[sort_field] = quote[sort_field]
+        results.append(quote_dict)
 
-#crypto order book
-import requests
-
-def cryptoBids(ticket, number):
-  data = requests.get("https://api.pro.coinbase.com/products/"+ticket+"-USD/book?level=2").json()
-  bids = data["bids"]
-  bids = bids[0:number]
-  return bids
-
-def cryptoAsks(ticket, number):
-  data = requests.get("https://api.pro.coinbase.com/products/"+ticket+"-USD/book?level=2").json()
-  asks = data["asks"]
-  asks = asks[0:number]
-  return asks
-
-
-#stock scanner
-# from https://github.com/mariostoev/finviz
-from finviz.screener import Screener
-filters = ['exch_nasd', 'idx_sp500']  # Shows companies in NASDAQ which are in the S&P500
-
-def highestGrowth():
-  stock_list = Screener(filters=filters, table='Performance', order='-change')  # Get the performance table and sort it by change ascending
-  return stock_list
-
-def highestLoss():
-  stock_list = Screener(filters=filters, table='Performance', order='change')  # Get the performance table and sort it by change ascending
-  return stock_list
-
-def highestVolitility():
-  stock_list = Screener(filters=filters, table='Performance', order='-volatility1w')  # Get the performance table and sort it by change ascending
-  return stock_list
-
-def Volume():
-  stock_list = Screener(filters=filters, table='Performance', order='volume')  # Get the performance table and sort it by change ascending
-  return stock_list
-
-main()
+    return results

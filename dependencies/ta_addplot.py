@@ -10,12 +10,12 @@ def adx_addplot(data, settings, ax=None, panel=None):
     adx_talib = pd.DataFrame(index=data.index,
                             data={"adx": adx})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((adx_talib["adx"]), panel=panel, ylabel='Avg Directional Movement')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((adx_talib["adx"]), ax=ax, ylabel='Avg Directional Movement')
         ]
@@ -26,12 +26,12 @@ def adxr_addplot(data, settings, ax=None, panel=None):
     adxr_talib = pd.DataFrame(index=data.index,
                             data={"adxr": adxr})
 
-    if(ax == None):
+    if ax is None:
         plot = [
-            mpf.make_addplot((adxr_talib["adxr"]),  panel=panel, ylabel='Avg Directional Movement Rating')
+            mpf.make_addplot((adxr_talib["adxr"]), panel=panel, ylabel='Avg Directional Movement Rating')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((adxr_talib["adxr"]),  ax=ax, ylabel='Avg Directional Movement Rating')
         ]
@@ -59,13 +59,13 @@ def aroon_addplot(data, settings, ax=None, panel=None):
                             data={"aroon_down": aroondown,
                                   "aroon_up" : aroonup})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((aroon_talib["aroon_down"]),  panel=panel, ylabel='Aroon'),
             mpf.make_addplot((aroon_talib["aroon_up"]),  panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((aroon_talib["aroon_down"]), ax=ax, ylabel='Aroon'),
             mpf.make_addplot((aroon_talib["aroon_up"]), ax=ax)
@@ -78,12 +78,12 @@ def aroonosc_addplot(data, settings, ax=None, panel=None):
     aroon_talib = pd.DataFrame(index=data.index,
                             data={"aroonosc": aroonosc})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((aroon_talib["aroonosc"]),  panel=panel, ylabel='Aroon Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((aroon_talib["aroonosc"]), ax=ax, ylabel='Aroon Oscillator')
         ]
@@ -95,12 +95,12 @@ def ao_addplot(data, ax=None, panel=None, fastma_period=5, slowma_period=34):
     ao_ta = pd.DataFrame(index=data.index,
                             data={"ao": ao})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((ao_ta["ao"]),  panel=panel, ylabel='Awesome Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((ao_ta["ao"]), ax=ax, ylabel='Awesome Oscillator')
         ]
@@ -111,12 +111,12 @@ def bop_addplot(data, settings, ax=None, panel=None):
     bop = talib.BOP(data['Open'], data['High'], data['Low'], data['Close'])
     bop_talib = pd.DataFrame(index=data.index,
                             data={"bop": bop})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((bop_talib["bop"]),  panel=panel, ylabel='Balance of Power')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((bop_talib["bop"]), ax=ax, ylabel='Balance of Power')
         ]
@@ -128,12 +128,12 @@ def cci_addplot(data, settings, ax=None, panel=None):
     cci_talib = pd.DataFrame(index=data.index,
                             data={"cci": cci})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((cci_talib["cci"]), panel=panel, ylabel='Commodity Channel Index')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((cci_talib["cci"]), ax=ax, ylabel='Commodity Channel Index')
         ]
@@ -145,12 +145,12 @@ def cmo_addplot(data, settings, ax=None, panel=None):
     cmo_talib = pd.DataFrame(index=data.index,
                             data={"cmo": cmo})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((cmo_talib["cmo"]),  panel=panel, ylabel='Chande Momentum Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((cmo_talib["cmo"]), ax=ax, ylabel='Chande Momentum Oscillator')
         ]
@@ -162,12 +162,12 @@ def dx_addplot(data, settings, ax=None, panel=None):
     dx_talib = pd.DataFrame(index=data.index,
                             data={"dx": dx})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((dx_talib["dx"]),  panel=panel, ylabel='Directional Movement Index')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((dx_talib["dx"]), ax=ax, ylabel='Directional Movement Index')
         ]
@@ -179,12 +179,12 @@ def kama_addplot(data, settings, ax=None, panel=None):
     kama_ta = pd.DataFrame(index=data.index,
                             data={"kama": kama})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((kama_ta["kama"]),  panel=panel, ylabel='KAMA Indicator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((kama_ta["kama"]), ax=ax, ylabel='Kama Indicator')
         ]
@@ -199,14 +199,14 @@ def macdext_addplot(data, settings, ax=None, panel=None):
                                   "macd_signal" : macdsignal,
                                   "macd_hist" : macdhist})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((macd_talib["macd"]),  panel=panel, ylabel='MACD'),
             mpf.make_addplot((macd_talib["macd_signal"]),  panel=panel),
             mpf.make_addplot((macd_talib["macd_hist"]), type='bar',  panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((macd_talib["macd"]), ax=ax, ylabel='MACD'),
             mpf.make_addplot((macd_talib["macd_signal"]),  ax=ax),
@@ -222,14 +222,14 @@ def macdfix_addplot(data, ax=None, panel=None, signalperiod=9):
                                   "macd_signal" : macdsignal,
                                   "macd_hist" : macdhist})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((macd_talib["macd"]),  panel=panel, ylabel='Fixed MACD'),
             mpf.make_addplot((macd_talib["macd_signal"]),  panel=panel),
             mpf.make_addplot((macd_talib["macd_hist"]), type='bar',  panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((macd_talib["macd"]), ax=ax, ylabel='Fixed MACD'),
             mpf.make_addplot((macd_talib["macd_signal"]),  ax=ax),
@@ -243,12 +243,12 @@ def mfi_addplot(data, settings, ax=None, panel=None):
     mfi_talib = pd.DataFrame(index=data.index,
                             data={"mfi": mfi})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((mfi_talib["mfi"]), panel=panel, ylabel='Money Flow Index')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((mfi_talib["mfi"]), ax=ax, ylabel='Money Flow Index')
         ]
@@ -260,12 +260,12 @@ def minusdi_addplot(data, settings, ax=None, panel=None):
     minusdi_talib = pd.DataFrame(index=data.index,
                             data={"minus_di": minusdi})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((minusdi_talib["minus_di"]), panel=panel, ylabel='Minus Directional Indicator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((minusdi_talib["minus_di"]), ax=ax, ylabel='Minus Directional Indicator')
         ]
@@ -277,12 +277,12 @@ def minusdm_addplot(data, settings, ax=None, panel=None):
     minusdm_talib = pd.DataFrame(index=data.index,
                             data={"minus_dm": minusdm})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((minusdm_talib["minus_dm"]), panel=panel, ylabel='Minus Directional Movement')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((minusdm_talib["minus_dm"]), ax=ax, ylabel='Minus Directional Movement')
         ]
@@ -294,12 +294,12 @@ def mom_addplot(data, settings, ax=None, panel=None):
     mom_talib = pd.DataFrame(index=data.index,
                             data={"mom": mom})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((mom_talib["mom"]), panel=panel, ylabel='Momentum')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((mom_talib["mom"]), ax=ax, ylabel='Momentum')
         ]
@@ -311,12 +311,12 @@ def plusdi_addplot(data, settings, ax=None, panel=None):
     plusdi_talib = pd.DataFrame(index=data.index,
                             data={"plusdi": plusdi})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((plusdi_talib["plusdi"]), panel=panel, ylabel='Plus Directional Indicator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((plusdi_talib["plusdi"]), ax=ax, ylabel='Plus Directional Indicator')
         ]
@@ -328,12 +328,12 @@ def plusdm_addplot(data, settings, ax=None, panel=None):
     plusdm_talib = pd.DataFrame(index=data.index,
                             data={"plusdm": plusdm})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((plusdm_talib["plusdm"]), panel=panel, ylabel='Plus Directional Movement')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((plusdm_talib["plusdm"]), ax=ax, ylabel='Plus Directional Movement')
         ]
@@ -345,12 +345,12 @@ def ppo_addplot(data, ax=None, panel=None, fastperiod=12, slowperiod=26, matype=
     ppo_talib = pd.DataFrame(index=data.index,
                             data={"ppo": ppo})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((ppo_talib["ppo"]), panel=panel, ylabel='Percentage Price Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((ppo_talib["ppo"]), ax=ax, ylabel='Percentage Price Oscillator')
         ]
@@ -362,12 +362,12 @@ def pvo_addplot(data, settings, ax=None, panel=None):
     pvo_ta = pd.DataFrame(index=data.index,
                             data={"pvo": pvo})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((pvo_ta["pvo"]), panel=panel, ylabel='Percentage Volume Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((pvo_ta["pvo"]), ax=ax, ylabel='Percentage Volume Oscillator')
         ]
@@ -379,12 +379,12 @@ def roc_addplot(data, settings, ax=None, panel=None):
     roc_talib = pd.DataFrame(index=data.index,
                             data={"roc": roc})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((roc_talib["roc"]), panel=panel, ylabel='Rate of Change ($)')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((roc_talib["roc"]), ax=ax, ylabel='Rate of Change ($)')
         ]
@@ -396,12 +396,12 @@ def rocpercentage_addplot(data, settings, ax=None, panel=None):
     rocp_talib = pd.DataFrame(index=data.index,
                             data={"rocp": rocp})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((rocp_talib["rocp"]), panel=panel, ylabel='Rate of Change (%)')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((rocp_talib["rocp"]), ax=ax, ylabel='Rate of Change (%)')
         ]
@@ -413,12 +413,12 @@ def rocratio_addplot(data, settings, ax=None, panel=None):
     rocr_talib = pd.DataFrame(index=data.index,
                             data={"rocr": rocr})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((rocr_talib["rocr"]), panel=panel, ylabel='Rate of Change (Ratio)')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((rocr_talib["rocr"]), ax=ax, ylabel='Rate of Change (Ratio)')
         ]
@@ -430,12 +430,12 @@ def rocratio100_addplot(data, settings, ax=None, panel=None):
     rocr_talib = pd.DataFrame(index=data.index,
                             data={"rocr": rocr})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((rocr_talib["rocr"]), panel=panel, ylabel='Rate of Change (Ratio, 100 scale)')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((rocr_talib["rocr"]), ax=ax, ylabel='Rate of Change (Ratio, 100 scale)')
         ]
@@ -447,12 +447,12 @@ def rsi_addplot(data, settings, ax=None, panel=None):
     rsi_talib = pd.DataFrame(index=data.index,
                             data={"rsi": rsi})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((rsi_talib["rsi"]), panel=panel, ylabel='Relative Strength Index')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((rsi_talib["rsi"]), ax=ax, ylabel='Relative Strength Index')
         ]
@@ -465,13 +465,13 @@ def slowstoch_addplot(data, settings, ax=None, panel=None):
                             data={"slowk" : slowk,
                                   "slowd" : slowd})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((stoch_talib["slowk"]), panel=panel, ylabel='Slow Stochastic'),
             mpf.make_addplot((stoch_talib["slowd"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((stoch_talib["slowk"]), ax=ax, ylabel='Slow Stochastic'),
             mpf.make_addplot((stoch_talib["slowd"]), ax=ax)
@@ -485,13 +485,13 @@ def faststoch_addplot(data, settings, ax=None, panel=None):
                             data={"fastk" : fastk,
                                   "fastd" : fastd})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((stoch_talib["fastk"]), panel=panel, ylabel='Fast Stochastic'),
             mpf.make_addplot((stoch_talib["fastd"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((stoch_talib["fastk"]), ax=ax, ylabel='Fast Stochastic'),
             mpf.make_addplot((stoch_talib["fastd"]), ax=ax)
@@ -505,13 +505,13 @@ def stochrsi_addplot(data, settings, ax=None, panel=None):
                             data={"fastk" : fastk,
                                   "fastd" : fastd})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((stoch_talib["fastk"]), panel=panel, ylabel='Stochastic RSI'),
             mpf.make_addplot((stoch_talib["fastd"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((stoch_talib["fastk"]), ax=ax, ylabel='Stochastic RSI'),
             mpf.make_addplot((stoch_talib["fastd"]), ax=ax)
@@ -523,12 +523,12 @@ def tsi_addplot(data, settings, ax=None, panel=None):
     tsi = ta.momentum.tsi(data['Close'], settings[0], settings[1])
     tsi_ta = pd.DataFrame(index=data.index,
                             data={"tsi": tsi})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((tsi_ta["tsi"]), panel=panel, ylabel='True Strength Index')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((tsi_ta["tsi"]), ax=ax, ylabel='True Strength Index')
         ]
@@ -540,12 +540,12 @@ def ultosc_addplot(data, settings, ax=None, panel=None):
     ultosc_talib = pd.DataFrame(index=data.index,
                             data={"ultosc": ultosc})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((ultosc_talib["ultosc"]), panel=panel, ylabel='Ultimate Oscillator')
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((ultosc_talib["ultosc"]), ax=ax, ylabel='Ultimate Oscillator')
         ]
@@ -558,12 +558,12 @@ def willr_addplot(data, settings, ax=None, panel=None):
     willr_talib = pd.DataFrame(index=data.index,
                             data={"willr": willr})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((willr_talib["willr"]), panel=panel, ylabel="Williams' %R")
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((willr_talib["willr"]), ax=ax, ylabel="Williams' %r")
         ]
@@ -580,12 +580,12 @@ def dpo_addplot(data, settings, ax=None, panel=None):
     dpo = trend.dpo(data['Close'], settings[0])
     dpo_ta = pd.DataFrame(index=data.index,
                             data={"dpo": dpo})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((dpo_ta["dpo"]), panel=panel, ylabel="Detrended Price Oscillator")
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((dpo_ta["dpo"]), ax=ax, ylabel="Detrended Price Oscillator")
         ]
@@ -600,7 +600,7 @@ def ichimoku_addplot(data, settings, ax=None, panel=None):
                                   "ichimoku_conversion" : ichimoku.ichimoku_conversion_line(),
                                   "ichimoku_baseline" : ichimoku.ichimoku_base_line()})
 
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((ichimoku_ta["ichimoku_a"]), panel=panel),
             mpf.make_addplot((ichimoku_ta["ichimoku_b"]), panel=panel),
@@ -608,7 +608,7 @@ def ichimoku_addplot(data, settings, ax=None, panel=None):
             mpf.make_addplot((ichimoku_ta["ichimoku_baseline"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((ichimoku_ta["ichimoku_a"]), ax=ax),
             mpf.make_addplot((ichimoku_ta["ichimoku_b"]), ax=ax),
@@ -626,12 +626,12 @@ def schaff_addplot(data, settings, ax=None, panel=None):
     schaff = trend.stc(data['Close'], settings[0], settings[1], settings[2], settings[3], settings[4])
     schaff_ta = pd.DataFrame(index=data.index,
                             data={"schaff": schaff})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((schaff_ta["schaff"]), panel=panel, ylabel="Schaff Trend Cycle")
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((schaff_ta["schaff"]), ax=ax, ylabel="Schaff Trend Cycle")
         ]
@@ -646,13 +646,13 @@ def parabolicsar_addplot(data, settings, ax=None, panel=None):
     psar_ta = pd.DataFrame(index=data.index,
                             data={"up" : psar.psar_up(),
                                   "down" : psar.psar_down()})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((psar_ta["up"]), panel=panel),
             mpf.make_addplot((psar_ta["down"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((psar_ta["up"]), ax=ax),
             mpf.make_addplot((psar_ta["down"]), ax=ax)
@@ -665,13 +665,13 @@ def kst_addplot(data, settings, ax=None, panel=None):
     kst_ta = kst_ta = pd.DataFrame(index=data.index,
                             data={"kst" : kst.kst(),
                                   "signal" : kst.kst_sig()})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((kst_ta["kst"]), panel=panel),
             mpf.make_addplot((kst_ta["signal"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((kst_ta["kst"]), ax=ax),
             mpf.make_addplot((kst_ta["signal"]), ax=ax)
@@ -686,12 +686,12 @@ def trix_addplot(data, settings, ax=None, panel=None):
     trix = trend.trix(data['Close'], settings[0])
     trix_ta = pd.DataFrame(index=data.index,
                             data={"trix": trix})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((trix_ta["trix"]), panel=panel, ylabel="Trix Indicator")
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((trix_ta["trix"]), ax=ax, ylabel="Trix Indicator")
         ]
@@ -706,12 +706,12 @@ def mi_addplot(data, settings, ax=None, panel=None):
     mi = trend.mass_index(data['High'], data['Low'], settings[0], settings[1])
     mi_ta = pd.DataFrame(index=data.index,
                             data={"mi": mi})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((mi_ta["mi"]), panel=panel, ylabel="Mass Index")
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((mi_ta["mi"]), ax=ax, ylabel="Mass Index")
         ]
@@ -726,13 +726,13 @@ def vortex_addplot(data, settings, ax=None, panel=None):
     vortex_ta = pd.DataFrame(index=data.index,
                             data={"vortex_pos" : vortex.vortex_indicator_pos(),
                                   "vortex_neg" : vortex.vortex_indicator_neg()})
-    if(ax == None):
+    if ax is None:
         plot = [
             mpf.make_addplot((vortex_ta["vortex_pos"]), panel=panel, ylabel="Vortex"),
             mpf.make_addplot((vortex_ta["vortex_neg"]), panel=panel)
         ]
 
-    elif(panel == None):
+    elif panel is None:
         plot = [
             mpf.make_addplot((vortex_ta["vortex_pos"]), ax=ax, ylabel="Vortex"),
             mpf.make_addplot((vortex_ta["vortex_neg"]), ax=ax)

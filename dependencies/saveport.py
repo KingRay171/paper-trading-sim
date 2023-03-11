@@ -31,4 +31,3 @@ def save_port(portfolio_assettypes, portfolio_tickers, portfolio_amts, portfolio
 
     with open(currentdir + '\\' + 'assets\\portfolio.xml', 'w') as trades_file:
         trades_file.write(str(soup))
-        print(str(soup))

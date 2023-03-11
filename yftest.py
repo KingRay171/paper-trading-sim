@@ -1640,7 +1640,6 @@ def close_event():
     st.save(OPEN_ORDERS)
     sp.save_port(portfolio_asset_types, portfolio_tickers, portfolio_amts, purchase_prices)
 
-    print('closed')
 
 app.aboutToQuit.connect(close_event)
 widget = QTabWidget()

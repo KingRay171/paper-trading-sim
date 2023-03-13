@@ -4,16 +4,17 @@ import button
 import pygame, sys
 import math
 from pygame.locals import QUIT
-# Import random for random numbers
 import random
-# Import the pygame module
+from pathlib import Path
+import xml.etree.ElementTree as ET
 
-# Define constants for the screen width and height
+
 file = open('minigame/sett.txt')
 
 # read the content of the file opened
 content = file.readlines()
 
+# Define constants for the screen width and height
 SCREEN_WIDTH = int(content[0])
 SCREEN_HEIGHT = int(content[1])
 
@@ -216,7 +217,8 @@ class Game():
     def start_wave(self):
         print("wave start")
 
-        pygame.time.set_timer(WAVE_LENGTH, round(WAVE_BASE * pow(WAVE_RATE, game.WAVE)))
+        pygame.time.set_timer(WAVE_LENGTH,
+                              round(WAVE_BASE * pow(WAVE_RATE, game.WAVE)))
         pygame.time.set_timer(ADDENEMY, WAVE_SPAWN_DELAY)
         self.inWave = True
         self.ENEMY_HP = 1 + math.floor(self.WAVE / 10)
@@ -248,9 +250,29 @@ class Game():
         allGroup.add(new_enemy)
 
     def buy(self, cost):
+        path = Path.cwd()
+        #print(path)
+        path = str(path)
+        path = "assets".join(path.rsplit('minigame', 1))
+        path += '/portfolio.xml'
+        #print(path)
+
+      
+        tree = ET.parse(path)
+        root = tree.getroot()
+        
+        print()
+        self.MONEY = int(root[0][2].text)
+        
+        
         if self.MONEY >= cost:
             self.MONEY -= cost
             rewrite_line(13, self.MONEY)
+            root[0][2].text=str(self.MONEY)
+
+
+            tree.write(path)
+          
             return True
         return False
 
@@ -289,6 +311,8 @@ running = True
 game_over = False
 paused = True
 
+game.buy(0)
+
 # Main loop
 # Create a custom event for adding a new enemy
 ADDENEMY = pygame.USEREVENT + 1
@@ -311,6 +335,8 @@ while running:
                     paused = not paused
 
                     if paused:
+                        print("game is paused")
+                        game.buy(0)
                         pygame.time.set_timer(ADDENEMY, 0)
                     else:
                         pygame.time.set_timer(ADDENEMY, SPAWN_DELAY)
@@ -394,7 +420,6 @@ while running:
             game.WAVE = int(content[15])
             game.inWave = False
             game.ENEMY_WAVE = 0
-            
 
         for proj in bullets:
             enemyhit = pygame.sprite.spritecollide(proj, enemies, False)

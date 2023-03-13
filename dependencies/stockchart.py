@@ -10,6 +10,8 @@ import ta_addplot
 import readassets as ra
 # pylint: disable-msg=E1101
 # pylint: disable-msg=W0123
+# pylint: disable-msg=W0603
+# pylint: disable-msg=C0103
 import talib
 import ta
 import yfinance as yf
@@ -20,7 +22,7 @@ pd.options.mode.chained_assignment = None
 isclosed = False
 data = None
 xlims = None
-scaled_xlims = None
+scaled_xlims = ()
 default_xlims = (0, 0)
 
 
@@ -75,7 +77,6 @@ def onclose(fig):
 def on_xlims_change(event_ax):
     global xlims
     global scaled_xlims
-    global plot
     print(f"xlims changed: {event_ax.get_xlim()}")
 
 
@@ -104,7 +105,6 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
     global scaled_xlims
 
     plot = []
-    additional_args = []
 
     up_color = ra.get_xml_data('assets/settings.xml', 'upcolor')
     down_color = ra.get_xml_data('assets/settings.xml', 'downcolor')
@@ -119,7 +119,6 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
     def update_data(ival):
         global plot
         global data
-        global axes
         global scaled_xlims
         global default_xlims
 
@@ -148,10 +147,10 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
                 auto_adjust=adjust_ohlc
             )
 
-        if(data['Close'].size > old_data_size):
+        if data['Close'].size > old_data_size:
             scaled_xlims = (scaled_xlims[0], scaled_xlims[1] + 1)
 
-        if(data['Close'].size < old_data_size):
+        if data['Close'].size < old_data_size:
             scaled_xlims = (scaled_xlims[0], scaled_xlims[1] - 1)
 
         plot = []

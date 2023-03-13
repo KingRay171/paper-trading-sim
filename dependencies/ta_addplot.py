@@ -500,7 +500,7 @@ def faststoch_addplot(data, settings, ax=None, panel=None):
     return plot
 
 def stochrsi_addplot(data, settings, ax=None, panel=None):
-    fastk, fastd = talib.STOCHRSI(data['Close'], settings[0], settings[1], settings[2])
+    fastk, fastd = talib.STOCHRSI(data['Close'], settings[0], settings[1], settings[2], settings[3])
     stoch_talib = pd.DataFrame(index=data.index,
                             data={"fastk" : fastk,
                                   "fastd" : fastd})

@@ -276,7 +276,7 @@ class Game():
     def __init__(self):
         self.time = 0
         self.lastSpawn = 0
-        self.MONEY = int(content[13])
+        self.MONEY = float(content[13])
 
         self.inWave = False
         self.WAVE = int(content[15])

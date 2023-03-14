@@ -19,8 +19,9 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
                                QRadioButton, QCalendarWidget, QCheckBox, QApplication,
                                QProgressBar, QVBoxLayout, QScrollArea, QButtonGroup,
                                QSlider, QSpinBox, QDoubleSpinBox, QSizePolicy, QGridLayout)
-from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor
+from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor, QImage, QPainter
 from PySide6.QtCore import QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation
+from PySide6.QtSvg import QSvgRenderer
 import yahooquery as yq
 
 from dependencies import autocomplete as ac
@@ -6082,6 +6083,46 @@ scanner_dialog = QDialog()
 scanner_dialog.setStyleSheet('background-color: deepskyblue')
 scanner_dialog.setLayout(QGridLayout())
 
+def create_results_dialog(search_criteria, sort_field=None):
+    new_scanner_dialog = QDialog()
+    new_scanner_dialog.setStyleSheet('background-color: deepskyblue')
+
+    new_scanner_dialog.back_button = QPushButton(new_scanner_dialog)
+
+    new_scanner_dialog.back_button.setIcon(QIcon(f"{CWD}icons/backarrow.png"))
+    new_scanner_dialog.back_button.setGeometry(10, 20, 50, 50)
+
+    def back_button_clicked():
+        ideas_dialog.removeTab(0)
+        ideas_dialog.insertTab(0, scanner_dialog, 'Scanner')
+        ideas_dialog.setCurrentIndex(0)
+
+    new_scanner_dialog.back_button.clicked.connect(back_button_clicked)
+
+
+    new_scanner_dialog.results_scroll = QScrollArea(new_scanner_dialog)
+    new_scanner_dialog.results_scroll.setGeometry(100, 20, 1100, 550)
+    new_scanner_dialog.results_scroll.setStyleSheet('background-color: white')
+    new_scanner_dialog.results_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    new_scanner_dialog.results_widget = QWidget(new_scanner_dialog)
+    new_scanner_dialog.results_widget.setLayout(QVBoxLayout())
+    new_scanner_dialog.setMinimumWidth(1000)
+
+    for result in sc.get_results(search_criteria, sort_field):
+        result_widget = QWidget()
+        result_widget.setLayout(QHBoxLayout())
+        for key in result.keys():
+            result_widget.layout().addWidget(QLabel(str(result[key])))
+
+        new_scanner_dialog.results_widget.layout().addWidget(result_widget)
+
+    new_scanner_dialog.results_scroll.setWidget(new_scanner_dialog.results_widget)
+    ideas_dialog.removeTab(0)
+    ideas_dialog.insertTab(0, new_scanner_dialog, 'Scanner')
+    ideas_dialog.setCurrentIndex(0)
+
+
 day_gain_groupbox = QGroupBox(scanner_dialog)
 day_gain_groupbox.setTitle("Day Gainers")
 day_gain_groupbox.setStyleSheet('background-color: white')
@@ -6097,36 +6138,32 @@ day_gain_groupbox.run_button = QPushButton(day_gain_groupbox)
 day_gain_groupbox.run_button.setText('Run')
 day_gain_groupbox.run_button.setGeometry(25, 110, 100, 20)
 
-def day_gain_button_clicked():
-    new_scanner_dialog = QDialog()
-    new_scanner_dialog.setStyleSheet('background-color: deepskyblue')
-
-    new_scanner_dialog.results_scroll = QScrollArea(new_scanner_dialog)
-    new_scanner_dialog.results_scroll.setGeometry(10, 20, 1200, 550)
-    new_scanner_dialog.results_scroll.setStyleSheet('background-color: white')
-    new_scanner_dialog.results_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-    new_scanner_dialog.results_widget = QWidget(new_scanner_dialog)
-    new_scanner_dialog.results_widget.setLayout(QVBoxLayout())
-    new_scanner_dialog.setMinimumWidth(1000)
-
-    for result in sc.get_results('day_gainers', 'regularMarketChangePercent'):
-        result_widget = QWidget()
-        result_widget.setLayout(QHBoxLayout())
-        for key in result.keys():
-            result_widget.layout().addWidget(QLabel(str(result[key])))
-
-        new_scanner_dialog.results_widget.layout().addWidget(result_widget)
-
-    new_scanner_dialog.results_scroll.setWidget(new_scanner_dialog.results_widget)
-    ideas_dialog.removeTab(0)
-    ideas_dialog.insertTab(0, new_scanner_dialog, 'Scanner')
-    ideas_dialog.setCurrentIndex(0)
-
-day_gain_groupbox.run_button.clicked.connect(day_gain_button_clicked)
+day_gain_groupbox.run_button.clicked.connect(
+    lambda: create_results_dialog('day_gainers', 'regularMarketChangePercent')
+)
 
 scanner_dialog.layout().addWidget(day_gain_groupbox, 0, 0)
 
+day_loss_groupbox = QGroupBox(scanner_dialog)
+day_loss_groupbox.setTitle("Day Losers")
+day_loss_groupbox.setStyleSheet('background-color: white')
+
+day_loss_groupbox.desc_label = QLabel(day_loss_groupbox)
+day_loss_groupbox.desc_label.setText(
+    "Find stocks that have lost the most relative to their close yesterday"
+)
+day_loss_groupbox.desc_label.setWordWrap(True)
+day_loss_groupbox.desc_label.setGeometry(10, 15, 130, 90)
+
+day_loss_groupbox.run_button = QPushButton(day_loss_groupbox)
+day_loss_groupbox.run_button.setText('Run')
+day_loss_groupbox.run_button.setGeometry(25, 110, 100, 20)
+
+day_loss_groupbox.run_button.clicked.connect(
+    lambda: create_results_dialog('day_losers', 'regularMarketChangePercent')
+)
+
+scanner_dialog.layout().addWidget(day_loss_groupbox, 0, 1)
 
 
 uncon_strats_dialog = QDialog()

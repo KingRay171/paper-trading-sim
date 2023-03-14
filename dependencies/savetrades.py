@@ -23,4 +23,3 @@ def save(trades: list):
         soup.select_one('trades').append(trade_soup.select_one('trade'))
     with open(currentdir + '\\' + 'assets\\trades.xml', 'w') as trades_file:
         trades_file.write(str(soup))
-        print(str(soup))

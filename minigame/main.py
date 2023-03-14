@@ -7,7 +7,7 @@ from pygame.locals import QUIT
 import random
 from pathlib import Path
 import xml.etree.ElementTree as ET
-
+import os
 
 file = open('minigame/sett.txt')
 
@@ -250,21 +250,16 @@ class Game():
         allGroup.add(new_enemy)
 
     def buy(self, cost):
-        path = Path.cwd()
-        #print(path)
-        path = str(path)
-        path = "assets".join(path.rsplit('minigame', 1))
-        path += '/portfolio.xml'
-        #print(path)
+        path = rf"{os.getcwd()}\assets\portfolio.xml"
 
-      
+
         tree = ET.parse(path)
         root = tree.getroot()
-        
+
         print()
-        self.MONEY = int(root[0][2].text)
-        
-        
+        self.MONEY = float(root[0][2].text)
+
+
         if self.MONEY >= cost:
             self.MONEY -= cost
             rewrite_line(13, self.MONEY)
@@ -272,7 +267,7 @@ class Game():
 
 
             tree.write(path)
-          
+
             return True
         return False
 

@@ -250,24 +250,30 @@ class Game():
         allGroup.add(new_enemy)
 
     def buy(self, cost):
-        path = rf"{os.getcwd()}\assets\portfolio.xml"
+        path = rf"{os.getcwd()}/portfolio.xml"
 
 
-        tree = ET.parse(path)
-        root = tree.getroot()
-
-        print()
-        self.MONEY = float(root[0][2].text)
-
+        file = open(path, "r")
+        contents = file.read()
+        
+        # parsing
+        soup = BeautifulSoup(contents, 'xml')
+        
+        num = soup.find("amount").string
+        
+        self.MONEY = float(num)
+        file.close()
 
         if self.MONEY >= cost:
             self.MONEY -= cost
             rewrite_line(13, self.MONEY)
-            root[0][2].text=str(self.MONEY)
-
-
-            tree.write(path)
-
+            
+            soup.find("amount").string=str(self.MONEY)
+        
+            f = open(path, "w")
+            f.write(soup.prettify())
+            f.close()
+            
             return True
         return False
 

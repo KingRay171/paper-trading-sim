@@ -5,8 +5,10 @@ import pygame, sys
 import math
 from pygame.locals import QUIT
 import random
+import lxml
 from pathlib import Path
-import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
+
 import os
 
 file = open('minigame/sett.txt')
@@ -23,6 +25,8 @@ SPAWN_DELAY = 5000
 WAVE_SPAWN_DELAY = 200
 WAVE_BASE = 1000
 WAVE_RATE = 1.1
+ENEMY_SPRITE = 0
+BULLET_SURF = 0
 
 # Initialize pygame
 pygame.init()
@@ -43,6 +47,12 @@ from pygame.locals import (
 
 clock = pygame.time.Clock()
 
+def colorize(image, newColor):
+  image = image.copy()
+        
+  # add in new RGB values
+  image.fill(newColor[0:3] + (0,), None, pygame.BLEND_RGBA_ADD)
+  return image
 
 def show_game_over():
     font = pygame.font.SysFont('arial', 30)
@@ -86,7 +96,7 @@ def rewrite_line(line, text):
 font = pygame.font.SysFont('arial', 50)
 fontsmall = pygame.font.SysFont('arial', 20)
 line1 = font.render("Stocker", True, (255, 255, 255))
-line2 = fontsmall.render("Space to pause and unpause", True, (255, 255, 255))
+line2 = fontsmall.render("Space to pause and unpause. Click to shoot and WASD to move", True, (255, 255, 255))
 
 
 def update_price(game, player):
@@ -174,7 +184,7 @@ def draw_shop(game, player):
     return False
 
 
-bg = pygame.image.load("minigame/Resources/background.jpeg")
+bg = pygame.image.load("Resources/background.jpeg")
 
 
 def render_background():
@@ -188,6 +198,30 @@ def render_background():
 
 
 class Game():
+    def update_enemy_sprite(self):
+      image = pygame.image.load("Resources/Bill.png").convert_alpha()
+    
+      color = (0,0,0)
+      match self.ENEMY_HP%8:
+        case 1:
+          color = (0,0,0)
+        case 2:
+          color = (255,0,0)
+        case 3:
+          color = (0,255,0)
+        case 4:
+          color = (0,0,255)
+        case 5:
+          color = (255,255,0)
+        case 6:
+          color = (255,0,255)
+        case 7:
+          color = (0,255,255)
+        case 0:
+          color = (255, 255, 255)
+      image = colorize(image, color)
+      
+      return image
 
     def end_wave(self):
         pygame.time.set_timer(ADDENEMY, SPAWN_DELAY)
@@ -221,8 +255,9 @@ class Game():
                               round(WAVE_BASE * pow(WAVE_RATE, game.WAVE)))
         pygame.time.set_timer(ADDENEMY, WAVE_SPAWN_DELAY)
         self.inWave = True
-        self.ENEMY_HP = 1 + math.floor(self.WAVE / 10)
+        self.ENEMY_HP = 1 + math.floor(self.WAVE / 3)
         self.WAVE += 1
+        self.update_enemy_sprite()
 
     def spawn(self, enemyGroup, allGroup):
         if (self.inWave):
@@ -245,12 +280,12 @@ class Game():
             ey = random.randint(-20, SCREEN_HEIGHT + 20)
             ex = -20
 
-        new_enemy = Enemy(ex, ey, game.ENEMY_HP)
+        new_enemy = Enemy(ex, ey, game.ENEMY_HP, ENEMY_SPRITE)
         enemyGroup.add(new_enemy)
         allGroup.add(new_enemy)
 
     def buy(self, cost):
-        path = rf"{os.getcwd()}/portfolio.xml"
+        path = rf"{os.getcwd()}\assets\portfolio.xml"
 
 
         file = open(path, "r")
@@ -296,7 +331,10 @@ class Game():
 
 
 # Create the 'player'
-player = Player()
+BULLET_SURF = pygame.image.load("Resources/coin.png").convert_alpha()
+BULLET_SURF = pygame.transform.scale(BULLET_SURF, (20, 20))
+
+player = Player(BULLET_SURF)
 game = Game()
 
 # Create groups to hold enemy sprites and all sprites
@@ -313,6 +351,8 @@ game_over = False
 paused = True
 
 game.buy(0)
+ENEMY_SPRITE = game.update_enemy_sprite()
+
 
 # Main loop
 # Create a custom event for adding a new enemy

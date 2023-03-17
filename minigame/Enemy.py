@@ -2,7 +2,7 @@ import pygame
 import mathStuff
 
 file = open('minigame/sett.txt')
-
+  
 # read the content of the file opened
 content = file.readlines()
 
@@ -19,20 +19,22 @@ class Enemy(pygame.sprite.Sprite):
       if self.hp <= 0:
           self.kill()
 
-    def __init__(self, x, y, hp):
+    def __init__(self, x, y, hp ,sprite):
         super(Enemy, self).__init__()
 
-        self.surf = pygame.image.load("minigame/Resources/coin.png").convert_alpha()
-
-        self.surf = pygame.transform.scale(self.surf, (40, 40))
+        self.hp = hp
+      
+        self.surf = sprite
+      
+        self.surf = pygame.transform.scale(self.surf, (60, 60))
         self.rect = self.surf.get_rect(center=(
             x,
             y,
         ))
         self.x = x
         self.y = y
-
-        self.hp = hp
+        
+        
 
     # Move the sprite based on speed
     # Remove the sprite when it passes the left edge of the screen

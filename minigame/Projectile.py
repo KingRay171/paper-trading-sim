@@ -1,7 +1,7 @@
 import pygame
 
 file = open('minigame/sett.txt')
-
+  
 # read the content of the file opened
 content = file.readlines()
 
@@ -19,27 +19,28 @@ class Projectile(pygame.sprite.Sprite):
               self.hitCashe.append(enemy)
               if (self.peirce<=0):
                 break
-
-
+              
+      
     def render(self, screen):
         screen.blit(self.surf, self.rect)
 
-    def __init__(self, x, y, target, speed, peirce):
+    def __init__(self, x, y, target, speed, peirce, surf):
         super(Projectile, self).__init__()
-        self.surf = pygame.Surface((10, 10))
-        self.surf.fill((255, 255, 255))
+        self.surf = surf
         self.rect = self.surf.get_rect(center=(
             x,
             y,
         ))
+        self.x = x
+        self.y = y
         self.xVel = target[0]*speed
         self.yVel = target[1]*speed
-        self.x = x
+        self.x = x 
         self.y = y
         self.peirce = peirce
         self.hitCashe = []
-
-    def hit(self):
+      
+    def hit(self):   
       if (self.peirce<=1):
         self.kill()
       self.peirce -=1
@@ -54,7 +55,7 @@ class Projectile(pygame.sprite.Sprite):
             self.kill()
         if self.rect.bottom >= SCREEN_HEIGHT:
             self.kill()
-
+          
     def update(self, deltaTime):
         self.x += self.xVel * deltaTime
         self.y += self.yVel * deltaTime

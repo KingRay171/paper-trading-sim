@@ -1,15 +1,24 @@
 import pygame
 import mathStuff
 from Projectile import Projectile
+
+pygame.mixer.init()
+
 from pygame.locals import (
     K_UP,
     K_DOWN,
     K_LEFT,
     K_RIGHT,
+    K_a,
+    K_w,
+    K_s,
+    K_d
 )
 
-file = open('minigame/sett.txt')
+hitsfx = pygame.mixer.Sound("minigame/Resources/hit.wav")
 
+file = open('minigame/sett.txt')
+  
 # read the content of the file opened
 content = file.readlines()
 
@@ -27,16 +36,16 @@ class Player(pygame.sprite.Sprite):
         self.DART_SPEED = num
     def update_pierce(self, num):
         self.DART_PIERCE = num
-
+      
     def update_fire(self,num):
         #print(num)
         self.FIRE_RATE = num
+      
 
-
-    def __init__(self):
+    def __init__(self, bullet_surf):
         super(Player, self).__init__()
         self.surf = pygame.image.load("minigame/Resources/block.png").convert_alpha()
-
+      
         self.surf = pygame.transform.scale(self.surf, (50, 60))
 
         self.rect = pygame.Rect(0, 0, 10, 10)
@@ -47,7 +56,8 @@ class Player(pygame.sprite.Sprite):
         self.DART_SPEED = int(content[7])
         self.DART_PIERCE = int(content[8])
         self.FIRE_RATE = int(content[3])
-
+        self.bullet = bullet_surf
+        
         # Move the sprite based on user keypresses
     def update(self, pressed_keys, deltaTime):
         target = [0, 0]
@@ -59,6 +69,14 @@ class Player(pygame.sprite.Sprite):
             target[0]-=1
         if pressed_keys[K_RIGHT]:
             target[0]+=1
+        if pressed_keys[K_w]:
+            target[1]-=1
+        if pressed_keys[K_s]:
+            target[1]+=1
+        if pressed_keys[K_a]:
+            target[0]-=1
+        if pressed_keys[K_d]:
+            target[0]+=1
 
         target = mathStuff.normalize_vector(target)
         self.x += target[0]* SPEED * deltaTime
@@ -67,7 +85,7 @@ class Player(pygame.sprite.Sprite):
         roundx = round(self.x)
         roundy = round(self.y)
         self.rect.topleft = roundx, roundy
-
+      
         # Keep player on the screen
         if self.rect.left < 0:
             self.rect.left = 0
@@ -78,7 +96,7 @@ class Player(pygame.sprite.Sprite):
         if self.rect.bottom >= SCREEN_HEIGHT:
             self.rect.bottom = SCREEN_HEIGHT
 
-
+        
 
         # Define the enemy object by extending pygame.sprite.Sprite
 
@@ -91,14 +109,13 @@ class Player(pygame.sprite.Sprite):
                 self.shoot(pygame.mouse.get_pos(), bullets, all_sprites)
         else:
           self.fire_timer = min(60, self.fire_timer+(deltaTime*self.FIRE_RATE))
-
+      
     def shoot(self, mousePos, bullets, all_sprites):
-
+        
         direction = ((mousePos[0] - self.rect.x), (mousePos[1] - self.rect.y))
         target = mathStuff.normalize_vector(direction)
-
-        bullet = Projectile(self.rect.x, self.rect.y, target ,self.DART_SPEED, self.DART_PIERCE)
+      
+        bullet = Projectile(self.rect.x, self.rect.y, target ,self.DART_SPEED, self.DART_PIERCE, self.bullet, hitsfx)
         bullets.add(bullet)
         all_sprites.add(bullet)
-
-
+        

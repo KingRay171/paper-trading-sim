@@ -1,12 +1,13 @@
 import pygame
+pygame.mixer.init()
 
-file = open('minigame/sett.txt')
+#file = open('sett.txt')
   
 # read the content of the file opened
-content = file.readlines()
+#content = file.readlines()
 
-SCREEN_WIDTH = int(content[0])
-SCREEN_HEIGHT = int(content[1])
+#SCREEN_WIDTH = int(content[0])
+#SCREEN_HEIGHT = int(content[1])
 
 
 class Projectile(pygame.sprite.Sprite):
@@ -15,6 +16,7 @@ class Projectile(pygame.sprite.Sprite):
         for enemy in enemies:
             if not (enemy in self.hitCashe):
               self.hit()
+              pygame.mixer.Sound.play(self.hitsfx)
               enemy.hit(damage)
               self.hitCashe.append(enemy)
               if (self.peirce<=0):
@@ -24,7 +26,7 @@ class Projectile(pygame.sprite.Sprite):
     def render(self, screen):
         screen.blit(self.surf, self.rect)
 
-    def __init__(self, x, y, target, speed, peirce, surf):
+    def __init__(self, x, y, target, speed, peirce, surf, hitsfx):
         super(Projectile, self).__init__()
         self.surf = surf
         self.rect = self.surf.get_rect(center=(
@@ -39,6 +41,7 @@ class Projectile(pygame.sprite.Sprite):
         self.y = y
         self.peirce = peirce
         self.hitCashe = []
+        self.hitsfx = hitsfx
       
     def hit(self):   
       if (self.peirce<=1):
@@ -49,11 +52,11 @@ class Projectile(pygame.sprite.Sprite):
       # Keep player on the screen
         if self.rect.left < 0:
             self.kill()
-        if self.rect.right > SCREEN_WIDTH:
+        if self.rect.right > 800:
             self.kill()
         if self.rect.top <= 0:
             self.kill()
-        if self.rect.bottom >= SCREEN_HEIGHT:
+        if self.rect.bottom >= 600:
             self.kill()
           
     def update(self, deltaTime):

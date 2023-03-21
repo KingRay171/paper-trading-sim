@@ -5,12 +5,12 @@ import pygame, sys
 import math
 from pygame.locals import QUIT
 import random
-import lxml
-from pathlib import Path
 from bs4 import BeautifulSoup
 
 import os
 
+pygame.mixer.init()
+death_sound = pygame.mixer.Sound("minigame/Resources/die.wav")
 file = open('minigame/sett.txt')
 
 # read the content of the file opened
@@ -184,7 +184,7 @@ def draw_shop(game, player):
     return False
 
 
-bg = pygame.image.load("Resources/background.jpeg")
+bg = pygame.image.load("minigame/Resources/background.jpeg")
 
 
 def render_background():
@@ -199,7 +199,7 @@ def render_background():
 
 class Game():
     def update_enemy_sprite(self):
-      image = pygame.image.load("Resources/Bill.png").convert_alpha()
+      image = pygame.image.load("minigame/Resources/Bill.png").convert_alpha()
     
       color = (0,0,0)
       match self.ENEMY_HP%8:
@@ -452,6 +452,7 @@ while running:
             # If so, then remove the player and stop the loop
 
             game_over = True
+            pygame.mixer.Sound.play(death_sound)
             render_background()
             player.render(screen)
             player.kill()

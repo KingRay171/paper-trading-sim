@@ -19,6 +19,7 @@ content = file.readlines()
 # Define constants for the screen width and height
 SCREEN_WIDTH = int(content[0])
 SCREEN_HEIGHT = int(content[1])
+ENEMY_SPEED = float(content[4])
 
 FRAME_COUNT = 60
 SPAWN_DELAY = 5000
@@ -280,7 +281,7 @@ class Game():
             ey = random.randint(-20, SCREEN_HEIGHT + 20)
             ex = -20
 
-        new_enemy = Enemy(ex, ey, game.ENEMY_HP, ENEMY_SPRITE)
+        new_enemy = Enemy(ex, ey, game.ENEMY_HP, ENEMY_SPRITE, ENEMY_SPEED)
         enemyGroup.add(new_enemy)
         allGroup.add(new_enemy)
 

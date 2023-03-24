@@ -19,9 +19,8 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
                                QRadioButton, QCalendarWidget, QCheckBox, QApplication,
                                QProgressBar, QVBoxLayout, QScrollArea, QButtonGroup,
                                QSlider, QSpinBox, QDoubleSpinBox, QSizePolicy, QGridLayout)
-from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor, QImage, QPainter
-from PySide6.QtCore import QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation
-from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor, QEnterEvent
+from PySide6.QtCore import QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation, QSize
 import yahooquery as yq
 
 from dependencies import autocomplete as ac
@@ -33,6 +32,7 @@ from dependencies import readassets as ra
 from dependencies import savetrades as st
 from dependencies import saveport as sp
 from dependencies import scanner as sc
+from dependencies import unconventional_stragegies as us
 app = QApplication(sys.argv)
 
 CWD = os.getcwd() + '\\'
@@ -320,9 +320,7 @@ def update_portfolio_piechart():
 
     for idx, amount in enumerate(portfolio_amts):
         if portfolio_asset_types[idx] != 'Liquidity':
-            asset_price = float(
-                port_dialog.pos_view_gb.pos_view.item(idx - 1, 2).text()[1:]
-            )
+            asset_price = float(port_dialog.pos_view_gb.pos_view.item(idx - 1, 2).text()[1:])
 
         match portfolio_asset_types[idx]:
             case "ETF":
@@ -458,15 +456,16 @@ def update_portfolio_table():
     # for each asset in the portfolio
     port_zip = zip(portfolio_tickers[1:], PORTFOLIO_OBJECTS, purchase_prices, portfolio_amts[1:])
     for idx, (ticker, obj, basis, amt) in enumerate(port_zip):
-
+        int_amt = int(amt)
+        basis = float(basis)
         # get the current price and the price it last closed at
 
         ticker_data = obj.history(period='5d')
-        ticker_current = ticker_data.iloc[-1][5]
-        ticker_last_close = ticker_data.iloc[-2][5]
+        current_price = ticker_data.iloc[-1][5]
+        last_close = ticker_data.iloc[-2][5]
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (ticker_current - float(basis)) * int(amt)
-        percent_change = round(total_return / (float(basis) * float(amt)) * 100, 2)
+        total_return = (current_price - basis) * int_amt
+        percent_change = round(total_return / (basis * int_amt) * 100, 2)
         # update the table with the new information
 
         if port_dialog.pos_view_gb.pos_view.item(idx, 0) is None:
@@ -479,19 +478,18 @@ def update_portfolio_table():
 
         port_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(ticker_data))
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 2).setText(f'${ticker_current:0,.2f}')
+        port_dialog.pos_view_gb.pos_view.item(idx, 2).setText(f'${current_price:0,.2f}')
 
-        last_close_change = ticker_current - ticker_last_close
+        last_close_change = current_price - last_close
         port_dialog.pos_view_gb.pos_view.item(idx, 3).setText(
-            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+            f'${last_close_change:0,.2f} ({round(last_close_change / last_close * 100, 2)}%)'
         )
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${float(basis):0,.2f}')
+        port_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${basis:0,.2f}')
 
         port_dialog.pos_view_gb.pos_view.item(idx, 5).setText(amt)
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 6).setText(
-            f'${(ticker_current * int(amt)):0,.2f}')
+        port_dialog.pos_view_gb.pos_view.item(idx, 6).setText(f'${(current_price * int_amt):0,.2f}')
 
         port_dialog.pos_view_gb.pos_view.item(idx, 7).setText(
             f'${total_return:0,.2f} ({percent_change}%)')
@@ -508,7 +506,7 @@ def update_watchlist_tickers():
 
         ticker = obj.history(period='5d')
         ticker_current = ticker.iloc[-1][5]
-        ticker_last_close = ticker.iloc[-2][5]
+        last_close = ticker.iloc[-2][5]
 
         port_dialog.watchlist_gb.watchlist.item(idx, 0).setText(item)
 
@@ -516,9 +514,9 @@ def update_watchlist_tickers():
 
         port_dialog.watchlist_gb.watchlist.item(idx, 2).setText(f'${ticker_current:0,.2f}')
 
-        last_close_change = ticker_current - ticker_last_close
+        last_close_change = ticker_current - last_close
         port_dialog.watchlist_gb.watchlist.item(idx, 3).setText(
-            f'${last_close_change:0,.2f} ({round(last_close_change / ticker_last_close * 100, 2)}%)'
+            f'${last_close_change:0,.2f} ({round(last_close_change / last_close * 100, 2)}%)'
 
         )
 
@@ -638,11 +636,11 @@ def update_ticker_icon(ticker) -> QIcon:
 
     ticker_open = ticker.iloc[-1][0]
     ticker_current = ticker.iloc[-1][5]
-    ticker_last_close = ticker.iloc[-2][5]
+    last_close = ticker.iloc[-2][5]
 
     # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
-    close_change = (ticker_current - ticker_last_close) / ticker_last_close * 100
+    close_change = (ticker_current - last_close) / last_close * 100
 
     # decides if the stock is up, down, or flat compared to open and yesterday's close
     open_pos = "UP"
@@ -705,20 +703,20 @@ def update_portfolio_nav():
     for idx, amt in enumerate(portfolio_amts[1:]):
         # slice returns only the dollar value without the '$'
         cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
+        amt = int(amt)
 
-        if int(amt) > 0:
+        if amt > 0:
             # if it's long, add its value to the new value and to the assets tally
-            new_val += float(cur_val) * int(amt)
-            assets += float(cur_val) * float(amt)
-        elif int(amt) < 0:
+            new_val += cur_val * amt
+            assets += cur_val * amt
+        elif amt < 0:
             # if it's short, subtract its value from the new value and add to the liabilities tally
-            new_val += float(cur_val) * int(amt)
-            liabilities += float(cur_val) * float(amt)
+            new_val += cur_val * amt
+            liabilities += cur_val * amt
 
-    buying_power = get_portfolio_bp()
     port_dialog.nav_gb.liq.setText(f'${new_val:0,.2f}')
 
-    port_dialog.nav_gb.bp.setText(f'${buying_power:0,.2f}')
+    port_dialog.nav_gb.bp.setText(f'${get_portfolio_bp():0,.2f}')
 
     port_dialog.nav_gb.cash.setText(f'${portfolio_cash:0,.2f}')
 
@@ -739,12 +737,13 @@ def update_wallet_nav():
     assets = 0
     for idx, amt in enumerate(wallet_amts[1:]):
         cur_val = atof(wallet_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        if float(amt) > 0:
-            new_val += float(cur_val) * float(amt)
-            assets += float(cur_val) * float(amt)
-        elif float(amt) < 0:
-            new_val -= float(cur_val) * float(amt)
-            liabilites += float(cur_val) * float(amt)
+        amt = float(amt)
+        if amt > 0:
+            new_val += cur_val * amt
+            assets += cur_val * amt
+        elif amt < 0:
+            new_val -= cur_val * amt
+            liabilites += cur_val * amt
 
     buying_power = get_wallet_bp()
     wallet_dialog.nav_gb.liq.setText(f'${new_val:0,.2f}')
@@ -771,10 +770,11 @@ def get_portfolio_bp() -> float:
 
     for idx, amt in enumerate(portfolio_amts[1:]):
         cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        if int(amt) > 0:
-            total_long += float(cur_val) * int(amt)
-        elif int(amt) < 0:
-            total_short += float(cur_val) * int(amt)
+        amt = int(amt)
+        if amt > 0:
+            total_long += cur_val * amt
+        elif amt < 0:
+            total_short += cur_val * amt
 
     buying_power += .5 * total_long
     buying_power += 1.5 * total_short
@@ -844,21 +844,20 @@ def get_etf_weights(ticker_info: pd.DataFrame) -> dict:
     weights as values from the given ticker information dataframe,
     obtained from a call to yq.Ticker('name').fund_sector_weightings
     """
-    weights_list = {}
 
-    weights_list["Real Estate"] = ticker_info.iloc[0]
-    weights_list["Consumer Cyclicals"] = ticker_info.iloc[1]
-    weights_list["Basic Materials"] = ticker_info.iloc[2]
-    weights_list["Consumer Defensives"] = ticker_info.iloc[3]
-    weights_list["Technology"] = ticker_info.iloc[4]
-    weights_list["Communication Services"] = ticker_info.iloc[5]
-    weights_list["Financial Services"] = ticker_info.iloc[6]
-    weights_list["Utilities"] = ticker_info.iloc[7]
-    weights_list["Industrials"] = ticker_info.iloc[8]
-    weights_list["Energy"] = ticker_info.iloc[9]
-    weights_list["Healthcare"] = ticker_info.iloc[10]
-
-    return weights_list
+    return {
+        "Real Estate" : ticker_info.iloc[0],
+        "Consumer Cyclicals" : ticker_info.iloc[1],
+        "Basic Materials" : ticker_info.iloc[2],
+        "Consumer Defensives" : ticker_info.iloc[3],
+        "Technology" : ticker_info.iloc[4],
+        "Communication Services" : ticker_info.iloc[5],
+        "Financial Services" : ticker_info.iloc[6],
+        "Utilities" : ticker_info.iloc[7],
+        "Industrials" : ticker_info.iloc[8],
+        "Energy" : ticker_info.iloc[9],
+        "Healthcare" : ticker_info.iloc[10]
+    }
 
 
 def clear_layout(layout: QVBoxLayout):
@@ -884,6 +883,7 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     fund_performance = ticker.fund_performance[name]['trailingReturns']
     etf_weights = get_etf_weights(ticker.fund_sector_weightings)
     ticker_news = fn.get_finviz_news(name)
+
 
     stockinfo_main.about_groupbox.setVisible(True)
     stockinfo_main.asset_info_gb.setVisible(True)
@@ -1250,12 +1250,21 @@ def stockinfo_dialog_changed(tab_id: int):
         series.attachAxis(ptchart_x_axis)
 
         clear_layout(pt_label_container.layout())
-        pt_label_container.layout().addWidget(QLabel(f"Current Price: {ticker_pts['currentPrice']}"))
-        pt_label_container.layout().addWidget(QLabel(f"Target Low Price: {ticker_pts['targetLowPrice']}"))
-        pt_label_container.layout().addWidget(QLabel(f"Target Mean Price: {ticker_pts['targetMeanPrice']}"))
-        pt_label_container.layout().addWidget(QLabel(f"Target High Price: {ticker_pts['targetHighPrice']}"))
         pt_label_container.layout().addWidget(
-            QLabel(f"Number of Analyst Opinions: {ticker_pts['numberOfAnalystOpinions']}"))
+            QLabel(f"Current Price: {ticker_pts['currentPrice']}")
+        )
+        pt_label_container.layout().addWidget(
+            QLabel(f"Target Low Price: {ticker_pts['targetLowPrice']}")
+        )
+        pt_label_container.layout().addWidget(
+            QLabel(f"Target Mean Price: {ticker_pts['targetMeanPrice']}")
+        )
+        pt_label_container.layout().addWidget(
+            QLabel(f"Target High Price: {ticker_pts['targetHighPrice']}")
+        )
+        pt_label_container.layout().addWidget(
+            QLabel(f"Number of Analyst Opinions: {ticker_pts['numberOfAnalystOpinions']}")
+        )
 
 
         qtr_earnings_chart.removeAllSeries()
@@ -1605,10 +1614,7 @@ def close_event():
 app.aboutToQuit.connect(close_event)
 widget = QTabWidget()
 widget.setWindowTitle("Paper Trading Game")
-splash = QSplashScreen(
-    QPixmap(f"{CWD}splashscreen-images/splash.png")
-
-)
+splash = QSplashScreen(QPixmap(f"{CWD}splashscreen-images/splash.png"))
 progressBar = QProgressBar(splash)
 progressBar.setGeometry(420, 500, 400, 50)
 splash.show()
@@ -1643,16 +1649,13 @@ WATCHLIST_OBJECTS = [yq.Ticker(symbol) for symbol in watchlist_tickers]
 trades = ra.get_xml_data(r'assets\trades.xml', 'trade')
 
 for trade in trades:
-    trade_list_item = []
-    trade_list_item.append(trade.contents[1].text)
-    trade_list_item.append(trade.contents[3].text)
-    trade_list_item.append(trade.contents[5].text)
-    trade_list_item.append(trade.contents[7].text)
-    trade_list_item.append(trade.contents[9].text)
+    trade_list_item = [trade.contents[1].text, trade.contents[3].text, trade.contents[5].text,
+                       trade.contents[7].text, trade.contents[9].text]
+
     OPEN_ORDERS.append(trade_list_item)
 
     ticker_obj = yq.Ticker(trade.contents[1].text)
-    prices = ticker_obj.history(
+    prices_frame = ticker_obj.history(
         interval='1m',
         start=datetime.strptime(trade.contents[11].text, '%Y-%m-%d %H:%M:%S.%f'),
         end=datetime.now()
@@ -1666,33 +1669,35 @@ for trade in trades:
             asset_class = 'Stock'
         case 'ETF':
             asset_class = 'ETF'
+
+    trade_price = float(trade.contents[7].text)
     if trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Limit':
-        for row in prices.iterrows():
-            if row[1].iloc[3] < float(trade.contents[7].text):
-                execute_buy(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        for row in prices_frame.iterrows():
+            if row[1].iloc[3] < trade_price:
+                execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
                 break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Limit':
-        for row in prices.iterrows():
-            if row[1].iloc[2] > float(trade.contents[7].text):
-                execute_sell(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        for row in prices_frame.iterrows():
+            if row[1].iloc[2] > trade_price:
+                execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
                 break
     elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Stop':
-        for row in prices.iterrows():
-            if row[1].iloc[2] > float(trade.contents[7].text):
-                execute_buy(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        for row in prices_frame.iterrows():
+            if row[1].iloc[2] > trade_price:
+                execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
                 break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Stop':
-        for row in prices.iterrows():
-            if row[1].iloc[3] < float(trade.contents[7].text):
-                execute_sell(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        for row in prices_frame.iterrows():
+            if row[1].iloc[3] < trade_price:
+                execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
                 break
     elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Market':
-        if prices.size > 1:
-            execute_buy(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        if prices_frame.size > 1:
+            execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
             break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Market':
-        if prices.size > 1:
-            execute_sell(trade_list_item, ticker_obj, asset_class, cash, float(trade.contents[7].text))
+        if prices_frame.size > 1:
+            execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
             break
 
 
@@ -1970,24 +1975,27 @@ indicators_dialog.momentum_gb.setStyleSheet('background-color: white')
 ta_combobox_items = [str(i) for i in range(0, 16)]
 
 
-def on_enter(event, widget, widget_button):
+def on_enter(_, indicator_widget, widget_button):
     """
     Sets the background color of the technical indicator widget to gray when it is hovered over
     """
     widget_button.setVisible(True)
-    widget.setStyleSheet("background-color : #E3E3E3;")
-    for child in widget.children()[1:]:
+    indicator_widget.setStyleSheet("background-color : #E3E3E3;")
+    for child in indicator_widget.children()[1:]:
         child.setStyleSheet("background-color : #E3E3E3;")
 
-def on_exit(event, widget, widget_button):
+
+def on_exit(_, indicator_widget, widget_button):
     """
-    Sets the background color of the technical indicator widget to white when it is
+    Sets the background color of the technical indicator indicator_widge to white when it is
     no longer being hovered over
     """
     widget_button.setVisible(False)
-    widget.setStyleSheet("background-color : white;")
-    for child in widget.children()[1:]:
+    indicator_widget.setStyleSheet("background-color : white;")
+    for child in indicator_widget.children()[1:]:
         child.setStyleSheet("background-color : white;")
+
+
 indicators_dialog.momentum_gb.momentum_scrollarea = QScrollArea(indicators_dialog.momentum_gb)
 indicators_dialog.momentum_gb.momentum_scrollarea.setGeometry(10, 20, 280, 600)
 momentum_widget = QWidget()
@@ -2043,9 +2051,7 @@ def adx_button_clicked():
     ok_button = QPushButton("Save" if adx_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ADX", adx_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ADX", adx_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if adx_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ADX")] = settings_tuple
@@ -2119,9 +2125,7 @@ def adxr_button_clicked():
     ok_button = QPushButton("Save" if adxr_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ADXR", adxr_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ADXR", adxr_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if adxr_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ADXR")] = settings_tuple
@@ -2219,12 +2223,8 @@ def apo_button_clicked():
     ok_button = QPushButton("Save" if apo_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        new_vals = [
-            fastma_spinbox.value(), slowma_spinbox.value(), matype_spinbox.value()
-        ]
-        settings_tuple = (
-            "talib.APO", apo_panel_cb.currentIndex(), new_vals
-        )
+        new_vals = [fastma_spinbox.value(), slowma_spinbox.value(), matype_spinbox.value()]
+        settings_tuple = ("talib.APO", apo_panel_cb.currentIndex(), new_vals)
         if apo_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.APO")] = settings_tuple
         else:
@@ -2296,9 +2296,7 @@ def aroon_button_clicked():
     ok_button = QPushButton("Save" if aroon_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.AROON", aroon_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.AROON", aroon_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if aroon_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.AROON")] = settings_tuple
@@ -2514,9 +2512,7 @@ def cci_button_clicked():
     ok_button = QPushButton("Save" if cci_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.CCI", cci_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.CCI", cci_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if cci_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.CCI")] = settings_tuple
@@ -2591,9 +2587,7 @@ def cmo_button_clicked():
     ok_button = QPushButton("Save" if cmo_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.CMO", cmo_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.CMO", cmo_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if cmo_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.CMO")] = settings_tuple
@@ -2668,9 +2662,7 @@ def dx_button_clicked():
     ok_button = QPushButton("Save" if dx_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.DX", dx_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.DX", dx_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if dx_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.DX")] = settings_tuple
@@ -2798,12 +2790,9 @@ def macdext_button_clicked():
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
         new_vals = [
-                fastpd_spinbox.value(),
-                fastpd_matype_spinbox.value(),
-                slowpd_spinbox.value(),
-                slowpd_matype_spinbox.value(),
-                signalpd_spinbox.value(),
-                signalpd_matype_spinbox.value(),
+                fastpd_spinbox.value(), fastpd_matype_spinbox.value(),
+                slowpd_spinbox.value(), slowpd_matype_spinbox.value(),
+                signalpd_spinbox.value(), signalpd_matype_spinbox.value(),
         ]
         settings_tuple = ("talib.MACDEXT", macdext_panel_cb.currentIndex(), new_vals)
 
@@ -3112,9 +3101,7 @@ def mom_button_clicked():
     ok_button = QPushButton("Save" if mom_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.MOM", mom_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.MOM", mom_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if mom_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.MOM")] = settings_tuple
@@ -3266,8 +3253,7 @@ def plusdm_button_clicked():
     ok_button = QPushButton("Save" if plusdm_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.PLUS_DM", plusdm_panel_cb.currentIndex(), [period_spinbox.value()]
+        settings_tuple = ("talib.PLUS_DM", plusdm_panel_cb.currentIndex(), [period_spinbox.value()]
         )
 
         if plusdm_checkbox.isChecked():
@@ -3368,9 +3354,7 @@ def kama_button_clicked():
         new_vals = [
             er_spinbox.value(), fastma_spinbox.value(), slowma_spinbox.value()
         ]
-        settings_tuple = (
-            "ta.momentum.kama", kama_panel_cb.currentIndex(), new_vals
-        )
+        settings_tuple = ("ta.momentum.kama", kama_panel_cb.currentIndex(), new_vals)
         if kama_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.momentum.kama")] = settings_tuple
         else:
@@ -3468,9 +3452,7 @@ def pvo_button_clicked():
         new_vals = [
             slowma_spinbox.value(), fastma_spinbox.value(), signal_spinbox.value()
         ]
-        settings_tuple = (
-            "ta.momentum.pvo", pvo_panel_cb.currentIndex(), new_vals
-        )
+        settings_tuple = ("ta.momentum.pvo", pvo_panel_cb.currentIndex(), new_vals)
         if pvo_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.momentum.pvo")] = settings_tuple
         else:
@@ -3542,9 +3524,7 @@ def roc_button_clicked():
     ok_button = QPushButton("Save" if roc_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ROC", roc_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ROC", roc_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if roc_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ROC")] = settings_tuple
@@ -3618,9 +3598,7 @@ def rocp_button_clicked():
     ok_button = QPushButton("Save" if rocp_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ROCP", rocp_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ROCP", rocp_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if rocp_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ROCP")] = settings_tuple
@@ -3697,9 +3675,7 @@ def rocr_button_clicked():
     ok_button = QPushButton("Save" if rocr_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ROCR", rocr_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ROCR", rocr_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if rocr_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ROCR")] = settings_tuple
@@ -3731,16 +3707,16 @@ momentum_widget.layout().addWidget(rocr_widget)
 rocr100_widget = QWidget()
 rocr100_widget.setLayout(QHBoxLayout())
 rocr100_widget.layout().addWidget(QLabel("ROCR Indexed to 100"))
-rocr100_panel_cb = QComboBox()
-rocr100_panel_cb.addItems(ta_combobox_items)
-rocr100_panel_cb.currentTextChanged.connect(
+rocr100_cb = QComboBox()
+rocr100_cb.addItems(ta_combobox_items)
+rocr100_cb.currentTextChanged.connect(
     lambda state: change_indicator_panel(
         "talib.ROCR100", state, selected_ta[get_indicator_index("talib.ROCR100")][2]
     )
     if rocr100_checkbox.isChecked()
     else None
 )
-rocr100_widget.layout().addWidget(rocr100_panel_cb)
+rocr100_widget.layout().addWidget(rocr100_cb)
 rocr100_settings_button = QPushButton()
 rocr100_settings_button.setVisible(False)
 size_retain = rocr100_settings_button.sizePolicy()
@@ -3774,9 +3750,7 @@ def rocr100_button_clicked():
     ok_button = QPushButton("Save" if rocr100_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.ROCR100", rocr100_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.ROCR100", rocr100_cb.currentIndex(), [period_spinbox.value()])
 
         if rocr100_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.ROCR100")] = settings_tuple
@@ -3799,7 +3773,7 @@ rocr100_checkbox = QCheckBox()
 rocr100_checkbox.clicked.connect(
     lambda: indicator_box_clicked(
         rocr100_checkbox,
-        rocr100_panel_cb.currentIndex(),
+        rocr100_cb.currentIndex(),
         "talib.ROCR100",
         [10],
         selected_ta
@@ -3855,9 +3829,7 @@ def rsi_button_clicked():
     ok_button = QPushButton("Save" if rsi_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "talib.RSI", rsi_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("talib.RSI", rsi_panel_cb.currentIndex(), [period_spinbox.value()])
 
         if rsi_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.RSI")] = settings_tuple
@@ -3985,9 +3957,7 @@ def slowstoch_button_clicked():
             slowd_spinbox.value(),
             slowd_matype_spinbox.value()
         ]
-        settings_tuple = (
-            "talib.STOCH", slowstoch_panel_cb.currentIndex(), new_vals
-        )
+        settings_tuple = ("talib.STOCH", slowstoch_panel_cb.currentIndex(), new_vals)
         if slowstoch_checkbox.isChecked():
             selected_ta[get_indicator_index("talib.STOCH")] = settings_tuple
         else:
@@ -4202,10 +4172,8 @@ def stochrsi_button_clicked():
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
         new_vals = [
-            period_spinbox.value(),
-            fastk_spinbox.value(),
-            fastd_spinbox.value(),
-            fastd_matype_spinbox.value()
+            period_spinbox.value(), fastk_spinbox.value(),
+            fastd_spinbox.value(), fastd_matype_spinbox.value()
             ]
         settings_tuple = ("talib.STOCHRSI", stochrsi_panel_cb.currentIndex(), new_vals)
         if stochrsi_checkbox.isChecked():
@@ -4812,38 +4780,34 @@ def ichimoku_button_clicked():
     wnd.setLayout(QVBoxLayout())
     low_period_widget = QWidget()
     low_period_widget.setLayout(QHBoxLayout())
-    low_period_label = QLabel("MACD Slow Period")
     low_period_spinbox = QSpinBox()
     low_period_spinbox.setValue(selected_ta[get_indicator_index(
         "ta.trend.IchimokuIndicator")][2][0] if ichimoku_checkbox.isChecked() else 9)
-    low_period_widget.layout().addWidget(low_period_label)
+    low_period_widget.layout().addWidget(QLabel("MACD Slow Period"))
     low_period_widget.layout().addWidget(low_period_spinbox)
     wnd.layout().addWidget(low_period_widget)
     med_period_widget = QWidget()
     med_period_widget.setLayout(QHBoxLayout())
-    med_period_label = QLabel("MACD Fast Period")
     med_period_spinbox = QSpinBox()
     med_period_spinbox.setValue(selected_ta[get_indicator_index(
         "ta.trend.IchimokuIndicator")][2][1] if ichimoku_checkbox.isChecked() else 26)
-    med_period_widget.layout().addWidget(med_period_label)
+    med_period_widget.layout().addWidget(QLabel("MACD Fast Period"))
     med_period_widget.layout().addWidget(med_period_spinbox)
     wnd.layout().addWidget(med_period_widget)
     high_period_widget = QWidget()
     high_period_widget.setLayout(QHBoxLayout())
-    high_period_label = QLabel("Cycles")
     high_period_spinbox = QSpinBox()
     high_period_spinbox.setValue(selected_ta[get_indicator_index(
         "ta.trend.IchimokuIndicator")][2][2] if ichimoku_checkbox.isChecked() else 52)
-    high_period_widget.layout().addWidget(high_period_label)
+    high_period_widget.layout().addWidget(QLabel("Cycles"))
     high_period_widget.layout().addWidget(high_period_spinbox)
     wnd.layout().addWidget(high_period_widget)
     shift_widget = QWidget()
     shift_widget.setLayout(QHBoxLayout())
-    shift_label = QLabel("Shift Medium")
     shift_checkbox = QCheckBox()
     shift_checkbox.setChecked(selected_ta[get_indicator_index(
         "ta.trend.IchimokuIndicator")][2][3] if ichimoku_checkbox.isChecked() else False)
-    shift_widget.layout().addWidget(shift_label)
+    shift_widget.layout().addWidget(QLabel("Shift Medium"))
     shift_widget.layout().addWidget(shift_checkbox)
     wnd.layout().addWidget(shift_widget)
     defaults_button = QPushButton("Reset to Defaults")
@@ -4863,15 +4827,11 @@ def ichimoku_button_clicked():
 
     def ok_button_clicked():
         new_vals = [
-            low_period_spinbox.value(),
-            med_period_spinbox.value(),
-            high_period_spinbox.value(),
-            shift_checkbox.isChecked()
+            low_period_spinbox.value(), med_period_spinbox.value(),
+            high_period_spinbox.value(), shift_checkbox.isChecked()
         ]
         settings_tuple = (
-            "ta.trend.IchimokuIndicator",
-            ichimoku_panel_cb.currentIndex(),
-            new_vals
+            "ta.trend.IchimokuIndicator", ichimoku_panel_cb.currentIndex(), new_vals
         )
         if ichimoku_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.trend.IchimokuIndicator")] = settings_tuple
@@ -4935,20 +4895,18 @@ def mi_button_clicked():
     wnd.setLayout(QVBoxLayout())
     fast_period_widget = QWidget()
     fast_period_widget.setLayout(QHBoxLayout())
-    fast_period_label = QLabel("Fast Period")
     fast_period_spinbox = QSpinBox()
     fast_period_spinbox.setValue(selected_ta[get_indicator_index(
         "ta.trend.mass_index")][2][0] if mi_checkbox.isChecked() else 9)
-    fast_period_widget.layout().addWidget(fast_period_label)
+    fast_period_widget.layout().addWidget(QLabel("Fast Period"))
     fast_period_widget.layout().addWidget(fast_period_spinbox)
     wnd.layout().addWidget(fast_period_widget)
     slow_period_widget = QWidget()
     slow_period_widget.setLayout(QHBoxLayout())
-    slow_period_label = QLabel("Slow Period")
     slow_period_spinbox = QSpinBox()
     slow_period_spinbox.setValue(selected_ta[get_indicator_index(
         "ta.trend.mass_index")][2][1] if mi_checkbox.isChecked() else 25)
-    slow_period_widget.layout().addWidget(slow_period_label)
+    slow_period_widget.layout().addWidget(QLabel("Slow Period"))
     slow_period_widget.layout().addWidget(slow_period_spinbox)
     wnd.layout().addWidget(slow_period_widget)
     defaults_button = QPushButton("Reset to Defaults")
@@ -4960,19 +4918,11 @@ def mi_button_clicked():
     cancel_button = QPushButton("Cancel")
     cancel_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     cancel_button.clicked.connect(lambda: wnd.done(0))
-    ok_button = QPushButton(
-        "Save" if mi_checkbox.isChecked() else "Save and Add")
+    ok_button = QPushButton("Save" if mi_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        new_vals = [
-            fast_period_spinbox.value(),
-            slow_period_spinbox.value()
-        ]
-        settings_tuple = (
-            "ta.trend.mass_index",
-            mi_panel_cb.currentIndex(),
-            new_vals
-        )
+        new_vals = [fast_period_spinbox.value(), slow_period_spinbox.value()]
+        settings_tuple = ("ta.trend.mass_index", mi_panel_cb.currentIndex(), new_vals)
         if mi_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.trend.mass_index")] = settings_tuple
         else:
@@ -5094,15 +5044,10 @@ def schaff_button_clicked():
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
         new_vals = [
-            macd_slow_spinbox.value(),
-            macd_fast_spinbox.value(),
-            cycle_spinbox.value(),
-            length1_spinbox.value(),
-            length2_spinbox.value()
+            macd_slow_spinbox.value(), macd_fast_spinbox.value(), cycle_spinbox.value(),
+            length1_spinbox.value(), length2_spinbox.value()
         ]
-        settings_tuple = (
-            "ta.trend.stc", schaff_panel_cb.currentIndex(), new_vals
-        )
+        settings_tuple = ("ta.trend.stc", schaff_panel_cb.currentIndex(), new_vals)
         if schaff_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.trend.stc")] = settings_tuple
         else:
@@ -5181,9 +5126,7 @@ def trix_button_clicked():
     ok_button = QPushButton("Save" if trix_checkbox.isChecked() else "Save and Add")
     ok_button.setStyleSheet(SETTINGS_DIALOG_BTN_STYLESHEET)
     def ok_button_clicked():
-        settings_tuple = (
-            "ta.trend.trix", trix_panel_cb.currentIndex(), [period_spinbox.value()]
-        )
+        settings_tuple = ("ta.trend.trix", trix_panel_cb.currentIndex(), [period_spinbox.value()])
         if trix_checkbox.isChecked():
             selected_ta[get_indicator_index("ta.trend.trix")] = settings_tuple
         else:
@@ -5493,6 +5436,9 @@ trade_dialog.order_gb.type_label.setText("Order Type")
 trade_dialog.order_gb.type_label.setGeometry(10, 230, 100, 15)
 
 def trade_searchbar_click():
+    """
+    Updates trade dialog when a stock is selected for trading
+    """
     global CURRENT_TRADE_STOCK
 
     ticker = trade_dialog.searchbar_gb.searchBar.text().split(' ')[0]
@@ -5501,13 +5447,13 @@ def trade_searchbar_click():
 
     prices = yq.Ticker(ticker).history('1d', '1m')
     day_chart.removeAllSeries()
-    day_lineseries = QLineSeries()
+    day_chart_series = QLineSeries()
     for idx, close in enumerate(prices.loc[:, 'close']):
         price_dt = QDateTime().fromString(str(prices.index[idx][1])[0:19], "yyyy-MM-dd hh:mm:ss")
         epoch_dt = float(price_dt.toMSecsSinceEpoch())
-        day_lineseries.append(epoch_dt, close)
+        day_chart_series.append(epoch_dt, close)
 
-    day_chart.addSeries(day_lineseries)
+    day_chart.addSeries(day_chart_series)
 
     day_chart.createDefaultAxes()
     day_chart.axes(Qt.Orientation.Horizontal)[0].hide()
@@ -5519,10 +5465,13 @@ def trade_searchbar_click():
     day_chart_x_axis.setVisible(True)
 
     day_chart.addAxis(day_chart_x_axis, Qt.AlignmentFlag.AlignBottom)
-    day_lineseries.attachAxis(day_chart_x_axis)
+    day_chart_series.attachAxis(day_chart_x_axis)
 
 
 def update_trade_dialog():
+    """
+    Updates the trade dialog UI with current bid, ask, and last trade price information
+    """
     ticker_symbol = CURRENT_TRADE_STOCK
     yq_ticker = yq.Ticker(ticker_symbol)
     all_modules = yq_ticker.all_modules[ticker_symbol]
@@ -5532,7 +5481,9 @@ def update_trade_dialog():
     summary = all_modules['summaryDetail']
 
     trade_dialog.basic_info_gb.full_name_label.setText(quote_type['shortName'])
-    trade_dialog.basic_info_gb.price_label.setText(f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})")
+    trade_dialog.basic_info_gb.price_label.setText(
+        f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})"
+    )
     trade_dialog.basic_info_gb.bid_label.setText(f"Bid: {summary['bid']} ({summary['bidSize']})")
     trade_dialog.basic_info_gb.ask_label.setText(f"Ask: {summary['ask']} ({summary['askSize']})")
 
@@ -5544,6 +5495,10 @@ def update_trade_dialog():
 
 
 def on_ordertype_change(value):
+    """
+    Shows or hides the price slider depending on the type of order selected
+    (show for limit/stop, hide for market)
+    """
     match value:
         case 'Market':
             trade_dialog.order_gb.price_slider.setVisible(False)
@@ -5558,7 +5513,9 @@ def on_ordertype_change(value):
 
 
 def on_previeworder_click():
-
+    """
+    Shows dialog with preview of the user's order
+    """
     wnd = QDialog(widget)
     wnd.setWindowTitle("Preview Order")
     wnd.setLayout(QVBoxLayout())
@@ -5666,12 +5623,10 @@ trade_dialog.order_gb.limit_stop_bid.setText("<bid>")
 trade_dialog.order_gb.limit_stop_bid.setGeometry(120, 300, 50, 50)
 trade_dialog.order_gb.limit_stop_bid.setVisible(False)
 
-
 trade_dialog.order_gb.limit_stop_ask = QLabel(trade_dialog.order_gb)
 trade_dialog.order_gb.limit_stop_ask.setText("<ask>")
 trade_dialog.order_gb.limit_stop_ask.setGeometry(350, 300, 50, 50)
 trade_dialog.order_gb.limit_stop_ask.setVisible(False)
-
 
 trade_dialog.order_gb.limit_stop_mid = QLabel(trade_dialog.order_gb)
 trade_dialog.order_gb.limit_stop_mid.setText("<mid>")
@@ -6083,7 +6038,10 @@ scanner_dialog = QDialog()
 scanner_dialog.setStyleSheet('background-color: deepskyblue')
 scanner_dialog.setLayout(QGridLayout())
 
-def create_results_dialog(search_criteria, sort_field=None):
+def create_results_dialog(search_criteria=None, search_results: list[dict] | pd.DataFrame=None, sort_field=None, results_iterable=None):
+    """
+    Changes the content of the "Scanner" dialog in the "Trade Ideas" tab to the scanner search results
+    """
     new_scanner_dialog = QDialog()
     new_scanner_dialog.setStyleSheet('background-color: deepskyblue')
 
@@ -6099,23 +6057,35 @@ def create_results_dialog(search_criteria, sort_field=None):
 
     new_scanner_dialog.back_button.clicked.connect(back_button_clicked)
 
-
     new_scanner_dialog.results_scroll = QScrollArea(new_scanner_dialog)
     new_scanner_dialog.results_scroll.setGeometry(100, 20, 1100, 550)
     new_scanner_dialog.results_scroll.setStyleSheet('background-color: white')
-    new_scanner_dialog.results_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    new_scanner_dialog.results_scroll.setSizePolicy(
+        QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+    )
 
     new_scanner_dialog.results_widget = QWidget(new_scanner_dialog)
     new_scanner_dialog.results_widget.setLayout(QVBoxLayout())
     new_scanner_dialog.setMinimumWidth(1000)
 
-    for result in sc.get_results(search_criteria, sort_field):
-        result_widget = QWidget()
-        result_widget.setLayout(QHBoxLayout())
-        for key in result.keys():
-            result_widget.layout().addWidget(QLabel(str(result[key])))
+    if search_criteria is not None and sort_field is not None:
+        for result in sc.get_results(search_criteria, sort_field):
+            result_widget = QWidget()
+            result_widget.setLayout(QHBoxLayout())
+            for key in result.keys():
+                result_widget.layout().addWidget(QLabel(str(result[key])))
 
-        new_scanner_dialog.results_widget.layout().addWidget(result_widget)
+            new_scanner_dialog.results_widget.layout().addWidget(result_widget)
+    elif search_results is not None:
+        for result in results_iterable:
+            result_widget = QWidget()
+            result_widget.setLayout(QHBoxLayout())
+            for item in result:
+                result_widget.layout().addWidget(QLabel(str(item)))
+
+            new_scanner_dialog.results_widget.layout().addWidget(result_widget)
+
+
 
     new_scanner_dialog.results_scroll.setWidget(new_scanner_dialog.results_widget)
     ideas_dialog.removeTab(0)
@@ -6123,62 +6093,251 @@ def create_results_dialog(search_criteria, sort_field=None):
     ideas_dialog.setCurrentIndex(0)
 
 
-day_gain_groupbox = QGroupBox(scanner_dialog)
-day_gain_groupbox.setTitle("Day Gainers")
-day_gain_groupbox.setStyleSheet('background-color: white')
+def create_scanner(title, desc, search_criteria, xpos, ypos, sort_field=None):
+    """
+    Creates a scanner widget and adds it to the scanner dialog
+    """
+    scanner_groupbox = QGroupBox(scanner_dialog)
+    scanner_groupbox.setTitle(title)
+    scanner_groupbox.setStyleSheet('background-color: white')
 
-day_gain_groupbox.desc_label = QLabel(day_gain_groupbox)
-day_gain_groupbox.desc_label.setText(
-    "Find stocks that have gained the most relative to their close yesterday"
-)
-day_gain_groupbox.desc_label.setWordWrap(True)
-day_gain_groupbox.desc_label.setGeometry(10, 15, 130, 90)
+    scanner_groupbox.desc_label = QLabel(scanner_groupbox)
+    scanner_groupbox.desc_label.setText(desc)
+    scanner_groupbox.desc_label.setWordWrap(True)
+    scanner_groupbox.desc_label.setGeometry(10, 15, 130, 90)
 
-day_gain_groupbox.run_button = QPushButton(day_gain_groupbox)
-day_gain_groupbox.run_button.setText('Run')
-day_gain_groupbox.run_button.setGeometry(25, 110, 100, 20)
+    scanner_groupbox.run_button = QPushButton(scanner_groupbox)
+    scanner_groupbox.run_button.setText('Run')
+    scanner_groupbox.run_button.setGeometry(25, 110, 100, 20)
 
-day_gain_groupbox.run_button.clicked.connect(
-    lambda: create_results_dialog('day_gainers', 'regularMarketChangePercent')
-)
+    scanner_groupbox.run_button.clicked.connect(
+        lambda: create_results_dialog(search_criteria=search_criteria, sort_field=sort_field)
+    )
 
-scanner_dialog.layout().addWidget(day_gain_groupbox, 0, 0)
+    scanner_dialog.layout().addWidget(scanner_groupbox, ypos, xpos)
 
-day_loss_groupbox = QGroupBox(scanner_dialog)
-day_loss_groupbox.setTitle("Day Losers")
-day_loss_groupbox.setStyleSheet('background-color: white')
-
-day_loss_groupbox.desc_label = QLabel(day_loss_groupbox)
-day_loss_groupbox.desc_label.setText(
-    "Find stocks that have lost the most relative to their close yesterday"
-)
-day_loss_groupbox.desc_label.setWordWrap(True)
-day_loss_groupbox.desc_label.setGeometry(10, 15, 130, 90)
-
-day_loss_groupbox.run_button = QPushButton(day_loss_groupbox)
-day_loss_groupbox.run_button.setText('Run')
-day_loss_groupbox.run_button.setGeometry(25, 110, 100, 20)
-
-day_loss_groupbox.run_button.clicked.connect(
-    lambda: create_results_dialog('day_losers', 'regularMarketChangePercent')
+create_scanner(
+    'Day Gainers',
+    "Find stocks that have gained the most relative to their close yesterday",
+    "day_gainers",
+    0, 0,
+    'regularMarketChangePercent',
 )
 
-scanner_dialog.layout().addWidget(day_loss_groupbox, 0, 1)
+create_scanner(
+    "Day Losers",
+    "Find stocks that have lost the most relative to their close yesterday",
+    "day_losers",
+    1, 0,
+    "regularMarketChangePercent"
+)
 
+create_scanner(
+    "Most Active",
+    "Find stocks that have traded the most shares today",
+    "most_actives",
+    2, 0,
+    "regularMarketVolume"
+)
+
+create_scanner(
+    "Options Open Interest",
+    "Find options with the highest Open Interest",
+    "top_options_open_interest",
+    3, 0
+)
+
+create_scanner(
+    "Options Implied Volatility",
+    "Find options with the highest Implied Volatility",
+    "top_options_implied_volatility",
+    4, 0
+)
+
+create_scanner(
+    "Undervalued Growth Stocks",
+    "Find stocks with earnings growth above 25% and low PE ratios",
+    "undervalued_growth_stocks",
+    5, 0
+)
+
+create_scanner(
+    "Undervalued Large Caps",
+    "Find large cap stocks trading at low multiples",
+    "undervalued_large_caps",
+    6, 0
+)
+
+create_scanner(
+    "Small Cap Gainers",
+    "Find small cap stocks up more than 5% today",
+    "small_cap_gainers",
+    0, 1
+)
 
 uncon_strats_dialog = QDialog()
 uncon_strats_dialog.setStyleSheet('background-color: deepskyblue')
+
+uncon_strats_dialog.cramer_gb = QGroupBox(uncon_strats_dialog)
+uncon_strats_dialog.cramer_gb.setTitle('Inverse Jim Cramer')
+uncon_strats_dialog.cramer_gb.setGeometry(10, 20, 350, 350)
+uncon_strats_dialog.cramer_gb.setStyleSheet('background-color: white')
+
+uncon_strats_dialog.cramer_gb.cramer_btn = QPushButton(uncon_strats_dialog.cramer_gb)
+uncon_strats_dialog.cramer_gb.cramer_btn.setIcon(QIcon(rf"{CWD}\icons\index.jpg"))
+uncon_strats_dialog.cramer_gb.cramer_btn.setIconSize(QSize(200, 300))
+uncon_strats_dialog.cramer_gb.cramer_btn.setGeometry(10, 20, 300, 190)
+uncon_strats_dialog.cramer_gb.cramer_btn.setEnabled(False)
+
+
+def uncon_strat_enter(_: QEnterEvent, button: QPushButton):
+    """
+    Triggered when one of the unconventional strategy buttons is entered by the mouse
+    """
+
+    button.setEnabled(True)
+    button.setStyleSheet(
+        """
+        border: 3px solid green;
+        """
+    )
+
+
+def uncon_strat_leave(_, button: QPushButton):
+    button.setEnabled(False)
+    button.setStyleSheet("")
+
+
+def cramer_btn_clicked():
+    results = us.get_cramer_recs()
+    results_iter = zip(
+        results['Stock'], results['Direction'], results['Date'], results['Return Since']
+    )
+    create_results_dialog(search_results=results, results_iterable=results_iter)
+
+uncon_strats_dialog.cramer_gb.cramer_btn.enterEvent = lambda e: uncon_strat_enter(
+    e, uncon_strats_dialog.cramer_gb.cramer_btn
+)
+uncon_strats_dialog.cramer_gb.cramer_btn.leaveEvent = lambda e: uncon_strat_leave(
+    e, uncon_strats_dialog.cramer_gb.cramer_btn
+)
+uncon_strats_dialog.cramer_gb.cramer_btn.clicked.connect(cramer_btn_clicked)
+
+uncon_strats_dialog.cramer_gb.cramer_label_header = QLabel(uncon_strats_dialog.cramer_gb)
+uncon_strats_dialog.cramer_gb.cramer_label_header.setText('Inverse Cramer Scanner')
+uncon_strats_dialog.cramer_gb.cramer_label_header.setGeometry(10, 240, 300, 30)
+uncon_strats_dialog.cramer_gb.cramer_label_header.setFont(QFont('arial', 20))
+
+uncon_strats_dialog.cramer_gb.cramer_label_text = QLabel(uncon_strats_dialog.cramer_gb)
+uncon_strats_dialog.cramer_gb.cramer_label_text.setText(
+    "Find CNBC analyst Jim Cramer's most recent buy and sell recommendations"
+)
+uncon_strats_dialog.cramer_gb.cramer_label_text.setGeometry(10, 270, 300, 50)
+uncon_strats_dialog.cramer_gb.cramer_label_text.setWordWrap(True)
+
+
+uncon_strats_dialog.wsb_gb = QGroupBox(uncon_strats_dialog)
+uncon_strats_dialog.wsb_gb.setTitle('WSB Scanner')
+uncon_strats_dialog.wsb_gb.setGeometry(500, 20, 350, 350)
+uncon_strats_dialog.wsb_gb.setStyleSheet('background-color: white')
+
+uncon_strats_dialog.wsb_gb.wsb_btn = QPushButton(uncon_strats_dialog.wsb_gb)
+uncon_strats_dialog.wsb_gb.wsb_btn.setIcon(QIcon(rf"{CWD}\icons\index.jpg"))
+uncon_strats_dialog.wsb_gb.wsb_btn.setIconSize(QSize(200, 300))
+uncon_strats_dialog.wsb_gb.wsb_btn.setGeometry(10, 20, 300, 190)
+uncon_strats_dialog.wsb_gb.wsb_btn.setEnabled(False)
+
+
+def wsb_btn_clicked():
+    results = us.get_wsb_tickers()
+    results_iter = zip(results['Stock'], results['Mentions'], results['% Change'])
+    create_results_dialog(search_results=results, results_iterable=results_iter)
+
+uncon_strats_dialog.wsb_gb.wsb_btn.enterEvent = lambda e: uncon_strat_enter(
+    e, uncon_strats_dialog.wsb_gb.wsb_btn
+)
+uncon_strats_dialog.wsb_gb.wsb_btn.leaveEvent = lambda e: uncon_strat_leave(
+    e, uncon_strats_dialog.wsb_gb.wsb_btn
+)
+uncon_strats_dialog.wsb_gb.wsb_btn.clicked.connect(wsb_btn_clicked)
+
+uncon_strats_dialog.wsb_gb.wsb_label_header = QLabel(uncon_strats_dialog.wsb_gb)
+uncon_strats_dialog.wsb_gb.wsb_label_header.setText('WallStreetBets Trending')
+uncon_strats_dialog.wsb_gb.wsb_label_header.setGeometry(10, 240, 300, 30)
+uncon_strats_dialog.wsb_gb.wsb_label_header.setFont(QFont('arial', 20))
+
+uncon_strats_dialog.wsb_gb.wsb_label_text = QLabel(uncon_strats_dialog.wsb_gb)
+uncon_strats_dialog.wsb_gb.wsb_label_text.setText(
+    "Find tickers that are recieving the most attention from r/WallStreetBets"
+)
+uncon_strats_dialog.wsb_gb.wsb_label_text.setGeometry(10, 270, 300, 50)
+uncon_strats_dialog.wsb_gb.wsb_label_text.setWordWrap(True)
+
+
+
+uncon_strats_dialog.google_gb = QGroupBox(uncon_strats_dialog)
+uncon_strats_dialog.google_gb.setTitle('Google Trends Scanner')
+uncon_strats_dialog.google_gb.setGeometry(250, 400, 350, 350)
+uncon_strats_dialog.google_gb.setStyleSheet('background-color: white')
+
+uncon_strats_dialog.google_gb.google_btn = QPushButton(uncon_strats_dialog.google_gb)
+uncon_strats_dialog.google_gb.google_btn.setIcon(QIcon(rf"{CWD}\icons\index.jpg"))
+uncon_strats_dialog.google_gb.google_btn.setIconSize(QSize(200, 300))
+uncon_strats_dialog.google_gb.google_btn.setGeometry(10, 20, 300, 190)
+uncon_strats_dialog.google_gb.google_btn.setEnabled(False)
+
+
+def google_btn_clicked():
+    results = us.get_google_trends()
+    results_iter = zip(results['Ticker'], results['Trend Score'])
+    create_results_dialog(search_results=results, results_iterable=results_iter)
+
+uncon_strats_dialog.google_gb.google_btn.enterEvent = lambda e: uncon_strat_enter(
+    e, uncon_strats_dialog.google_gb.google_btn
+)
+uncon_strats_dialog.google_gb.google_btn.leaveEvent = lambda e: uncon_strat_leave(
+    e, uncon_strats_dialog.google_gb.google_btn
+)
+uncon_strats_dialog.google_gb.google_btn.clicked.connect(google_btn_clicked)
+
+uncon_strats_dialog.google_gb.google_label_header = QLabel(uncon_strats_dialog.google_gb)
+uncon_strats_dialog.google_gb.google_label_header.setText('Google Trending')
+uncon_strats_dialog.google_gb.google_label_header.setGeometry(10, 240, 300, 30)
+uncon_strats_dialog.google_gb.google_label_header.setFont(QFont('arial', 20))
+
+uncon_strats_dialog.google_gb.google_label_text = QLabel(uncon_strats_dialog.google_gb)
+uncon_strats_dialog.google_gb.google_label_text.setText(
+    "Find tickers that are recieving the most search interest"
+)
+uncon_strats_dialog.google_gb.google_label_text.setGeometry(10, 270, 300, 50)
+uncon_strats_dialog.google_gb.google_label_text.setWordWrap(True)
+
 
 ideas_dialog.addTab(scanner_dialog, "Scanner")
 
 ideas_dialog.addTab(uncon_strats_dialog, "Unconventional Strategies")
 
 
+###################
+# minigame dialog #
+###################
+
+minigame_dialog = QDialog()
+minigame_dialog.setStyleSheet('background-color: deepskyblue;')
+
+minigame_dialog.minigame_label = QLabel(minigame_dialog)
+minigame_dialog.minigame_label.setStyleSHeet('background-color: deepskyblue;')
+minigame_dialog.minigame_label.setText('Launch Minigame')
+minigame_dialog.minigame_label.setFong(QFont('arial', 20))
+minigame_dialog.minigame_label.setGeometry(550, 410, 200, 100)
+
+minigame_dialog.minigame_btn = QPushButton(minigame_dialog)
+minigame_dialog.minigame_btn.setGeometry(550, 200, 200, 200)
+
 
 ###################
 # settings dialog #
 ###################
-
 
 # create lists of colors for up and down candles and chart styles
 up_colors = ['Green', 'Red', 'Cyan', 'Purple']
@@ -6318,15 +6477,11 @@ wallet_dialog.nav_gb.returnSinceInception.setGeometry(10, 190, 120, 30)
 wallet_dialog.pos_view_gb.pos_view.resizeColumnsToContents()
 update_wallet_nav()
 
-##################
-# resolve trades #
-##################
-
-
 
 ######################
 # end of dialog init #
 ######################
+
 # adding tabs to main window
 widget.addTab(port_dialog, "Your Portfolio")
 widget.addTab(chart_dialog, "Chart Stocks")
@@ -6335,11 +6490,12 @@ widget.addTab(stockinfo_dialog, "Get Stock Info")
 widget.addTab(dcf_dialog, "DCF Modelling")
 widget.addTab(ideas_dialog, "Trade Ideas")
 widget.addTab(wallet_dialog, "Your Crypto Wallet")
+widget.addTab(minigame_dialog, "Minigame")
 widget.addTab(settings_dialog, "Settings")
 widget.resize(1300, 700)
 widget.show()
 splash.close()
+
 # instantiate thread which runs the updateNav function in an infinite loop
-t2 = Thread(target=update_ui, daemon=True)
-t2.start()
+Thread(target=update_ui, daemon=True).start()
 sys.exit(app.exec())

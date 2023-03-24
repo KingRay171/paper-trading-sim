@@ -3,4 +3,9 @@
 <type>Liquidity</type>
 <name>US Dollars</name>
 <amount>10000.00</amount>
+</equity><equity>
+<type>ETF</type>
+<name>SPY</name>
+<amount>10</amount>
+<costbasis>400.00</costbasis>
 </equity></portfolio>

@@ -1,7 +1,17 @@
 Changelog
 =========
 
-1.0.0
+1b.1.0
+------
+- further optimized portfolio, watchlist, and wallet ui updates
+- optimized generation of etf information dialog
+- optimized trade handling
+- further optimized creation of technical indicator dialog
+- added 8 types of scanners to trade ideas dialog
+- added Inverse Cramer, Google Trends, and WallStreetBets scanners to trade ideas dialog
+- optimized retrieval and parsing of scanner data
+
+1b.0.0
 ------
 - market, limit, and stop orders are now available
 - portfolio menu now handles short positions properly

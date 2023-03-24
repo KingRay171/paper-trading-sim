@@ -1,6 +1,6 @@
-from Player import Player
-from Enemy import Enemy
-import button
+from minigame.Player import Player
+from minigame.Enemy import Enemy
+import minigame.button as button
 import pygame, sys
 import math
 from pygame.locals import QUIT
@@ -333,7 +333,7 @@ def run_game():
 
 
     # Create the 'player'
-    BULLET_SURF = pygame.image.load("Resources/coin.png").convert_alpha()
+    BULLET_SURF = pygame.image.load("minigame/Resources/coin.png").convert_alpha()
     BULLET_SURF = pygame.transform.scale(BULLET_SURF, (20, 20))
 
     player = Player(BULLET_SURF)

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (QWidget, QTabWidget, QGroupBox, QLabel, QTableWid
                                QProgressBar, QVBoxLayout, QScrollArea, QButtonGroup,
                                QSlider, QSpinBox, QDoubleSpinBox, QSizePolicy, QGridLayout)
 from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QIcon, QColor, QEnterEvent
-from PySide6.QtCore import QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation, QSize
+from PySide6.QtCore import QStringListModel, QDateTime, Qt, SIGNAL, QPropertyAnimation, QSize, QFileSystemWatcher
 import yahooquery as yq
 
 from dependencies import autocomplete as ac
@@ -33,6 +33,7 @@ from dependencies import savetrades as st
 from dependencies import saveport as sp
 from dependencies import scanner as sc
 from dependencies import unconventional_stragegies as us
+from minigame import main
 app = QApplication(sys.argv)
 
 CWD = os.getcwd() + '\\'
@@ -5369,71 +5370,74 @@ chart_dialog.addTab(indicators_dialog, "Technical Indicators")
 ################
 # trade dialog #
 ################
-trade_dialog = QDialog()
+trade_dialog = QTabWidget()
 trade_dialog.setStyleSheet('background-color: deepskyblue;')
 
-trade_dialog.searchbar_gb = QGroupBox(trade_dialog)
-trade_dialog.searchbar_gb.setStyleSheet('background-color: white;')
-trade_dialog.searchbar_gb.setTitle("Find a Stock")
-trade_dialog.searchbar_gb.setGeometry(10, 10, 960, 70)
-trade_dialog.searchbar_gb.searchBar = QLineEdit(trade_dialog.searchbar_gb)
-trade_dialog.searchbar_gb.searchBar.setGeometry(10, 20, 850, 40)
-trade_dialog.searchbar_gb.searchBar.textChanged.connect(search_text_changed)
-trade_dialog.searchbar_gb.searchBar.setFont(ARIAL_10)
-trade_dialog.searchbar_gb.searchBar.setCompleter(completer)
-trade_dialog.searchbar_gb.search_button = QPushButton(trade_dialog.searchbar_gb)
-trade_dialog.searchbar_gb.search_button.setGeometry(870, 20, 80, 40)
-trade_dialog.searchbar_gb.search_button.setText("Trade")
+trade_dialog.stocks = QDialog(trade_dialog)
+trade_dialog.stocks.setStyleSheet('background-color: deepskyblue')
 
-trade_dialog.basic_info_gb = QGroupBox(trade_dialog)
-trade_dialog.basic_info_gb.setStyleSheet('background-color: white;')
-trade_dialog.basic_info_gb.setTitle("Information")
-trade_dialog.basic_info_gb.setGeometry(980, 10, 300, 70)
+trade_dialog.stocks.searchbar_gb = QGroupBox(trade_dialog)
+trade_dialog.stocks.searchbar_gb.setStyleSheet('background-color: white;')
+trade_dialog.stocks.searchbar_gb.setTitle("Find a Stock")
+trade_dialog.stocks.searchbar_gb.setGeometry(10, 10, 960, 70)
+trade_dialog.stocks.searchbar_gb.searchBar = QLineEdit(trade_dialog.stocks.searchbar_gb)
+trade_dialog.stocks.searchbar_gb.searchBar.setGeometry(10, 20, 850, 40)
+trade_dialog.stocks.searchbar_gb.searchBar.textChanged.connect(search_text_changed)
+trade_dialog.stocks.searchbar_gb.searchBar.setFont(ARIAL_10)
+trade_dialog.stocks.searchbar_gb.searchBar.setCompleter(completer)
+trade_dialog.stocks.searchbar_gb.search_button = QPushButton(trade_dialog.stocks.searchbar_gb)
+trade_dialog.stocks.searchbar_gb.search_button.setGeometry(870, 20, 80, 40)
+trade_dialog.stocks.searchbar_gb.search_button.setText("Trade")
 
-trade_dialog.basic_info_gb.full_name_label = QLabel(trade_dialog.basic_info_gb)
-trade_dialog.basic_info_gb.full_name_label.setText("")
-trade_dialog.basic_info_gb.full_name_label.setGeometry(10, 15, 150, 15)
+trade_dialog.stocks.basic_info_gb = QGroupBox(trade_dialog)
+trade_dialog.stocks.basic_info_gb.setStyleSheet('background-color: white;')
+trade_dialog.stocks.basic_info_gb.setTitle("Information")
+trade_dialog.stocks.basic_info_gb.setGeometry(980, 10, 300, 70)
 
-trade_dialog.basic_info_gb.price_label = QLabel(trade_dialog.basic_info_gb)
-trade_dialog.basic_info_gb.price_label.setText("Price (+/-)")
-trade_dialog.basic_info_gb.price_label.setGeometry(160, 15, 100, 20)
+trade_dialog.stocks.basic_info_gb.full_name_label = QLabel(trade_dialog.stocks.basic_info_gb)
+trade_dialog.stocks.basic_info_gb.full_name_label.setText("")
+trade_dialog.stocks.basic_info_gb.full_name_label.setGeometry(10, 15, 150, 15)
 
-trade_dialog.basic_info_gb.bid_label = QLabel(trade_dialog.basic_info_gb)
-trade_dialog.basic_info_gb.bid_label.setText("Bid: <bid_price> (bid_size)")
-trade_dialog.basic_info_gb.bid_label.setGeometry(10, 30, 140, 20)
+trade_dialog.stocks.basic_info_gb.price_label = QLabel(trade_dialog.stocks.basic_info_gb)
+trade_dialog.stocks.basic_info_gb.price_label.setText("Price (+/-)")
+trade_dialog.stocks.basic_info_gb.price_label.setGeometry(160, 15, 100, 20)
 
-trade_dialog.basic_info_gb.ask_label = QLabel(trade_dialog.basic_info_gb)
-trade_dialog.basic_info_gb.ask_label.setText("Ask: <ask_price> (ask_size)")
-trade_dialog.basic_info_gb.ask_label.setGeometry(160, 30, 140, 20)
+trade_dialog.stocks.basic_info_gb.bid_label = QLabel(trade_dialog.stocks.basic_info_gb)
+trade_dialog.stocks.basic_info_gb.bid_label.setText("Bid: <bid_price> (bid_size)")
+trade_dialog.stocks.basic_info_gb.bid_label.setGeometry(10, 30, 140, 20)
 
-trade_dialog.order_gb = QGroupBox(trade_dialog)
-trade_dialog.order_gb.setStyleSheet('background-color: white;')
-trade_dialog.order_gb.setTitle("Create Order")
-trade_dialog.order_gb.setGeometry(10, 90, 450, 400)
+trade_dialog.stocks.basic_info_gb.ask_label = QLabel(trade_dialog.stocks.basic_info_gb)
+trade_dialog.stocks.basic_info_gb.ask_label.setText("Ask: <ask_price> (ask_size)")
+trade_dialog.stocks.basic_info_gb.ask_label.setGeometry(160, 30, 140, 20)
 
-trade_dialog.order_gb.action_label = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.action_label.setText("Action")
-trade_dialog.order_gb.action_label.setGeometry(10, 50, 100, 15)
+trade_dialog.stocks.order_gb = QGroupBox(trade_dialog)
+trade_dialog.stocks.order_gb.setStyleSheet('background-color: white;')
+trade_dialog.stocks.order_gb.setTitle("Create Order")
+trade_dialog.stocks.order_gb.setGeometry(10, 90, 450, 400)
 
-trade_dialog.order_gb.action_combobox = QComboBox(trade_dialog.order_gb)
-trade_dialog.order_gb.action_combobox.addItems(['Buy', 'Sell'])
-trade_dialog.order_gb.action_combobox.setGeometry(10, 70, 100, 40)
+trade_dialog.stocks.order_gb.action_label = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.action_label.setText("Action")
+trade_dialog.stocks.order_gb.action_label.setGeometry(10, 50, 100, 15)
 
-trade_dialog.order_gb.qty_label = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.qty_label.setText("Quantity")
-trade_dialog.order_gb.qty_label.setGeometry(10, 150, 100, 15)
+trade_dialog.stocks.order_gb.action_combobox = QComboBox(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.action_combobox.addItems(['Buy', 'Sell'])
+trade_dialog.stocks.order_gb.action_combobox.setGeometry(10, 70, 100, 40)
 
-trade_dialog.order_gb.qty_spinbox = QSpinBox(trade_dialog.order_gb)
-trade_dialog.order_gb.qty_spinbox.setGeometry(10, 170, 100, 40)
+trade_dialog.stocks.order_gb.qty_label = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.qty_label.setText("Quantity")
+trade_dialog.stocks.order_gb.qty_label.setGeometry(10, 150, 100, 15)
 
-trade_dialog.order_gb.max_btn = QPushButton(trade_dialog.order_gb)
-trade_dialog.order_gb.max_btn.setText("Max")
-trade_dialog.order_gb.max_btn.setGeometry(120, 170, 100, 40)
-trade_dialog.order_gb.max_btn.setEnabled(False)
+trade_dialog.stocks.order_gb.qty_spinbox = QSpinBox(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.qty_spinbox.setGeometry(10, 170, 100, 40)
 
-trade_dialog.order_gb.type_label = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.type_label.setText("Order Type")
-trade_dialog.order_gb.type_label.setGeometry(10, 230, 100, 15)
+trade_dialog.stocks.order_gb.max_btn = QPushButton(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.max_btn.setText("Max")
+trade_dialog.stocks.order_gb.max_btn.setGeometry(120, 170, 100, 40)
+trade_dialog.stocks.order_gb.max_btn.setEnabled(False)
+
+trade_dialog.stocks.order_gb.type_label = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.type_label.setText("Order Type")
+trade_dialog.stocks.order_gb.type_label.setGeometry(10, 230, 100, 15)
 
 def trade_searchbar_click():
     """
@@ -5441,9 +5445,9 @@ def trade_searchbar_click():
     """
     global CURRENT_TRADE_STOCK
 
-    ticker = trade_dialog.searchbar_gb.searchBar.text().split(' ')[0]
+    ticker = trade_dialog.stocks.searchbar_gb.searchBar.text().split(' ')[0]
     CURRENT_TRADE_STOCK = ticker
-    trade_dialog.order_gb.max_btn.setEnabled(True)
+    trade_dialog.stocks.order_gb.max_btn.setEnabled(True)
 
     prices = yq.Ticker(ticker).history('1d', '1m')
     day_chart.removeAllSeries()
@@ -5480,18 +5484,18 @@ def update_trade_dialog():
     prices = all_modules['price']
     summary = all_modules['summaryDetail']
 
-    trade_dialog.basic_info_gb.full_name_label.setText(quote_type['shortName'])
-    trade_dialog.basic_info_gb.price_label.setText(
+    trade_dialog.stocks.basic_info_gb.full_name_label.setText(quote_type['shortName'])
+    trade_dialog.stocks.basic_info_gb.price_label.setText(
         f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})"
     )
-    trade_dialog.basic_info_gb.bid_label.setText(f"Bid: {summary['bid']} ({summary['bidSize']})")
-    trade_dialog.basic_info_gb.ask_label.setText(f"Ask: {summary['ask']} ({summary['askSize']})")
+    trade_dialog.stocks.basic_info_gb.bid_label.setText(f"Bid: {summary['bid']} ({summary['bidSize']})")
+    trade_dialog.stocks.basic_info_gb.ask_label.setText(f"Ask: {summary['ask']} ({summary['askSize']})")
 
-    trade_dialog.order_gb.limit_stop_bid.setText(f"Bid:\n{summary['bid']}\n({summary['bidSize']})")
-    trade_dialog.order_gb.limit_stop_ask.setText(f"Ask:\n{summary['ask']}\n({summary['askSize']})")
-    trade_dialog.order_gb.limit_stop_mid.setText(f"Mid:\n{(summary['bid'] + summary['ask']) / 2}")
+    trade_dialog.stocks.order_gb.limit_stop_bid.setText(f"Bid:\n{summary['bid']}\n({summary['bidSize']})")
+    trade_dialog.stocks.order_gb.limit_stop_ask.setText(f"Ask:\n{summary['ask']}\n({summary['askSize']})")
+    trade_dialog.stocks.order_gb.limit_stop_mid.setText(f"Mid:\n{(summary['bid'] + summary['ask']) / 2}")
     slider_range = (summary['ask'] - summary['bid']) * 100
-    trade_dialog.order_gb.price_slider.setRange(0, slider_range)
+    trade_dialog.stocks.order_gb.price_slider.setRange(0, slider_range)
 
 
 def on_ordertype_change(value):
@@ -5501,15 +5505,15 @@ def on_ordertype_change(value):
     """
     match value:
         case 'Market':
-            trade_dialog.order_gb.price_slider.setVisible(False)
-            trade_dialog.order_gb.limit_stop_bid.setVisible(False)
-            trade_dialog.order_gb.limit_stop_ask.setVisible(False)
-            trade_dialog.order_gb.limit_stop_mid.setVisible(False)
+            trade_dialog.stocks.order_gb.price_slider.setVisible(False)
+            trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(False)
+            trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(False)
+            trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(False)
         case _:
-            trade_dialog.order_gb.price_slider.setVisible(True)
-            trade_dialog.order_gb.limit_stop_bid.setVisible(True)
-            trade_dialog.order_gb.limit_stop_ask.setVisible(True)
-            trade_dialog.order_gb.limit_stop_mid.setVisible(True)
+            trade_dialog.stocks.order_gb.price_slider.setVisible(True)
+            trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(True)
+            trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(True)
+            trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(True)
 
 
 def on_previeworder_click():
@@ -5531,7 +5535,7 @@ def on_previeworder_click():
     transaction_widget = QWidget()
     transaction_widget.setLayout(QHBoxLayout())
     transaction_widget.layout().addWidget(QLabel('Transaction:'))
-    transaction_label = QLabel(trade_dialog.order_gb.action_combobox.currentText())
+    transaction_label = QLabel(trade_dialog.stocks.order_gb.action_combobox.currentText())
     transaction_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     transaction_widget.layout().addWidget(transaction_label)
     wnd.layout().addWidget(transaction_widget)
@@ -5540,7 +5544,7 @@ def on_previeworder_click():
     ordertype_widget = QWidget()
     ordertype_widget.setLayout(QHBoxLayout())
     ordertype_widget.layout().addWidget(QLabel('Order Type:'))
-    ordertype_label = QLabel(trade_dialog.order_gb.type_combobox.currentText())
+    ordertype_label = QLabel(trade_dialog.stocks.order_gb.type_combobox.currentText())
     ordertype_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     ordertype_widget.layout().addWidget(ordertype_label)
     wnd.layout().addWidget(ordertype_widget)
@@ -5549,14 +5553,14 @@ def on_previeworder_click():
     estprice_widget.setLayout(QHBoxLayout())
     estprice_widget.layout().addWidget(QLabel('Estimated Price'))
     estprice_label = QLabel()
-    if trade_dialog.order_gb.type_combobox.currentText() == 'Market':
-        if trade_dialog.order_gb.action_combobox.currentText() == 'Buy':
-            estprice_label.setText(trade_dialog.order_gb.limit_stop_ask.text().split('\n')[1])
+    if trade_dialog.stocks.order_gb.type_combobox.currentText() == 'Market':
+        if trade_dialog.stocks.order_gb.action_combobox.currentText() == 'Buy':
+            estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_ask.text().split('\n')[1])
         else:
-            estprice_label.setText(trade_dialog.order_gb.limit_stop_bid.text().split('\n')[1])
+            estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_bid.text().split('\n')[1])
     else:
         # change to limit/stop price
-        estprice_label.setText(trade_dialog.order_gb.limit_stop_bid.text())
+        estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_bid.text())
     estprice_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     estprice_widget.layout().addWidget(estprice_label)
     wnd.layout().addWidget(estprice_widget)
@@ -5564,7 +5568,7 @@ def on_previeworder_click():
     qty_widget = QWidget()
     qty_widget.setLayout(QHBoxLayout())
     qty_widget.layout().addWidget(QLabel('Quantity:'))
-    qty_label = QLabel(str(trade_dialog.order_gb.qty_spinbox.value()))
+    qty_label = QLabel(str(trade_dialog.stocks.order_gb.qty_spinbox.value()))
     qty_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     qty_widget.layout().addWidget(qty_label)
     wnd.layout().addWidget(qty_widget)
@@ -5607,51 +5611,49 @@ def on_previeworder_click():
 
     wnd.exec()
 
-trade_dialog.order_gb.type_combobox = QComboBox(trade_dialog.order_gb)
-trade_dialog.order_gb.type_combobox.addItems(['Market', 'Limit', 'Stop'])
-trade_dialog.order_gb.type_combobox.setGeometry(10, 250, 100, 40)
-trade_dialog.order_gb.type_combobox.currentTextChanged.connect(on_ordertype_change)
+trade_dialog.stocks.order_gb.type_combobox = QComboBox(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.type_combobox.addItems(['Market', 'Limit', 'Stop'])
+trade_dialog.stocks.order_gb.type_combobox.setGeometry(10, 250, 100, 40)
+trade_dialog.stocks.order_gb.type_combobox.currentTextChanged.connect(on_ordertype_change)
 
-trade_dialog.order_gb.price_slider = QSlider(trade_dialog.order_gb)
-trade_dialog.order_gb.price_slider.setOrientation(Qt.Orientation.Horizontal)
-trade_dialog.order_gb.price_slider.setRange(0, 10)
-trade_dialog.order_gb.price_slider.setGeometry(120, 250, 250, 40)
-trade_dialog.order_gb.price_slider.setVisible(False)
+trade_dialog.stocks.order_gb.price_slider = QSlider(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.price_slider.setOrientation(Qt.Orientation.Horizontal)
+trade_dialog.stocks.order_gb.price_slider.setRange(0, 10)
+trade_dialog.stocks.order_gb.price_slider.setGeometry(120, 250, 250, 40)
+trade_dialog.stocks.order_gb.price_slider.setVisible(False)
 
-trade_dialog.order_gb.limit_stop_bid = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.limit_stop_bid.setText("<bid>")
-trade_dialog.order_gb.limit_stop_bid.setGeometry(120, 300, 50, 50)
-trade_dialog.order_gb.limit_stop_bid.setVisible(False)
+trade_dialog.stocks.order_gb.limit_stop_bid = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.limit_stop_bid.setText("<bid>")
+trade_dialog.stocks.order_gb.limit_stop_bid.setGeometry(120, 300, 50, 50)
+trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(False)
 
-trade_dialog.order_gb.limit_stop_ask = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.limit_stop_ask.setText("<ask>")
-trade_dialog.order_gb.limit_stop_ask.setGeometry(350, 300, 50, 50)
-trade_dialog.order_gb.limit_stop_ask.setVisible(False)
+trade_dialog.stocks.order_gb.limit_stop_ask = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.limit_stop_ask.setText("<ask>")
+trade_dialog.stocks.order_gb.limit_stop_ask.setGeometry(350, 300, 50, 50)
+trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(False)
 
-trade_dialog.order_gb.limit_stop_mid = QLabel(trade_dialog.order_gb)
-trade_dialog.order_gb.limit_stop_mid.setText("<mid>")
-trade_dialog.order_gb.limit_stop_mid.setGeometry(240, 300, 50, 50)
-trade_dialog.order_gb.limit_stop_mid.setVisible(False)
+trade_dialog.stocks.order_gb.limit_stop_mid = QLabel(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.limit_stop_mid.setText("<mid>")
+trade_dialog.stocks.order_gb.limit_stop_mid.setGeometry(240, 300, 50, 50)
+trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(False)
 
-trade_dialog.order_gb.preview_order = QPushButton(trade_dialog.order_gb)
-trade_dialog.order_gb.preview_order.setText("Preview Order")
-trade_dialog.order_gb.preview_order.setGeometry(50, 340, 360, 50)
-trade_dialog.order_gb.preview_order.clicked.connect(on_previeworder_click)
+trade_dialog.stocks.order_gb.preview_order = QPushButton(trade_dialog.stocks.order_gb)
+trade_dialog.stocks.order_gb.preview_order.setText("Preview Order")
+trade_dialog.stocks.order_gb.preview_order.setGeometry(50, 340, 360, 50)
+trade_dialog.stocks.order_gb.preview_order.clicked.connect(on_previeworder_click)
 
-trade_dialog.searchbar_gb.search_button.clicked.connect(trade_searchbar_click)
+trade_dialog.stocks.searchbar_gb.search_button.clicked.connect(trade_searchbar_click)
 
-trade_dialog.chart_groupbox = QGroupBox(trade_dialog)
-trade_dialog.chart_groupbox.setTitle('Chart')
-trade_dialog.chart_groupbox.setStyleSheet('background-color: white')
-trade_dialog.chart_groupbox.setGeometry(500, 90, 650, 400)
+trade_dialog.stocks.chart_groupbox = QGroupBox(trade_dialog)
+trade_dialog.stocks.chart_groupbox.setTitle('Chart')
+trade_dialog.stocks.chart_groupbox.setStyleSheet('background-color: white')
+trade_dialog.stocks.chart_groupbox.setGeometry(500, 90, 650, 400)
 
 day_chart = QChart()
-
-day_chartview = QChartView(trade_dialog.chart_groupbox)
+day_chartview = QChartView(trade_dialog.stocks.chart_groupbox)
 day_lineseries = QLineSeries()
 day_chart.addSeries(day_lineseries)
 day_lineseries.setName('Stock')
-
 
 x_axis = QDateTimeAxis()
 x_axis.setFormat('h:mm')
@@ -5664,9 +5666,10 @@ y_axis = QValueAxis()
 day_chart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
 day_lineseries.attachAxis(y_axis)
 
-
 day_chartview.setGeometry(10, 20, 600, 400)
 day_chartview.setChart(day_chart)
+
+trade_dialog.addTab(trade_dialog.stocks, "Trade Stocks")
 
 #####################
 # stock info dialog #
@@ -5868,6 +5871,7 @@ financials_table.setGeometry(10, 325, 1200, 1500)
 financials_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 financials_table.setFont(ARIAL_10)
 financials_table.setStyleSheet('background-color: white;')
+
 stockinfo_dialog.addTab(stockinfo_main, "Overview")
 stockinfo_dialog.addTab(stockinfo_recs, "Insiders and Institutions")
 stockinfo_dialog.addTab(stockinfo_dialog_forecasts, "Forecasts")
@@ -6273,8 +6277,6 @@ uncon_strats_dialog.wsb_gb.wsb_label_text.setText(
 uncon_strats_dialog.wsb_gb.wsb_label_text.setGeometry(10, 270, 300, 50)
 uncon_strats_dialog.wsb_gb.wsb_label_text.setWordWrap(True)
 
-
-
 uncon_strats_dialog.google_gb = QGroupBox(uncon_strats_dialog)
 uncon_strats_dialog.google_gb.setTitle('Google Trends Scanner')
 uncon_strats_dialog.google_gb.setGeometry(250, 400, 350, 350)
@@ -6291,6 +6293,7 @@ def google_btn_clicked():
     results = us.get_google_trends()
     results_iter = zip(results['Ticker'], results['Trend Score'])
     create_results_dialog(search_results=results, results_iterable=results_iter)
+
 
 uncon_strats_dialog.google_gb.google_btn.enterEvent = lambda e: uncon_strat_enter(
     e, uncon_strats_dialog.google_gb.google_btn
@@ -6314,7 +6317,6 @@ uncon_strats_dialog.google_gb.google_label_text.setWordWrap(True)
 
 
 ideas_dialog.addTab(scanner_dialog, "Scanner")
-
 ideas_dialog.addTab(uncon_strats_dialog, "Unconventional Strategies")
 
 
@@ -6326,13 +6328,17 @@ minigame_dialog = QDialog()
 minigame_dialog.setStyleSheet('background-color: deepskyblue;')
 
 minigame_dialog.minigame_label = QLabel(minigame_dialog)
-minigame_dialog.minigame_label.setStyleSHeet('background-color: deepskyblue;')
+minigame_dialog.minigame_label.setStyleSheet('background-color: deepskyblue;')
 minigame_dialog.minigame_label.setText('Launch Minigame')
-minigame_dialog.minigame_label.setFong(QFont('arial', 20))
+minigame_dialog.minigame_label.setFont(QFont('arial', 20))
 minigame_dialog.minigame_label.setGeometry(550, 410, 200, 100)
 
 minigame_dialog.minigame_btn = QPushButton(minigame_dialog)
 minigame_dialog.minigame_btn.setGeometry(550, 200, 200, 200)
+minigame_dialog.minigame_btn.clicked.connect(main.run_game)
+
+file_watch = QFileSystemWatcher(['/assets/portfolio.xml'])
+file_watch.fileChanged.connect(lambda: print('hi'))
 
 
 ###################

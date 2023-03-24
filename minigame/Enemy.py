@@ -1,5 +1,5 @@
 import pygame
-import mathStuff
+import minigame.mathStuff as mathStuff
 
 class Enemy(pygame.sprite.Sprite):
     def render(self, screen):
@@ -14,10 +14,10 @@ class Enemy(pygame.sprite.Sprite):
         super(Enemy, self).__init__()
 
         self.hp = hp
-      
+
         self.surf = sprite
         self.speed = speed
-      
+
         self.surf = pygame.transform.scale(self.surf, (60, 60))
         self.rect = self.surf.get_rect(center=(
             x,
@@ -25,7 +25,7 @@ class Enemy(pygame.sprite.Sprite):
         ))
         self.x = x
         self.y = y
-        
+
 
     # Move the sprite based on speed
     # Remove the sprite when it passes the left edge of the screen

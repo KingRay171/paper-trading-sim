@@ -1,6 +1,6 @@
 import pygame
-import mathStuff
-from Projectile import Projectile
+import minigame.mathStuff as mathStuff
+from minigame.Projectile import Projectile
 
 pygame.mixer.init()
 
@@ -18,7 +18,7 @@ from pygame.locals import (
 hitsfx = pygame.mixer.Sound("minigame/Resources/hit.wav")
 
 file = open('minigame/sett.txt')
-  
+
 # read the content of the file opened
 content = file.readlines()
 
@@ -36,16 +36,16 @@ class Player(pygame.sprite.Sprite):
         self.DART_SPEED = num
     def update_pierce(self, num):
         self.DART_PIERCE = num
-      
+
     def update_fire(self,num):
         #print(num)
         self.FIRE_RATE = num
-      
+
 
     def __init__(self, bullet_surf):
         super(Player, self).__init__()
         self.surf = pygame.image.load("minigame/Resources/block.png").convert_alpha()
-      
+
         self.surf = pygame.transform.scale(self.surf, (50, 60))
 
         self.rect = pygame.Rect(0, 0, 10, 10)
@@ -57,7 +57,7 @@ class Player(pygame.sprite.Sprite):
         self.DART_PIERCE = int(content[8])
         self.FIRE_RATE = int(content[3])
         self.bullet = bullet_surf
-        
+
         # Move the sprite based on user keypresses
     def update(self, pressed_keys, deltaTime):
         target = [0, 0]
@@ -85,7 +85,7 @@ class Player(pygame.sprite.Sprite):
         roundx = round(self.x)
         roundy = round(self.y)
         self.rect.topleft = roundx, roundy
-      
+
         # Keep player on the screen
         if self.rect.left < 0:
             self.rect.left = 0
@@ -96,7 +96,7 @@ class Player(pygame.sprite.Sprite):
         if self.rect.bottom >= SCREEN_HEIGHT:
             self.rect.bottom = SCREEN_HEIGHT
 
-        
+
 
         # Define the enemy object by extending pygame.sprite.Sprite
 
@@ -109,13 +109,13 @@ class Player(pygame.sprite.Sprite):
                 self.shoot(pygame.mouse.get_pos(), bullets, all_sprites)
         else:
           self.fire_timer = min(60, self.fire_timer+(deltaTime*self.FIRE_RATE))
-      
+
     def shoot(self, mousePos, bullets, all_sprites):
-        
+
         direction = ((mousePos[0] - self.rect.x), (mousePos[1] - self.rect.y))
         target = mathStuff.normalize_vector(direction)
-      
+
         bullet = Projectile(self.rect.x, self.rect.y, target ,self.DART_SPEED, self.DART_PIERCE, self.bullet, hitsfx)
         bullets.add(bullet)
         all_sprites.add(bullet)
-        
+

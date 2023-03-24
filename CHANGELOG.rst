@@ -1,6 +1,10 @@
 Changelog
 =========
 
+1b.1.1
+------
+- fixed issue with minigame
+
 1b.1.0
 ------
 - further optimized portfolio, watchlist, and wallet ui updates

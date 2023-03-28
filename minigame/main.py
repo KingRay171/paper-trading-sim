@@ -338,10 +338,7 @@ def run_game():
           self.time += deltaTime
   
   
-  # Create the 'player'
-  
-  
-  
+  # Create the 'player'  
 
   #create instances
   player = Player(BULLET_SURF)
@@ -496,5 +493,3 @@ def run_game():
 
   pygame.quit()
   
-
-run_game()

@@ -1,6 +1,6 @@
-from Player import Player
-from Enemy import Enemy
-import button
+from minigame.Player import Player
+from minigame.Enemy import Enemy
+import minigame.button as button
 import pygame, sys
 import math
 import random

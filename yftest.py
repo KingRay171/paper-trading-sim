@@ -5,7 +5,8 @@ from locale import atof, setlocale, LC_NUMERIC
 from threading import Thread
 import time
 import xml.etree.ElementTree as et
-from datetime import datetime
+from datetime import datetime, timedelta
+import math
 
 import pandas as pd
 # pylint: disable-msg=E0611
@@ -32,9 +33,15 @@ from dependencies import readassets as ra
 from dependencies import savetrades as st
 from dependencies import saveport as sp
 from dependencies import scanner as sc
+from dependencies import optionchain as oc
 from dependencies import unconventional_stragegies as us
+from dependencies import stock_prediction as spred
+from dependencies import greekscalc as gc
+from dependencies import savewallet as sw
 from minigame import main
 app = QApplication(sys.argv)
+app.setWindowIcon(QIcon('wsb.jpg'))
+
 
 CWD = os.getcwd() + '\\'
 
@@ -44,13 +51,8 @@ CURRENT_TICKER = ''
 
 selected_ta = []
 
-OPEN_ORDERS = []
-
-TOKEN_OBJECTS = []
-
-PORTFOLIO_OBJECTS = []
-
-WATCHLIST_OBJECTS = []
+OPEN_PORT_ORDERS = []
+OPEN_WALLET_ORDERS = []
 
 ARIAL_10 = QFont('arial', 10)
 
@@ -60,7 +62,12 @@ SETTINGS_DIALOG_BTN_STYLESHEET = "QPushButton::hover{background-color: deepskybl
 
 SCROLLBAR_ALWAYSON = Qt.ScrollBarPolicy.ScrollBarAlwaysOn
 
-CURRENT_TRADE_STOCK = None
+CURRENT_TRADE_STOCK_NAME = None
+CURRENT_TRADE_OPTION_NAME = None
+CURRENT_TRADE_TOKEN_NAME = None
+
+OPTION_TRADE_FLAG = False
+OPTION_WINDOW = None
 
 # performance icons
 GREENARROW_GREENBOX = QIcon(f"{CWD}icons/greenarrowgreenbox.png")
@@ -122,30 +129,192 @@ def update_ui():
     program is running
     """
     while True:
-        if widget.currentWidget() == wallet_dialog:
-            update_wallet_nav()
-            update_wallet_table()
-            time.sleep(5)
-        if widget.currentWidget() == trade_dialog and CURRENT_TRADE_STOCK is not None:
-            update_trade_dialog()
-        if mktopen.isMarketOpen():
-            if widget.currentWidget() == port_dialog:
-                update_portfolio_table()
-                update_watchlist_tickers()
-                update_portfolio_nav()
-                update_portfolio_piechart()
-            update_trades()
+        try:
+            if widget.currentWidget() == wallet_dialog:
+                update_wallet_nav()
+                update_wallet_table()
+                time.sleep(5)
+            if widget.currentWidget() == trade_dialog and CURRENT_TRADE_STOCK_NAME is not None:
+                update_stock_trade_dialog()
+            if widget.currentWidget() == trade_dialog:
+                if widget.currentWidget().currentWidget() == options:
+                    try:
+                        update_option_chain()
+                    except AttributeError:
+                        pass
+            if widget.currentWidget() == trade_crypto_dialog and CURRENT_TRADE_TOKEN_NAME is not None:
+                update_crypto_trade_dialog()
+            if mktopen.market_is_open():
+                if widget.currentWidget() == port_dialog:
+                    update_portfolio_options()
+                    update_portfolio_table()
+                    update_watchlist_tickers()
+                    update_portfolio_nav()
+                    update_portfolio_piechart()
+                update_port_trades()
+
+            else:
+                time.sleep(.1)
+
+            update_wallet_trades()
+        except RuntimeError:
+            pass
+
+
+def update_wallet_trades():
+    """
+    Checks if any open crypto trades can be executed and executes them
+    """
+    for order in OPEN_WALLET_ORDERS:
+
+        cash = wallet_amts[0]
+        ticker = yq.Ticker(order[0])
+        cur_price = ticker.price[order[0]]['regularMarketPrice']
+
+        if order[2] == 'Market' and order[1] == 'Buy':
+            execute_crypto_buy(order, cash, cur_price)
+
+        elif order[2] == 'Market' and order[1] == 'Sell':
+            execute_crypto_sell(order, cash, cur_price)
+
+        elif order[2] == 'Limit' and order[1] == 'Buy':
+            if cur_price < float(order[3]):
+                execute_crypto_buy(order, cash, cur_price)
+
+        elif order[2] == 'Limit' and order[1] == 'Sell':
+            if cur_price > float(order[3]):
+                execute_crypto_sell(order, cash, cur_price)
+
+        elif order[2] == 'Stop' and order[1] == 'Buy':
+            if cur_price > float(order[3]):
+                execute_crypto_buy(order, cash, cur_price)
+
+        elif order[2] == 'Stop' and order[1] == 'Sell':
+            if cur_price < float(order[3]):
+                execute_crypto_sell(order, cash, cur_price)
+
+
+def execute_crypto_buy(order, cash, trade_price):
+    global wallet_cash
+
+    order[0] = order[0].upper()
+
+    trade_qty = float(order[4])
+    cash -= trade_qty * float(trade_price)
+    wallet_amts[0] = cash
+    wallet_cash = cash
+
+    if order[0] in wallet_tickers:
+        idx = wallet_tickers.index(order[0])
+        pos_size = wallet_amts[idx]
+        old_basis = float(wallet_costbases[idx - 1])
+
+        if -1 * trade_qty == pos_size:
+            wallet_tickers.remove(order[0])
+            wallet_amts.remove(1 * trade_qty)
+            wallet_costbases.remove(wallet_costbases[idx - 1])
+            wallet_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+
+        elif trade_qty < pos_size:
+            token_amt = pos_size + trade_qty
+            wallet_amts[idx] = token_amt
+
+            new_cb = 0
+            if pos_size <= 0:
+                new_cb = round(
+                    (old_basis * (token_amt - trade_qty) + trade_price * trade_qty) / token_amt, 2
+                )
+                wallet_costbases[idx - 1] = str(new_cb)
+
+        elif trade_qty >= pos_size:
+            token_amt = pos_size + trade_qty
+            wallet_amts[idx] = token_amt
+
+            new_cb = 0
+            if pos_size >= 0:
+                new_cb = round(
+                    (old_basis * (token_amt - trade_qty) + trade_price * trade_qty) / token_amt, 2
+                )
+                wallet_costbases[idx - 1] = str(new_cb)
+            else:
+                if trade_qty > abs(pos_size):
+                    wallet_costbases[idx - 1] = str(trade_price)
+
+    else:
+        wallet_tickers.append(order[0])
+        wallet_amts.append(order[4])
+        wallet_costbases.append(str(trade_price))
+
+        wallet_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+        column_count = wallet_dialog.pos_view_gb.pos_view.columnCount()
+        for k in range(column_count):
+            wallet_dialog.pos_view_gb.pos_view.setItem(column_count - 1, k, QTableWidgetItem())
+
+
+    OPEN_WALLET_ORDERS.remove(order)
+
+
+def execute_crypto_sell(order, cash, trade_price):
+    global wallet_cash
+    order[0] = order[0].upper()
+
+    trade_qty = float(order[4])
+
+    cash += trade_qty * float(trade_price)
+    wallet_amts[0] = cash
+    wallet_cash = cash
+
+    if order[0] in wallet_tickers:
+        idx = wallet_tickers.index(order[0])
+        pos_size = wallet_amts[idx]
+        old_basis = float(wallet_costbases[idx - 1])
+
+        if trade_qty < pos_size:
+            token_amt = pos_size - trade_qty
+            wallet_amts[idx] = token_amt
+
+        elif trade_qty == pos_size:
+            wallet_tickers.remove(order[0])
+            wallet_amts.remove(order[4])
+            wallet_costbases.remove(wallet_costbases[idx - 1])
+
+            port_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+            new_cb = round(
+                (old_basis * (token_amt - trade_qty) + trade_price * trade_qty) / token_amt, 2
+            )
+            wallet_costbases[idx - 1] = str(new_cb)
+
         else:
-            time.sleep(1)
+            token_amt = pos_size - trade_qty
+            wallet_amts[idx] = token_amt
+
+            new_cb = 0
+            if pos_size <= 0:
+                new_cb = round(
+                    (old_basis * (token_amt + trade_qty) + trade_price * -trade_qty) / token_amt, 2
+                )
+                wallet_costbases[idx - 1] = new_cb
+            else:
+                wallet_costbases[idx - 1] = trade_price
+
+    else:
+        wallet_tickers.append(order[0])
+        wallet_amts.append(-1 * trade_qty)
+        wallet_costbases.append(str(trade_price))
+        port_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        for j in range(column_count):
+            wallet_dialog.pos_view_gb.pos_view.setItem(column_count - 1, j, QTableWidgetItem())
+    OPEN_WALLET_ORDERS.remove(order)
 
 
+def update_port_trades():
+    """
+    Checks if any open stock/option trades can be executed and executes them
+    """
+    for order in OPEN_PORT_ORDERS:
 
-
-def update_trades():
-
-    for order in OPEN_ORDERS:
-
-        cash = float(portfolio_amts[0])
+        cash = portfolio_amts[0]
         ticker = yq.Ticker(order[0])
         asset_type = ""
         match ticker.quote_type[order[0]]['quoteType']:
@@ -153,6 +322,8 @@ def update_trades():
                 asset_type = 'Stock'
             case 'ETF':
                 asset_type = 'ETF'
+            case 'OPTION':
+                asset_type = 'Option'
 
         if order[2] == 'Market' and order[1] == 'Buy':
             execute_buy(order, ticker, asset_type, cash)
@@ -177,71 +348,67 @@ def update_trades():
                 execute_sell(order, ticker, asset_type, cash)
 
 
-
-
 def execute_buy(order: list, ticker: yq.Ticker, asset_type: str, cash: float, trade_price=None):
     global portfolio_cash
     if trade_price is None:
         trade_price = ticker.summary_detail[order[0]]['ask']
 
     cash -= float(order[4]) * float(trade_price)
-    portfolio_amts[0] = str(cash)
+    portfolio_amts[0] = cash
     portfolio_cash = cash
+    trade_qty = int(order[4])
 
     if order[0] in portfolio_tickers:
         idx = portfolio_tickers.index(order[0])
+        pos_size = portfolio_amts[idx]
+        old_basis = purchase_prices[idx - 1]
 
-        if -1 * int(order[4]) == int(portfolio_amts[idx]):
+        if -1 * trade_qty == pos_size:
             portfolio_tickers.remove(order[0])
-            portfolio_amts.remove(str(-1 * int(order[4])))
+            portfolio_amts.remove(-1 * trade_qty)
             purchase_prices.remove(purchase_prices[idx - 1])
             portfolio_asset_types.remove(portfolio_asset_types[idx])
-            PORTFOLIO_OBJECTS.remove(ticker)
-            try:
-                port_dialog.pos_view_gb.pos_view.setRowCount(
-                    len(portfolio_amts) - 1
+
+            port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+
+        elif trade_qty < pos_size:
+            stock_amt = pos_size + trade_qty
+            portfolio_amts[idx] = stock_amt
+
+            new_cb = 0
+            if pos_size >= 0:
+                new_cb = round(
+                    (old_basis * (stock_amt - trade_qty) + trade_price * trade_qty) / stock_amt, 2
                 )
+                purchase_prices[idx - 1] = new_cb
 
-            except Exception:
-                pass
+        elif trade_qty >= pos_size:
+            stock_amt = pos_size + trade_qty
+            portfolio_amts[idx] = stock_amt
 
-        elif int(order[4]) < int(portfolio_amts[idx]):
-
-
-            stock_amt = int(portfolio_amts[idx])
-            stock_amt += int(order[4])
-            portfolio_amts[idx] = str(stock_amt)
-
-            purchase_price = float(purchase_prices[idx - 1])
-            new_cb = round(
-                (purchase_price * (int(portfolio_amts[idx]) - int(order[4])) + trade_price * int(order[4])) / int(portfolio_amts[idx]), 2
-            )
-            purchase_prices[idx - 1] = str(new_cb)
-        elif int(order[4]) > int(portfolio_amts[idx]):
-            stock_amt = int(portfolio_amts[idx])
-            stock_amt += int(order[4])
-            portfolio_amts[idx] = str(stock_amt)
-
-            purchase_prices[idx - 1] = str(trade_price)
+            new_cb = 0
+            if pos_size >= 0:
+                new_cb = round(
+                    (old_basis * (stock_amt - trade_qty) + trade_price * trade_qty) / stock_amt, 2
+                )
+                purchase_prices[idx - 1] = new_cb
+            else:
+                if trade_qty > abs(pos_size):
+                    purchase_prices[idx - 1] = trade_price
 
     else:
         portfolio_tickers.append(order[0])
         portfolio_amts.append(order[4])
         portfolio_asset_types.append(asset_type)
-        purchase_prices.append(str(trade_price))
-        PORTFOLIO_OBJECTS.append(ticker)
-        try:
-            port_dialog.pos_view_gb.pos_view.setRowCount(
-                len(portfolio_amts) - 1
-            )
-            column_count = port_dialog.pos_view_gb.pos_view.columnCount()
-            for k in range(column_count):
-                port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, k, QTableWidgetItem())
+        purchase_prices.append(trade_price)
 
-        except Exception:
-            pass
-    OPEN_ORDERS.remove(order)
+        port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        for k in range(column_count):
+            port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, k, QTableWidgetItem())
 
+
+    OPEN_PORT_ORDERS.remove(order)
 
 
 def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, trade_price=None):
@@ -249,60 +416,106 @@ def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, t
     if trade_price is None:
         trade_price = ticker.summary_detail[order[0]]['bid']
     cash += float(order[4]) * float(trade_price)
-    portfolio_amts[0] = str(cash)
+    portfolio_amts[0] = cash
     portfolio_cash = cash
+
+    trade_qty = int(order[4])
 
     if order[0] in portfolio_tickers:
         idx = portfolio_tickers.index(order[0])
+        pos_size = portfolio_amts[idx]
+        old_basis = purchase_prices[idx - 1]
 
-        if int(order[4]) < int(portfolio_amts[idx]):
-            stock_amt = int(portfolio_amts[idx])
-            stock_amt -= int(order[4])
-            portfolio_amts[idx] = str(stock_amt)
+        if trade_qty < pos_size:
+            stock_amt = pos_size - trade_qty
+            portfolio_amts[idx] = stock_amt
 
-
-        elif int(order[4]) == int(portfolio_amts[idx]):
+        elif trade_qty == pos_size:
             portfolio_tickers.remove(order[0])
             portfolio_amts.remove(order[4])
             purchase_prices.remove(purchase_prices[idx - 1])
             portfolio_asset_types.remove(portfolio_asset_types[idx])
-            PORTFOLIO_OBJECTS.remove(ticker)
-            try:
-                port_dialog.pos_view_gb.pos_view.setRowCount(
-                    len(portfolio_amts) - 1
-                )
-            except TypeError:
-                pass
+            port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+
         else:
-            stock_amt = int(portfolio_amts[idx])
-            stock_amt -= int(order[4])
-            portfolio_amts[idx] = str(stock_amt)
-            purchase_prices[idx - 1] = str(trade_price)
+            stock_amt = pos_size - trade_qty
+            portfolio_amts[idx] = stock_amt
+            new_cb = 0
 
-            purchase_price = float(purchase_prices[idx - 1])
-            new_cb = round(
-                (purchase_price * (int(portfolio_amts[idx]) - int(order[4])) + trade_price * int(order[4])) / int(portfolio_amts[idx]), 2
-            )
-            purchase_prices[idx - 1] = str(new_cb)
-
+            if pos_size <= 0:
+                new_cb = round(
+                    (old_basis * (stock_amt + trade_qty) + trade_price * -trade_qty) / stock_amt, 2
+                )
+                purchase_prices[idx - 1] = new_cb
+            else:
+                purchase_prices[idx - 1] = trade_price
 
     else:
         portfolio_tickers.append(order[0])
-        portfolio_amts.append(str(-1 * int(order[4])))
+        portfolio_amts.append(-1 * trade_qty)
         portfolio_asset_types.append(asset_type)
-        purchase_prices.append(str(trade_price))
-        PORTFOLIO_OBJECTS.append(ticker)
-        try:
-            port_dialog.pos_view_gb.pos_view.setRowCount(
-                len(portfolio_amts) - 1
-            )
-            column_count = port_dialog.pos_view_gb.pos_view.columnCount()
-            for j in range(column_count):
-                port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, j, QTableWidgetItem())
-        except TypeError:
-            pass
-    OPEN_ORDERS.remove(order)
+        purchase_prices.append(trade_price)
 
+        port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        for j in range(column_count):
+            port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, j, QTableWidgetItem())
+
+    OPEN_PORT_ORDERS.remove(order)
+
+
+def num_options_on_underlying(ticker: str, calls_puts: str):
+    """
+    Finds the number of options, of any strike or expiration, that the user has positions in for a given underlying
+    """
+    acc = 0
+    for idx, asset_type in enumerate(portfolio_asset_types):
+        if asset_type == "Option" and portfolio_amts[idx] < 0:
+            if ticker in portfolio_tickers[idx]:
+                _type = yq.Ticker(portfolio_tickers[idx]).all_modules[portfolio_tickers[idx]]['price']['shortName'][:-4]
+                if calls_puts == "Calls" and _type == 'call':
+                    acc += portfolio_amts[idx]
+                elif calls_puts == "Puts" and _type == ' put':
+                    acc += portfolio_amts[idx]
+    return acc * 100
+
+
+def get_bpr(ticker: str, quantity: int, strike: float, buy_sell: str, option_ticker: str, is_itm: bool):
+    """
+    Calculates the buying power reduction that would result from selling short a given option
+    """
+    if buy_sell == 'Sell':
+        options_owned = 0
+        option_slots_left = 0
+        if option_ticker in portfolio_tickers: # user has shares of underlying
+            index = portfolio_tickers.index(option_ticker)
+            options_owned = portfolio_amts[index]
+        shares_covered_by_options = num_options_on_underlying(ticker, f"{is_itm}s")
+        num_underlying_shares = 0
+        if ticker in portfolio_tickers:
+            num_underlying_shares += max(0, portfolio_amts[portfolio_tickers.index(ticker)])
+
+
+        option_slots_left = max(0, math.trunc((num_underlying_shares - shares_covered_by_options) / 100))
+        options_owned = max(0, options_owned)
+
+        if quantity <= options_owned:
+            return 0
+        elif quantity > options_owned:
+            if quantity > options_owned + option_slots_left:
+                cash_covered_options = quantity - options_owned - option_slots_left
+                if is_itm:
+                    return cash_covered_options * yq.Ticker(ticker).price[ticker]['regularMarketPrice'] * 100 * .2
+                else:
+                    stock_price = yq.Ticker(ticker).price[ticker]['regularMarketPrice']
+                    return max(
+                        .1 * strike * 100,
+                        .2 * (stock_price - (stock_price - strike)) * 100
+                    ) * cash_covered_options
+            else:
+                return 0
+    else:
+        return 0
 
 
 def update_portfolio_piechart():
@@ -325,22 +538,22 @@ def update_portfolio_piechart():
 
         match portfolio_asset_types[idx]:
             case "ETF":
-                if int(amount) > 0:
-                    long_etfs += int(amount) * asset_price
+                if amount > 0:
+                    long_etfs += amount * asset_price
                 else:
-                    short_etfs -= int(amount) * asset_price
+                    short_etfs -= amount * asset_price
             case "Liquidity":
-                cash_amount += float(amount)
+                cash_amount += amount
             case "Stock":
-                if int(amount) > 0:
-                    long_stocks += int(amount) * asset_price
+                if amount > 0:
+                    long_stocks += amount * asset_price
                 else:
-                    short_stocks -= int(amount) * asset_price
+                    short_stocks -= amount * asset_price
             case "Option":
-                if int(amount) > 0:
-                    long_options += int(amount) * asset_price
+                if amount > 0:
+                    long_options += amount * asset_price * 100
                 else:
-                    short_options -= int(amount) * asset_price
+                    short_options -= amount * asset_price * 100
 
     cash_amount -= 2 * float(port_dialog.nav_gb.liabilities.text()[2:].replace(",", ""))
     # loads values into pie chart and displays them
@@ -399,25 +612,32 @@ def update_wallet_table():
     """
     Updates the positions table on the crypto wallet dialog.
     """
-    wallet_zip = zip(wallet_tickers[1:], TOKEN_OBJECTS, wallet_costbases, wallet_amts[1:])
-    for idx, (ticker, obj, basis, amt) in enumerate(wallet_zip):
+    prices = yq.Ticker(wallet_tickers[1:]).price
+    price_data = [
+        (
+            float(prices[ticker]['regularMarketPrice']),
+            float(prices[ticker]['regularMarketOpen']),
+            float(prices[ticker]['regularMarketPreviousClose'])
+        ) for ticker in wallet_tickers[1:]
+    ]
+    wallet_zip = zip(price_data, wallet_costbases, wallet_amts[1:])
+    for idx, (data, basis, amt) in enumerate(wallet_zip):
 
         # get the current price and the price it last closed at
-        ticker_data = obj.history('1wk')
-        current_price = ticker_data.iloc[-1][5]
-        last_close_price = ticker_data.iloc[-2][5]
+        current_price = data[0]
+        last_close_price = data[2]
 
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (current_price - float(basis)) * float(amt)
-        percent_change = round(total_return / (float(basis) * float(amt)) * 100, 2)
+        total_return = (current_price - basis) * amt
+        percent_change = round(total_return / (basis * amt) * 100, 2)
 
         # update the table with the new information
 
         # first cell in the row is the coin symbol
-        wallet_dialog.pos_view_gb.pos_view.item(idx, 0).setText(ticker)
+        wallet_dialog.pos_view_gb.pos_view.item(idx, 0).setText(wallet_tickers[idx + 1])
 
         # second cell is the coin's performance icon
-        wallet_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(ticker_data))
+        wallet_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(data))
 
         # third cell is the coin's current price
         wallet_dialog.pos_view_gb.pos_view.item(idx, 2).setText(f'${current_price:0,.2f}')
@@ -432,16 +652,16 @@ def update_wallet_table():
 
 
         # fifth cell is the user's costbasis for the token
-        wallet_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${float(basis):0,.2f}')
+        wallet_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${basis:0,.2f}')
 
 
         # sixth cell is the amount of the coin the user has (or is short)
-        wallet_dialog.pos_view_gb.pos_view.item(idx, 5).setText(amt)
+        wallet_dialog.pos_view_gb.pos_view.item(idx, 5).setText(f"{amt}")
 
 
         # seventh cell is the NLV the user has in the coin
         wallet_dialog.pos_view_gb.pos_view.item(idx, 6).setText(
-            f'${(current_price * float(amt)):0,.2f}')
+            f'${(current_price * amt):0,.2f}')
 
 
         # eighth cell is the user's net P/L on the position from when it was opened
@@ -450,23 +670,50 @@ def update_wallet_table():
         )
 
 
+def update_portfolio_options():
+    """
+    Removes expired options from the user's portfolio, if any are there
+    """
+    port_zip = zip(portfolio_tickers[1:], portfolio_asset_types[1:], portfolio_amts[1:], purchase_prices)
+    for ticker, type_, amt, basis in port_zip:
+        if type_ == "Option":
+            exp_date = yq.Ticker(ticker).summary_detail[ticker]['expireDate']
+            exp_dt_obj = datetime.strptime(exp_date, "%Y-%m-%d %H:%M:%S") + timedelta(hours=20)
+            cur_dt_obj = datetime.now()
+            if cur_dt_obj > exp_dt_obj:
+                portfolio_tickers.remove(ticker)
+                portfolio_asset_types.remove(type_)
+                portfolio_amts.remove(amt)
+                purchase_prices.remove(basis)
+
+
 def update_portfolio_table():
     """
     Updates the table with all the user's positions in the portfolio dialog
     """
+
     # for each asset in the portfolio
-    port_zip = zip(portfolio_tickers[1:], PORTFOLIO_OBJECTS, purchase_prices, portfolio_amts[1:])
-    for idx, (ticker, obj, basis, amt) in enumerate(port_zip):
-        int_amt = int(amt)
-        basis = float(basis)
+    prices = yq.Ticker(portfolio_tickers[1:]).price
+    price_data = [
+        (
+            prices[ticker]['regularMarketPrice'],
+            prices[ticker]['regularMarketOpen'],
+            prices[ticker]['regularMarketPreviousClose']
+        )
+        for ticker in portfolio_tickers[1:]
+    ]
+
+    port_zip = zip(price_data, purchase_prices, portfolio_amts[1:])
+    for idx, (data, basis, amt) in enumerate(port_zip):
         # get the current price and the price it last closed at
 
-        ticker_data = obj.history(period='5d')
-        current_price = ticker_data.iloc[-1][5]
-        last_close = ticker_data.iloc[-2][5]
+        current_price = data[0]
+        last_close = data[2]
         # calculate the return since the position was opened in dollar and percent terms
-        total_return = (current_price - basis) * int_amt
-        percent_change = round(total_return / (basis * int_amt) * 100, 2)
+        total_return = (current_price - basis) * amt
+        percent_change = round(total_return / (basis * amt) * 100, 2)
+        if amt < 0:
+            percent_change *= -1
         # update the table with the new information
 
         if port_dialog.pos_view_gb.pos_view.item(idx, 0) is None:
@@ -475,9 +722,9 @@ def update_portfolio_table():
                 port_dialog.pos_view_gb.pos_view.setItem(idx, k, QTableWidgetItem())
 
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 0).setText(ticker)
+        port_dialog.pos_view_gb.pos_view.item(idx, 0).setText(portfolio_tickers[idx + 1])
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(ticker_data))
+        port_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(data))
 
         port_dialog.pos_view_gb.pos_view.item(idx, 2).setText(f'${current_price:0,.2f}')
 
@@ -488,12 +735,14 @@ def update_portfolio_table():
 
         port_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${basis:0,.2f}')
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 5).setText(amt)
+        port_dialog.pos_view_gb.pos_view.item(idx, 5).setText(f"{amt}")
 
-        port_dialog.pos_view_gb.pos_view.item(idx, 6).setText(f'${(current_price * int_amt):0,.2f}')
+        option_modifier = 100 if portfolio_asset_types[idx + 1] == 'Option' else 1
+
+        port_dialog.pos_view_gb.pos_view.item(idx, 6).setText(f'${(current_price * amt * option_modifier):0,.2f}')
 
         port_dialog.pos_view_gb.pos_view.item(idx, 7).setText(
-            f'${total_return:0,.2f} ({percent_change}%)')
+            f'${total_return * option_modifier:0,.2f} ({percent_change}%)')
 
 
 def update_watchlist_tickers():
@@ -502,16 +751,22 @@ def update_watchlist_tickers():
     """
 
     # for each ticker in the watchlist
-    watchlist_zip = zip(watchlist_tickers, WATCHLIST_OBJECTS)
-    for idx, (item, obj) in enumerate(watchlist_zip):
+    prices = yq.Ticker(watchlist_tickers).price
+    price_data = [
+        (
+            prices[ticker]['regularMarketPrice'],
+            prices[ticker]['regularMarketOpen'],
+            prices[ticker]['regularMarketPreviousClose']
+        ) for ticker in watchlist_tickers
+    ]
+    for idx, data in enumerate(price_data):
 
-        ticker = obj.history(period='5d')
-        ticker_current = ticker.iloc[-1][5]
-        last_close = ticker.iloc[-2][5]
+        ticker_current = data[0]
+        last_close = data[2]
 
-        port_dialog.watchlist_gb.watchlist.item(idx, 0).setText(item)
+        port_dialog.watchlist_gb.watchlist.item(idx, 0).setText(watchlist_tickers[idx])
 
-        port_dialog.watchlist_gb.watchlist.item(idx, 1).setIcon(update_ticker_icon(ticker))
+        port_dialog.watchlist_gb.watchlist.item(idx, 1).setIcon(update_ticker_icon(data))
 
         port_dialog.watchlist_gb.watchlist.item(idx, 2).setText(f'${ticker_current:0,.2f}')
 
@@ -624,7 +879,7 @@ def chart_by_period(ticker: str, interval: str, prepost: str, ohlc: str, split_d
     Thread(daemon=True, target=thread_worker, args=(ticker, period, interval)).start()
 
 
-def update_ticker_icon(ticker) -> QIcon:
+def update_ticker_icon(data: tuple) -> QIcon:
     """
     Updates the performance icon for the given stock
 
@@ -635,9 +890,9 @@ def update_ticker_icon(ticker) -> QIcon:
     """
     # initializes new table widget item and gets the ticker's open, last close, and current prices
 
-    ticker_open = ticker.iloc[-1][0]
-    ticker_current = ticker.iloc[-1][5]
-    last_close = ticker.iloc[-2][5]
+    ticker_open = data[1]
+    ticker_current = data[0]
+    last_close = data[2]
 
     # calculates the percent change in price from open and from yesterday's close
     open_change = (ticker_current - ticker_open) / ticker_open * 100
@@ -695,8 +950,10 @@ def update_portfolio_nav():
     (1.5 * value of all short positions).
     """
 
+    global option_collateral
+
     # sets buying power to user's cash
-    new_val = float(portfolio_amts[0])
+    new_val = portfolio_amts[0]
     liabilities = 0
     assets = 0
 
@@ -704,7 +961,7 @@ def update_portfolio_nav():
     for idx, amt in enumerate(portfolio_amts[1:]):
         # slice returns only the dollar value without the '$'
         cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        amt = int(amt)
+
 
         if amt > 0:
             # if it's long, add its value to the new value and to the assets tally
@@ -714,6 +971,17 @@ def update_portfolio_nav():
             # if it's short, subtract its value from the new value and add to the liabilities tally
             new_val += cur_val * amt
             liabilities += cur_val * amt
+
+    option_collateral = 0
+
+    for idx, ticker in enumerate(portfolio_tickers[1:]):
+        if portfolio_asset_types[idx + 1] == 'Option' and portfolio_amts[idx + 1] < 0:
+            option_obj = yq.Ticker(ticker).all_modules[ticker]
+            shortname_list = option_obj['price']['shortName'].split(' ')
+            underlying_price = yq.Ticker(shortname_list[0]).price[shortname_list[0]]['regularMarketPrice']
+            is_itm = float(shortname_list[-2]) > underlying_price
+            strike = float(shortname_list[-2])
+            option_collateral += (.2 * underlying_price * 100 * portfolio_amts[idx + 1]) if is_itm else max(.1 * strike * 100, .2 * (underlying_price - (underlying_price - strike)) * 100) * portfolio_amts[idx + 1]
 
     port_dialog.nav_gb.liq.setText(f'${new_val:0,.2f}')
 
@@ -725,6 +993,8 @@ def update_portfolio_nav():
 
     port_dialog.nav_gb.liabilities.setText(f'${liabilities:0,.2f}')
 
+    port_dialog.nav_gb.option_req.setText(f'${option_collateral:0,.2f}')
+
     port_dialog.nav_gb.returnSinceInception.setText(f'{((new_val / 10000 - 1) * 100):0,.2f}%')
 
 
@@ -733,18 +1003,17 @@ def update_wallet_nav():
     (1.5 * value of all short positions)."""
 
     # sets buying power to user's cash
-    new_val = float(wallet_amts[0])
+    new_val = wallet_amts[0]
     liabilities = 0
     assets = 0
     for idx, amt in enumerate(wallet_amts[1:]):
         cur_val = atof(wallet_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        amt = float(amt)
         if amt > 0:
             new_val += cur_val * amt
             assets += cur_val * amt
         elif amt < 0:
             new_val -= cur_val * amt
-            liabilites += cur_val * amt
+            liabilities += cur_val * amt
 
     buying_power = get_wallet_bp()
     wallet_dialog.nav_gb.liq.setText(f'${new_val:0,.2f}')
@@ -771,7 +1040,6 @@ def get_portfolio_bp() -> float:
 
     for idx, amt in enumerate(portfolio_amts[1:]):
         cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        amt = int(amt)
         if amt > 0:
             total_long += cur_val * amt
         elif amt < 0:
@@ -779,6 +1047,8 @@ def get_portfolio_bp() -> float:
 
     buying_power += .5 * total_long
     buying_power += 1.5 * total_short
+
+    buying_power -= abs(option_collateral)
     return buying_power
 
 
@@ -847,17 +1117,17 @@ def get_etf_weights(ticker_info: pd.DataFrame) -> dict:
     """
 
     return {
-        "Real Estate" : ticker_info.iloc[0],
-        "Consumer Cyclicals" : ticker_info.iloc[1],
-        "Basic Materials" : ticker_info.iloc[2],
-        "Consumer Defensives" : ticker_info.iloc[3],
-        "Technology" : ticker_info.iloc[4],
-        "Communication Services" : ticker_info.iloc[5],
-        "Financial Services" : ticker_info.iloc[6],
-        "Utilities" : ticker_info.iloc[7],
-        "Industrials" : ticker_info.iloc[8],
-        "Energy" : ticker_info.iloc[9],
-        "Healthcare" : ticker_info.iloc[10]
+        "Real Estate" : ticker_info.iat[0, 0],
+        "Consumer Cyclicals" : ticker_info.iat[1, 0],
+        "Basic Materials" : ticker_info.iat[2, 0],
+        "Consumer Defensives" : ticker_info.iat[3, 0],
+        "Technology" : ticker_info.iat[4, 0],
+        "Communication Services" : ticker_info.iat[5, 0],
+        "Financial Services" : ticker_info.iat[6, 0],
+        "Utilities" : ticker_info.iat[7, 0],
+        "Industrials" : ticker_info.iat[8, 0],
+        "Energy" : ticker_info.iat[9, 0],
+        "Healthcare" : ticker_info.iat[10, 0]
     }
 
 
@@ -908,6 +1178,8 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     more_info_label = QLabel("Hover over a slice of the pie chart for more information")
     more_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+    ai_button = QPushButton('Get AI Prediction')
+    ai_button.clicked.connect(lambda: spred.predict_stock_price(name))
 
     weights_piechart = QPieSeries()
 
@@ -1015,6 +1287,8 @@ def setup_etf_info(ticker: yq.Ticker, name: str):
     about_scrollarea_widget.layout().addWidget(description_label)
     about_scrollarea_widget.layout().addWidget(weights_chartview)
     about_scrollarea_widget.layout().addWidget(more_info_label)
+    about_scrollarea_widget.layout().addWidget(ai_button)
+
 
     assetinfo_scrollarea_widget.layout().addWidget(current_price_label)
     assetinfo_scrollarea_widget.layout().addWidget(open_price_label)
@@ -1072,6 +1346,9 @@ def setup_stock_info(ticker: yq.Ticker, name: str):
     website_label = QLabel(
         f"Website: <a href=\"{asset_profile['website']}\"> {asset_profile['website']} </a>")
 
+    ai_button = QPushButton('Get AI Prediction')
+    ai_button.clicked.connect(lambda: spred.predict_stock_price(name))
+
     current_price_label = QLabel(f"Current Price: {price_data['regularMarketPrice']}")
     open_price_label = QLabel(f"\tOpen: {price_data['regularMarketOpen']}")
     high_price_label = QLabel(f"\tHigh: {price_data['regularMarketDayHigh']}")
@@ -1125,6 +1402,8 @@ def setup_stock_info(ticker: yq.Ticker, name: str):
     about_scrollarea_widget.layout().addWidget(description_label)
     about_scrollarea_widget.layout().addWidget(location_label)
     about_scrollarea_widget.layout().addWidget(website_label)
+    about_scrollarea_widget.layout().addWidget(ai_button)
+
 
     assetinfo_scrollarea_widget.layout().addWidget(current_price_label)
     assetinfo_scrollarea_widget.layout().addWidget(open_price_label)
@@ -1207,7 +1486,7 @@ def stockinfo_dialog_changed(tab_id: int):
         prediction_date = QDateTime().currentDateTime().addYears(1).toMSecsSinceEpoch()
         date_format = "yyyy-MM-dd hh:mm:ss"
         for idx, close in enumerate(ticker_hist.loc[:, 'adjclose']):
-            price_dt = QDateTime().fromString(str(ticker_hist.index[idx][1])[0:19], date_format)
+            price_dt = QDateTime().fromString(f"{ticker_hist.index[idx][1]}"[0:19], date_format)
 
             series.append(float(price_dt.toMSecsSinceEpoch()), close)
 
@@ -1224,13 +1503,14 @@ def stockinfo_dialog_changed(tab_id: int):
         series4.setName("Best Case")
         series4.setColor(QColor("green"))
 
-        series2.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        current_price = ticker_hist.iat[-1, 3]
+        series2.append(current_dt, current_price)
         series2.append(float(prediction_date), ticker_pts['targetLowPrice'])
 
-        series3.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series3.append(current_dt, current_price)
         series3.append(float(prediction_date), ticker_pts['targetMeanPrice'])
 
-        series4.append(current_dt, ticker_hist.iloc[ticker_hist.count().iloc[0] - 1][3])
+        series4.append(current_dt, current_price)
         series4.append(float(prediction_date), ticker_pts['targetHighPrice'])
 
         ptchart.addSeries(series)
@@ -1285,7 +1565,7 @@ def stockinfo_dialog_changed(tab_id: int):
             qtr_earnings_table.horizontalHeaderItem(idx).setFont(ARIAL_10)
 
         for idx in range(qtr_earnings_table.rowCount()):
-            qtr_earnings_table.setVerticalHeaderItem(idx, QTableWidgetItem(str(idx + 1)))
+            qtr_earnings_table.setVerticalHeaderItem(idx, QTableWidgetItem(f"{idx + 1}"))
             qtr_earnings_table.verticalHeaderItem(idx).setFont(ARIAL_10)
 
         for idx, report in enumerate(ticker_qtr_earnings):
@@ -1303,9 +1583,9 @@ def stockinfo_dialog_changed(tab_id: int):
                 earnings_trend_min = estimate
             estimate_qtr_earnings_set.append(estimate)
 
-            qtr_earnings_table.setItem(idx, 0, QTableWidgetItem(str(reported)))
-            qtr_earnings_table.setItem(idx, 1, QTableWidgetItem(str(estimate)))
-            qtr_earnings_table.setItem(idx, 2, QTableWidgetItem(str(reported - estimate)))
+            qtr_earnings_table.setItem(idx, 0, QTableWidgetItem(f"{reported}"))
+            qtr_earnings_table.setItem(idx, 1, QTableWidgetItem(f"{estimate}"))
+            qtr_earnings_table.setItem(idx, 2, QTableWidgetItem(f"{reported - estimate}"))
 
         series.append(actual_qtr_earnings_set)
         series.append(estimate_qtr_earnings_set)
@@ -1381,21 +1661,21 @@ def stockinfo_dialog_changed(tab_id: int):
         yr_revtrend_chart.createDefaultAxes()
         yr_revtrend_chart.axes(Qt.Orientation.Vertical)[0].setRange(
             yr_revtrend_min * 1.1, yr_revtrend_max * 1.1)
-
         TAB3_ISLOADED = True
 
     elif (tab_id == 3 and not TAB4_ISLOADED):
         ticker_financials = ticker.all_financial_data()
         financials_table.setRowCount(ticker_financials.columns.size)
         financials_table.setColumnCount(5)
+
         for idx in range(4):
-            tw_item = QTableWidgetItem(str(ticker_financials.iloc[idx][0])[:10])
+            tw_item = QTableWidgetItem(f"{ticker_financials.iat[idx, 0]}"[:10])
             financials_table.setHorizontalHeaderItem(idx, tw_item)
             financials_table.horizontalHeaderItem(idx).setFont(ARIAL_10)
 
         for idx in range(4):
             for j in range(3, ticker_financials.iloc[0].size):
-                current_data = float(ticker_financials.iloc[idx][j])
+                current_data = float(ticker_financials.iat[idx, j])
                 if current_data > 1000:
                     formatted_data = nf.simplify(current_data, True)
                     financials_table.setItem(j, idx, QTableWidgetItem(formatted_data))
@@ -1403,7 +1683,7 @@ def stockinfo_dialog_changed(tab_id: int):
                     formatted_data = nf.simplify(abs(current_data), True)
                     financials_table.setItem(j, idx, QTableWidgetItem(f"-{formatted_data}"))
                 else:
-                    financials_table.setItem(j, idx, QTableWidgetItem(str(current_data)))
+                    financials_table.setItem(j, idx, QTableWidgetItem(f"{current_data}"))
 
         checkboxes = QButtonGroup()
 
@@ -1429,7 +1709,7 @@ def on_financials_checkbox_click():
     financials_chart.removeAllSeries()
     series = QBarSeries()
     for outer in range(financials_table.rowCount()):
-        box = financials_table.cellWidget(i, 4)
+        box = financials_table.cellWidget(outer, 4)
         if box.isChecked():
             financials_set = QBarSet(financials_table.verticalHeaderItem(outer).text())
             for inner in range(4):
@@ -1468,7 +1748,7 @@ def dcf_findstock_button_click():
     mkt_price = input_info['mp']
     dcf_dialog.inputs_gb.mkt_price.setText(f"${mkt_price:0,.2f}")
 
-    dcf_dialog.inputs_gb.eps.setText(str(input_info['eps']))
+    dcf_dialog.inputs_gb.eps.setText(f"{input_info['eps']}")
 
     dcf_dialog.inputs_gb.growth.setText(f"{input_info['ge']}")
 
@@ -1608,8 +1888,9 @@ def close_event():
     """
     Saves currently open trades and the state of the portfolio to trades.xml and portfolio.xml
     """
-    st.save(OPEN_ORDERS)
+    st.save(OPEN_PORT_ORDERS)
     sp.save_port(portfolio_asset_types, portfolio_tickers, portfolio_amts, purchase_prices)
+    sw.save_wallet(wallet_tickers, wallet_amts, wallet_costbases)
 
 
 app.aboutToQuit.connect(close_event)
@@ -1636,16 +1917,12 @@ down_color = ra.get_xml_data(r'assets\settings.xml', 'downcolor')
 base_style = ra.get_xml_data(r'assets\settings.xml', 'basestyle')
 portfolio_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\portfolio.xml', 'name')]
 portfolio_asset_types = [type.text for type in ra.get_xml_data(r'assets\portfolio.xml', 'type')]
-portfolio_amts = [amt.text for amt in ra.get_xml_data(r'assets\portfolio.xml', 'amount')]
-purchase_prices = [price.text for price in ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')]
+portfolio_amts = [float(amt.text) for amt in ra.get_xml_data(r'assets\portfolio.xml', 'amount')]
+purchase_prices = [float(price.text) for price in ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')]
 wallet_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\wallet.xml', 'name')]
-wallet_amts = [amt.text for amt in ra.get_xml_data(r'assets\wallet.xml', 'amount')]
-wallet_costbases = [basis.text for basis in ra.get_xml_data(r'assets\wallet.xml', 'costbasis')]
+wallet_amts = [float(amt.text) for amt in ra.get_xml_data(r'assets\wallet.xml', 'amount')]
+wallet_costbases = [float(basis.text) for basis in ra.get_xml_data(r'assets\wallet.xml', 'costbasis')]
 watchlist_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\watchlist.xml', 'name')]
-
-TOKEN_OBJECTS = [yq.Ticker(symbol) for symbol in wallet_tickers[1:]]
-PORTFOLIO_OBJECTS = [yq.Ticker(symbol) for symbol in portfolio_tickers[1:]]
-WATCHLIST_OBJECTS = [yq.Ticker(symbol) for symbol in watchlist_tickers]
 
 trades = ra.get_xml_data(r'assets\trades.xml', 'trade')
 
@@ -1653,7 +1930,7 @@ for trade in trades:
     trade_list_item = [trade.contents[1].text, trade.contents[3].text, trade.contents[5].text,
                        trade.contents[7].text, trade.contents[9].text]
 
-    OPEN_ORDERS.append(trade_list_item)
+    OPEN_PORT_ORDERS.append(trade_list_item)
 
     ticker_obj = yq.Ticker(trade.contents[1].text)
     prices_frame = ticker_obj.history(
@@ -1661,7 +1938,7 @@ for trade in trades:
         start=datetime.strptime(trade.contents[11].text, '%Y-%m-%d %H:%M:%S.%f'),
         end=datetime.now()
     )
-    cash = float(portfolio_amts[0])
+    portfolio_cash = portfolio_amts[0]
 
 
     asset_class = ""
@@ -1670,35 +1947,37 @@ for trade in trades:
             asset_class = 'Stock'
         case 'ETF':
             asset_class = 'ETF'
+        case 'OPTION':
+            asset_class = "Option"
 
-    trade_price = float(trade.contents[7].text)
+    execution_price = float(trade.contents[7].text)
     if trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Limit':
         for row in prices_frame.iterrows():
-            if row[1].iloc[3] < trade_price:
-                execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            if row[1].iloc[3] < execution_price:
+                execute_buy(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
                 break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Limit':
         for row in prices_frame.iterrows():
-            if row[1].iloc[2] > trade_price:
-                execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            if row[1].iloc[2] > execution_price:
+                execute_sell(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
                 break
     elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Stop':
         for row in prices_frame.iterrows():
-            if row[1].iloc[2] > trade_price:
-                execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            if row[1].iloc[2] > execution_price:
+                execute_buy(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
                 break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Stop':
         for row in prices_frame.iterrows():
-            if row[1].iloc[3] < trade_price:
-                execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            if row[1].iloc[3] < execution_price:
+                execute_sell(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
                 break
     elif trade.contents[3].text == 'Buy' and trade.contents[5].text == 'Market':
         if prices_frame.size > 1:
-            execute_buy(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            execute_buy(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
             break
     elif trade.contents[3].text == 'Sell' and trade.contents[5].text == 'Market':
         if prices_frame.size > 1:
-            execute_sell(trade_list_item, ticker_obj, asset_class, cash, trade_price)
+            execute_sell(trade_list_item, ticker_obj, asset_class, portfolio_cash, execution_price)
             break
 
 
@@ -1717,18 +1996,21 @@ all_tickers_list = [f"{ticker} - {name}" for (ticker, name) in tickers_names_zip
 
 # set user's NAV equal to cash first, then iterate through stocks,
 # find their current price, and add their values to user's NAV
-portfolio_nav = float(portfolio_amts[0])
-portfolio_cash = float(portfolio_amts[0])
+portfolio_nav = portfolio_amts[0]
+portfolio_cash = portfolio_amts[0]
 
 for port_ticker, port_amt in zip(portfolio_tickers[1:], portfolio_amts[1:]):
-    price = yq.Ticker(port_ticker).history(period='5d').iloc[4][3]
-    portfolio_nav += float(price) * int(port_amt)
+    price = yq.Ticker(port_ticker).price[port_ticker]['regularMarketPrice']
+    portfolio_nav += price * port_amt
 
-wallet_nav = float(wallet_amts[0])
-wallet_cash = float(wallet_amts[0])
+wallet_nav =  wallet_amts[0]
+wallet_cash = wallet_amts[0]
+
 for wallet_ticker, wallet_amt in zip(wallet_tickers[1:], wallet_amts[1:]):
-    price = yq.Ticker(wallet_ticker).history('5d').iloc[-1][5]
-    wallet_nav += float(price) * float(wallet_amt)
+    price = yq.Ticker(wallet_ticker).history('5d').iat[-1, 5]
+    wallet_nav += price * wallet_amt
+
+option_collateral = 0
 
 # add genius font to database
 QFontDatabase.addApplicationFont('fonts/genius.ttf')
@@ -1748,7 +2030,7 @@ port_dialog.setStyleSheet('background-color: deepskyblue;')
 
 # positions table settings
 port_dialog.pos_view_gb = QGroupBox(port_dialog)
-port_dialog.pos_view_gb.setGeometry(10, 300, 900, 250)
+port_dialog.pos_view_gb.setGeometry(10, 270, 1050, 250)
 port_dialog.pos_view_gb.setTitle("Your Portfolio")
 port_dialog.pos_view_gb.setStyleSheet('background-color: white;')
 
@@ -1758,23 +2040,23 @@ port_dialog.pos_view_gb.pos_view.setEditTriggers(
 port_dialog.pos_view_gb.pos_view.setFont(ARIAL_10)
 port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
 port_dialog.pos_view_gb.pos_view.setColumnCount(8)
-port_dialog.pos_view_gb.pos_view.setGeometry(10, 20, 850, 200)
+port_dialog.pos_view_gb.pos_view.setGeometry(10, 20, 1040, 200)
 port_dialog.pos_view_gb.pos_view.setStyleSheet('background-color: white;')
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(3, QTableWidgetItem("Gain/Loss Per Share"))
+port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(3, QTableWidgetItem("P/L Per Share Today"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(4, QTableWidgetItem("Purchase Price"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(5, QTableWidgetItem("# of Shares"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(6, QTableWidgetItem("Total Value"))
 port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(7, QTableWidgetItem("Position Gain/Loss"))
-for i in range(8):
-    port_dialog.pos_view_gb.pos_view.horizontalHeaderItem(i).setFont(ARIAL_10)
-for i in range(port_dialog.pos_view_gb.pos_view.rowCount()):
-    port_dialog.pos_view_gb.pos_view.setVerticalHeaderItem(i, QTableWidgetItem("1"))
-    port_dialog.pos_view_gb.pos_view.verticalHeaderItem(i).setFont(ARIAL_10)
-    for j in range(port_dialog.pos_view_gb.pos_view.columnCount()):
-        port_dialog.pos_view_gb.pos_view.setItem(i, j, QTableWidgetItem())
+for row in range(8):
+    port_dialog.pos_view_gb.pos_view.horizontalHeaderItem(row).setFont(ARIAL_10)
+for row in range(port_dialog.pos_view_gb.pos_view.rowCount()):
+    port_dialog.pos_view_gb.pos_view.setVerticalHeaderItem(row, QTableWidgetItem("1"))
+    port_dialog.pos_view_gb.pos_view.verticalHeaderItem(row).setFont(ARIAL_10)
+    for column in range(port_dialog.pos_view_gb.pos_view.columnCount()):
+        port_dialog.pos_view_gb.pos_view.setItem(row, column, QTableWidgetItem())
 update_portfolio_table()
 port_dialog.pos_view_gb.pos_view.resizeColumnsToContents()
 progressBar.setValue(60)
@@ -1817,13 +2099,21 @@ port_dialog.nav_gb.liabilitiesLabel.setText("Short Assets: ")
 port_dialog.nav_gb.liabilitiesLabel.setGeometry(10, 150, 80, 20)
 port_dialog.nav_gb.liabilities = QLabel(port_dialog.nav_gb)
 port_dialog.nav_gb.liabilities.setGeometry(100, 150, 80, 20)
+# option requirement labels
+port_dialog.nav_gb.option_req_label = QLabel(port_dialog.nav_gb)
+port_dialog.nav_gb.option_req_label.setText("Option Req:")
+port_dialog.nav_gb.option_req_label.setGeometry(10, 170, 80, 20)
+port_dialog.nav_gb.option_req = QLabel(port_dialog.nav_gb)
+port_dialog.nav_gb.option_req.setText(f'${option_collateral:0,.2f}')
+port_dialog.nav_gb.option_req.setGeometry(100, 170, 80, 20)
+
 # return since inception labels
 port_dialog.nav_gb.returnSinceInceptionLabel = QLabel(port_dialog.nav_gb)
 port_dialog.nav_gb.returnSinceInceptionLabel.setText("Return Since Inception: ")
-port_dialog.nav_gb.returnSinceInceptionLabel.setGeometry(10, 170, 120, 20)
+port_dialog.nav_gb.returnSinceInceptionLabel.setGeometry(10, 190, 120, 20)
 port_dialog.nav_gb.returnSinceInception = QLabel(port_dialog.nav_gb)
 port_dialog.nav_gb.returnSinceInception.setFont(QFont('genius', 20))
-port_dialog.nav_gb.returnSinceInception.setGeometry(10, 190, 120, 30)
+port_dialog.nav_gb.returnSinceInception.setGeometry(10, 210, 120, 30)
 update_portfolio_nav()
 progressBar.setValue(80)
 # watchlist table settings
@@ -1841,13 +2131,13 @@ port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(
 port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
 port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(
     3, QTableWidgetItem("Gain/Loss Per Share"))
-for i in range(4):
-    port_dialog.watchlist_gb.watchlist.horizontalHeaderItem(i).setFont(ARIAL_10)
-for i in range(port_dialog.watchlist_gb.watchlist.rowCount()):
-    port_dialog.watchlist_gb.watchlist.setVerticalHeaderItem(i, QTableWidgetItem(str(i + 1)))
-    port_dialog.watchlist_gb.watchlist.verticalHeaderItem(i).setFont(ARIAL_10)
-    for j in range(port_dialog.watchlist_gb.watchlist.columnCount()):
-        port_dialog.watchlist_gb.watchlist.setItem(i, j, QTableWidgetItem())
+for row in range(4):
+    port_dialog.watchlist_gb.watchlist.horizontalHeaderItem(row).setFont(ARIAL_10)
+for row in range(port_dialog.watchlist_gb.watchlist.rowCount()):
+    port_dialog.watchlist_gb.watchlist.setVerticalHeaderItem(row, QTableWidgetItem(f"{row + 1}"))
+    port_dialog.watchlist_gb.watchlist.verticalHeaderItem(row).setFont(ARIAL_10)
+    for column in range(port_dialog.watchlist_gb.watchlist.columnCount()):
+        port_dialog.watchlist_gb.watchlist.setItem(row, column, QTableWidgetItem())
 
 port_dialog.watchlist_gb.watchlist.setFont(ARIAL_10)
 port_dialog.watchlist_gb.watchlist.setGeometry(10, 20, 500, 200)
@@ -1868,7 +2158,7 @@ chart.setTitle("Positions by Asset Class")
 chart.setVisible(True)
 port_dialog.chart_view = QChartView(chart)
 port_dialog.chart_view.setParent(port_dialog)
-port_dialog.chart_view.setGeometry(780, 2, 500, 270)
+port_dialog.chart_view.setGeometry(780, 1, 500, 265)
 port_dialog.chart_view.setVisible(True)
 update_portfolio_piechart()
 
@@ -1973,7 +2263,7 @@ indicators_dialog.momentum_gb = QGroupBox(indicators_dialog)
 indicators_dialog.momentum_gb.setTitle("Momentum Indicators")
 indicators_dialog.momentum_gb.setGeometry(10, 10, 300, 620)
 indicators_dialog.momentum_gb.setStyleSheet('background-color: white')
-ta_combobox_items = [str(i) for i in range(0, 16)]
+ta_combobox_items = [f"{i}" for i in range(0, 16)]
 
 
 def on_enter(_, indicator_widget, widget_button):
@@ -5371,89 +5661,85 @@ chart_dialog.addTab(indicators_dialog, "Technical Indicators")
 # trade dialog #
 ################
 trade_dialog = QTabWidget()
-trade_dialog.setStyleSheet('background-color: deepskyblue;')
 
-trade_dialog.stocks = QDialog(trade_dialog)
-trade_dialog.stocks.setStyleSheet('background-color: deepskyblue')
+stocks = QDialog(trade_dialog)
+stocks.setStyleSheet('background-color: deepskyblue')
 
-trade_dialog.stocks.searchbar_gb = QGroupBox(trade_dialog)
-trade_dialog.stocks.searchbar_gb.setStyleSheet('background-color: white;')
-trade_dialog.stocks.searchbar_gb.setTitle("Find a Stock")
-trade_dialog.stocks.searchbar_gb.setGeometry(10, 10, 960, 70)
-trade_dialog.stocks.searchbar_gb.searchBar = QLineEdit(trade_dialog.stocks.searchbar_gb)
-trade_dialog.stocks.searchbar_gb.searchBar.setGeometry(10, 20, 850, 40)
-trade_dialog.stocks.searchbar_gb.searchBar.textChanged.connect(search_text_changed)
-trade_dialog.stocks.searchbar_gb.searchBar.setFont(ARIAL_10)
-trade_dialog.stocks.searchbar_gb.searchBar.setCompleter(completer)
-trade_dialog.stocks.searchbar_gb.search_button = QPushButton(trade_dialog.stocks.searchbar_gb)
-trade_dialog.stocks.searchbar_gb.search_button.setGeometry(870, 20, 80, 40)
-trade_dialog.stocks.searchbar_gb.search_button.setText("Trade")
+stocks.searchbar_gb = QGroupBox(stocks)
+stocks.searchbar_gb.setStyleSheet('background-color: white;')
+stocks.searchbar_gb.setTitle("Find a Stock")
+stocks.searchbar_gb.setGeometry(10, 10, 960, 70)
+stocks.searchbar_gb.searchBar = QLineEdit(stocks.searchbar_gb)
+stocks.searchbar_gb.searchBar.setGeometry(10, 20, 850, 40)
+stocks.searchbar_gb.searchBar.textChanged.connect(search_text_changed)
+stocks.searchbar_gb.searchBar.setFont(ARIAL_10)
+stocks.searchbar_gb.searchBar.setCompleter(completer)
+stocks.searchbar_gb.search_button = QPushButton(stocks.searchbar_gb)
+stocks.searchbar_gb.search_button.setGeometry(870, 20, 80, 40)
+stocks.searchbar_gb.search_button.setText("Trade")
 
-trade_dialog.stocks.basic_info_gb = QGroupBox(trade_dialog)
-trade_dialog.stocks.basic_info_gb.setStyleSheet('background-color: white;')
-trade_dialog.stocks.basic_info_gb.setTitle("Information")
-trade_dialog.stocks.basic_info_gb.setGeometry(980, 10, 300, 70)
+stocks.basic_info_gb = QGroupBox(stocks)
+stocks.basic_info_gb.setStyleSheet('background-color: white;')
+stocks.basic_info_gb.setTitle("Information")
+stocks.basic_info_gb.setGeometry(980, 10, 300, 70)
 
-trade_dialog.stocks.basic_info_gb.full_name_label = QLabel(trade_dialog.stocks.basic_info_gb)
-trade_dialog.stocks.basic_info_gb.full_name_label.setText("")
-trade_dialog.stocks.basic_info_gb.full_name_label.setGeometry(10, 15, 150, 15)
+stocks.basic_info_gb.full_name_label = QLabel(stocks.basic_info_gb)
+stocks.basic_info_gb.full_name_label.setText("")
+stocks.basic_info_gb.full_name_label.setGeometry(10, 15, 150, 15)
 
-trade_dialog.stocks.basic_info_gb.price_label = QLabel(trade_dialog.stocks.basic_info_gb)
-trade_dialog.stocks.basic_info_gb.price_label.setText("Price (+/-)")
-trade_dialog.stocks.basic_info_gb.price_label.setGeometry(160, 15, 100, 20)
+stocks.basic_info_gb.price_label = QLabel(stocks.basic_info_gb)
+stocks.basic_info_gb.price_label.setGeometry(160, 15, 100, 20)
 
-trade_dialog.stocks.basic_info_gb.bid_label = QLabel(trade_dialog.stocks.basic_info_gb)
-trade_dialog.stocks.basic_info_gb.bid_label.setText("Bid: <bid_price> (bid_size)")
-trade_dialog.stocks.basic_info_gb.bid_label.setGeometry(10, 30, 140, 20)
+stocks.basic_info_gb.bid_label = QLabel(stocks.basic_info_gb)
+stocks.basic_info_gb.bid_label.setGeometry(10, 30, 140, 20)
 
-trade_dialog.stocks.basic_info_gb.ask_label = QLabel(trade_dialog.stocks.basic_info_gb)
-trade_dialog.stocks.basic_info_gb.ask_label.setText("Ask: <ask_price> (ask_size)")
-trade_dialog.stocks.basic_info_gb.ask_label.setGeometry(160, 30, 140, 20)
+stocks.basic_info_gb.ask_label = QLabel(stocks.basic_info_gb)
+stocks.basic_info_gb.ask_label.setGeometry(160, 30, 140, 20)
 
-trade_dialog.stocks.order_gb = QGroupBox(trade_dialog)
-trade_dialog.stocks.order_gb.setStyleSheet('background-color: white;')
-trade_dialog.stocks.order_gb.setTitle("Create Order")
-trade_dialog.stocks.order_gb.setGeometry(10, 90, 450, 400)
+stocks.order_gb = QGroupBox(stocks)
+stocks.order_gb.setStyleSheet('background-color: white;')
+stocks.order_gb.setTitle("Create Order")
+stocks.order_gb.setGeometry(10, 90, 450, 400)
 
-trade_dialog.stocks.order_gb.action_label = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.action_label.setText("Action")
-trade_dialog.stocks.order_gb.action_label.setGeometry(10, 50, 100, 15)
+stocks.order_gb.action_label = QLabel(stocks.order_gb)
+stocks.order_gb.action_label.setText("Action")
+stocks.order_gb.action_label.setGeometry(10, 50, 100, 15)
 
-trade_dialog.stocks.order_gb.action_combobox = QComboBox(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.action_combobox.addItems(['Buy', 'Sell'])
-trade_dialog.stocks.order_gb.action_combobox.setGeometry(10, 70, 100, 40)
+stocks.order_gb.action_combobox = QComboBox(stocks.order_gb)
+stocks.order_gb.action_combobox.addItems(('Buy', 'Sell'))
+stocks.order_gb.action_combobox.setGeometry(10, 70, 100, 40)
 
-trade_dialog.stocks.order_gb.qty_label = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.qty_label.setText("Quantity")
-trade_dialog.stocks.order_gb.qty_label.setGeometry(10, 150, 100, 15)
+stocks.order_gb.qty_label = QLabel(stocks.order_gb)
+stocks.order_gb.qty_label.setText("Quantity")
+stocks.order_gb.qty_label.setGeometry(10, 150, 100, 15)
 
-trade_dialog.stocks.order_gb.qty_spinbox = QSpinBox(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.qty_spinbox.setGeometry(10, 170, 100, 40)
+stocks.order_gb.qty_spinbox = QSpinBox(stocks.order_gb)
+stocks.order_gb.qty_spinbox.setGeometry(10, 170, 100, 40)
 
-trade_dialog.stocks.order_gb.max_btn = QPushButton(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.max_btn.setText("Max")
-trade_dialog.stocks.order_gb.max_btn.setGeometry(120, 170, 100, 40)
-trade_dialog.stocks.order_gb.max_btn.setEnabled(False)
+stocks.order_gb.max_btn = QPushButton(stocks.order_gb)
+stocks.order_gb.max_btn.setText("Max")
+stocks.order_gb.max_btn.setGeometry(120, 170, 100, 40)
+stocks.order_gb.max_btn.setEnabled(False)
 
-trade_dialog.stocks.order_gb.type_label = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.type_label.setText("Order Type")
-trade_dialog.stocks.order_gb.type_label.setGeometry(10, 230, 100, 15)
+stocks.order_gb.type_label = QLabel(stocks.order_gb)
+stocks.order_gb.type_label.setText("Order Type")
+stocks.order_gb.type_label.setGeometry(10, 230, 100, 15)
 
 def trade_searchbar_click():
     """
     Updates trade dialog when a stock is selected for trading
     """
-    global CURRENT_TRADE_STOCK
+    global CURRENT_TRADE_STOCK_NAME
 
-    ticker = trade_dialog.stocks.searchbar_gb.searchBar.text().split(' ')[0]
-    CURRENT_TRADE_STOCK = ticker
-    trade_dialog.stocks.order_gb.max_btn.setEnabled(True)
-
-    prices = yq.Ticker(ticker).history('1d', '1m')
+    symbol = stocks.searchbar_gb.searchBar.text().split(' ')[0]
+    CURRENT_TRADE_STOCK_NAME = symbol
+    ticker = yq.Ticker(symbol)
+    stocks.order_gb.max_btn.setEnabled(True)
+    prices = ticker.history('1d', '1m')
     day_chart.removeAllSeries()
     day_chart_series = QLineSeries()
     for idx, close in enumerate(prices.loc[:, 'close']):
-        price_dt = QDateTime().fromString(str(prices.index[idx][1])[0:19], "yyyy-MM-dd hh:mm:ss")
+        price_dt = QDateTime().fromString(f"{prices.index[idx][1]}"[0:19], "yyyy-MM-dd hh:mm:ss")
         epoch_dt = float(price_dt.toMSecsSinceEpoch())
         day_chart_series.append(epoch_dt, close)
 
@@ -5471,31 +5757,367 @@ def trade_searchbar_click():
     day_chart.addAxis(day_chart_x_axis, Qt.AlignmentFlag.AlignBottom)
     day_chart_series.attachAxis(day_chart_x_axis)
 
+    option_chain_list = oc.split_option_chain(ticker.option_chain)
+    options.clear()
+    for chain in option_chain_list:
+        chain_dialog = QTabWidget(options)
+        chain_dialog.setStyleSheet('background-color: deepskyblue')
 
-def update_trade_dialog():
+        chain_dialog.calls = QDialog(chain_dialog)
+        chain_dialog.calls.setStyleSheet('background-color: deepskyblue')
+
+        chain_dialog.puts = QDialog(chain_dialog)
+        chain_dialog.puts.setStyleSheet('background-color: deepskyblue')
+
+
+        chain_dialog.calls.gb = QGroupBox(chain_dialog.calls)
+        chain_dialog.calls.gb.setTitle(f'Option Chain for {str(chain.index[0][1])[:10]}')
+        chain_dialog.calls.gb.setGeometry(10, 110, 1260, 500)
+        chain_dialog.calls.gb.setStyleSheet('background-color: white;')
+
+        chain_dialog.calls.gb.chain = QTableWidget(chain_dialog.calls.gb)
+        chain_dialog.calls.gb.chain.setGeometry(10, 20, 1250, 450)
+        chain_dialog.calls.gb.chain.setColumnCount(20)
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(0, QTableWidgetItem('Strike'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(1, QTableWidgetItem('Moneyness'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(2, QTableWidgetItem('Bid'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(3, QTableWidgetItem('Ask'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(4, QTableWidgetItem('Mark'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(5, QTableWidgetItem('Chg'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(6, QTableWidgetItem('% Chg'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(7, QTableWidgetItem('Volume'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(8, QTableWidgetItem('Implied Vol'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(9, QTableWidgetItem('Open Int'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(10, QTableWidgetItem('Delta'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(11, QTableWidgetItem('Gamma'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(12, QTableWidgetItem('Theta'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(13, QTableWidgetItem('Vega'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(14, QTableWidgetItem('Rho'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(15, QTableWidgetItem('Vanna'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(16, QTableWidgetItem('Charm'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(17, QTableWidgetItem('Vomma'))
+        chain_dialog.calls.gb.chain.setHorizontalHeaderItem(18, QTableWidgetItem('Veta'))
+        chain_dialog.calls.gb.chain.itemClicked.connect(init_option_trade)
+
+        chain_dialog.calls.gb.chain.horizontalHeader().setFont(ARIAL_10)
+        chain_dialog.calls.gb.chain.resizeColumnsToContents()
+        chain_dialog.calls.gb.chain.setFont(ARIAL_10)
+
+        chain_dialog.puts.gb = QGroupBox(chain_dialog.puts)
+        chain_dialog.puts.gb.setTitle(f'Option Chain for {str(chain.index[0][1])[:10]}')
+        chain_dialog.puts.gb.setGeometry(10, 110, 1260, 500)
+        chain_dialog.puts.gb.setStyleSheet('background-color: white;')
+
+        chain_dialog.puts.gb.chain = QTableWidget(chain_dialog.puts.gb)
+        chain_dialog.puts.gb.chain.setGeometry(10, 20, 1250, 450)
+        chain_dialog.puts.gb.chain.setColumnCount(20)
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(0, QTableWidgetItem('Strike'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(1, QTableWidgetItem('Moneyness'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(2, QTableWidgetItem('Bid'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(3, QTableWidgetItem('Ask'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(4, QTableWidgetItem('Mark'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(5, QTableWidgetItem('Chg'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(6, QTableWidgetItem('% Chg'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(7, QTableWidgetItem('Volume'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(8, QTableWidgetItem('Implied Vol'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(9, QTableWidgetItem('Open Int'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(10, QTableWidgetItem('Delta'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(11, QTableWidgetItem('Gamma'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(12, QTableWidgetItem('Theta'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(13, QTableWidgetItem('Vega'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(14, QTableWidgetItem('Rho'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(15, QTableWidgetItem('Vanna'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(16, QTableWidgetItem('Charm'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(17, QTableWidgetItem('Vomma'))
+        chain_dialog.puts.gb.chain.setHorizontalHeaderItem(18, QTableWidgetItem('Veta'))
+        chain_dialog.puts.gb.chain.itemClicked.connect(init_option_trade)
+
+
+        chain_dialog.puts.gb.chain.horizontalHeader().setFont(ARIAL_10)
+        chain_dialog.puts.gb.chain.resizeColumnsToContents()
+        chain_dialog.puts.gb.chain.setFont(ARIAL_10)
+
+        chain_dialog.addTab(chain_dialog.calls, "Calls")
+        chain_dialog.addTab(chain_dialog.puts, "Puts")
+
+        options.addTab(chain_dialog, f"{chain.index[0][1]}"[:10])
+
+
+def preview_option_trade():
+    wnd = QDialog(OPTION_WINDOW)
+    wnd.setWindowTitle("Confirm Trade")
+    wnd.setLayout(QVBoxLayout())
+
+    ticker_widget = QWidget()
+    ticker_widget.setLayout(QHBoxLayout())
+    ticker_widget.layout().addWidget(QLabel('Ticker:'))
+    ticker_label = QLabel(CURRENT_TRADE_OPTION_NAME)
+    ticker_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ticker_widget.layout().addWidget(ticker_label)
+    wnd.layout().addWidget(ticker_widget)
+
+    transaction_widget = QWidget()
+    transaction_widget.setLayout(QHBoxLayout())
+    transaction_widget.layout().addWidget(QLabel('Transaction:'))
+    transaction_label = QLabel(OPTION_WINDOW.windowTitle()[:4])
+    transaction_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    transaction_widget.layout().addWidget(transaction_label)
+    wnd.layout().addWidget(transaction_widget)
+
+
+    ordertype_widget = QWidget()
+    ordertype_widget.setLayout(QHBoxLayout())
+    ordertype_widget.layout().addWidget(QLabel('Order Type:'))
+    ordertype_label = QLabel(OPTION_WINDOW.ordertype_combobox.currentText())
+    ordertype_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ordertype_widget.layout().addWidget(ordertype_label)
+    wnd.layout().addWidget(ordertype_widget)
+
+    estprice_widget = QWidget()
+    estprice_widget.setLayout(QHBoxLayout())
+    estprice_widget.layout().addWidget(QLabel('Estimated Price'))
+    estprice_label = QLabel(OPTION_WINDOW.trade_price.text())
+    estprice_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    estprice_widget.layout().addWidget(estprice_label)
+    wnd.layout().addWidget(estprice_widget)
+
+    qty_widget = QWidget()
+    qty_widget.setLayout(QHBoxLayout())
+    qty_widget.layout().addWidget(QLabel('Quantity:'))
+    qty_label = QLabel(f"{OPTION_WINDOW.quantity_spinbox.value()}")
+    qty_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    qty_widget.layout().addWidget(qty_label)
+    wnd.layout().addWidget(qty_widget)
+
+    est_cost_widget = QWidget()
+    est_cost_widget.setLayout(QHBoxLayout())
+    est_cost_widget.layout().addWidget(
+        QLabel(
+            "Estimated Net Debit"
+            if OPTION_WINDOW.windowTitle()[:3] == "Buy"
+            else "Estimated Net Credit"
+        )
+    )
+
+    est_cost_label = QLabel(f"{int(qty_label.text()) * float(estprice_label.text())}")
+    est_cost_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    est_cost_widget.layout().addWidget(est_cost_label)
+    wnd.layout().addWidget(est_cost_widget)
+
+    actions_widget = QWidget()
+    actions_widget.setLayout(QHBoxLayout())
+    cancel_button = QPushButton('Change Order')
+    def cancel_button_clicked():
+        wnd.done(0)
+        OPTION_WINDOW.done(0)
+    cancel_button.clicked.connect(cancel_button_clicked)
+    actions_widget.layout().addWidget(cancel_button)
+    ok_button = QPushButton('Confirm Order')
+    def ok_button_clicked():
+        OPEN_PORT_ORDERS.append(
+            [
+                CURRENT_TRADE_OPTION_NAME,
+                'Buy' if transaction_label.text() == 'Buy ' else transaction_label.text(),
+                ordertype_label.text(),
+                estprice_label.text(),
+                float(qty_label.text())
+            ]
+        )
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    actions_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(actions_widget)
+
+    wnd.exec()
+
+
+def init_option_trade(wi: QTableWidgetItem):
+    global OPTION_TRADE_FLAG
+    global OPTION_WINDOW
+    global CURRENT_TRADE_OPTION_NAME
+    if wi.column() > 1 and wi.column() < 4:
+        wnd = QDialog(widget)
+        current_chain = widget.currentWidget().currentWidget().currentWidget()
+        calls_puts_idx = current_chain.indexOf(current_chain.currentWidget())
+        calls_puts = current_chain.tabText(calls_puts_idx)
+        wnd.setWindowTitle(
+            f"""{"Sell" if wi.column() == 2 else "Buy"}
+            {CURRENT_TRADE_STOCK_NAME}
+            {wi.tableWidget().item(wi.row(), 0).text()}
+            {"Call" if calls_puts == "Calls" else "Put"}""")
+
+        wnd.setFixedSize(400, 300)
+
+        wnd.place_trade = QPushButton(wnd)
+        wnd.place_trade.setText('Preview Order')
+        wnd.place_trade.setGeometry(225, 240, 100, 50)
+
+
+        wnd.quantity_label = QLabel(wnd)
+        wnd.quantity_label.setText("Quantity")
+        wnd.quantity_label.setGeometry(10, 50, 50, 40)
+
+        wnd.quantity_spinbox = QSpinBox(wnd)
+        wnd.quantity_spinbox.setValue(0)
+        wnd.quantity_spinbox.setGeometry(100, 50, 100, 40)
+
+
+        wnd.ordertype_label = QLabel(wnd)
+        wnd.ordertype_label.setText("Order Type:")
+        wnd.ordertype_label.setGeometry(10, 100, 60, 40)
+
+        wnd.ordertype_combobox = QComboBox(wnd)
+        wnd.ordertype_combobox.addItems(('Market', 'Limit', 'Stop'))
+        wnd.ordertype_combobox.setGeometry(100, 100, 100, 40)
+
+
+        def on_option_ordertype_change(value):
+            """
+            Shows or hides the price slider depending on the type of order selected
+            (show for limit/stop, hide for market)
+            """
+            match value:
+                case 'Market':
+                    wnd.price_slider.setVisible(False)
+                    wnd.limit_stop_bid.setVisible(False)
+                    wnd.limit_stop_ask.setVisible(False)
+                    wnd.limit_stop_mid.setVisible(False)
+                case _:
+                    wnd.price_slider.setVisible(True)
+                    wnd.limit_stop_bid.setVisible(True)
+                    wnd.limit_stop_ask.setVisible(True)
+                    wnd.limit_stop_mid.setVisible(True)
+
+
+        wnd.ordertype_combobox.currentTextChanged.connect(on_option_ordertype_change)
+
+        wnd.price_slider = QSlider(wnd)
+        wnd.price_slider.setOrientation(Qt.Orientation.Horizontal)
+        wnd.price_slider.setRange(0, 10)
+        wnd.price_slider.setGeometry(210, 100, 160, 40)
+        wnd.price_slider.setVisible(False)
+
+        wnd.limit_stop_bid = QLabel(wnd)
+        wnd.limit_stop_bid.setText("<bid>")
+        wnd.limit_stop_bid.setGeometry(200, 150, 50, 50)
+        wnd.limit_stop_bid.setVisible(False)
+
+        wnd.limit_stop_ask = QLabel(wnd)
+        wnd.limit_stop_ask.setText("<ask>")
+        wnd.limit_stop_ask.setGeometry(350, 150, 50, 50)
+        wnd.limit_stop_ask.setVisible(False)
+
+        wnd.limit_stop_mid = QLabel(wnd)
+        wnd.limit_stop_mid.setText("<mid>")
+        wnd.limit_stop_mid.setGeometry(280, 150, 50, 50)
+        wnd.limit_stop_mid.setVisible(False)
+
+        wnd.trade_price_label = QLabel(wnd)
+        wnd.trade_price_label.setText("Trade Price")
+        wnd.trade_price_label.setGeometry(10, 150, 60, 40)
+
+        wnd.trade_price = QLabel(wnd)
+        wnd.trade_price.setText(wi.text())
+        wnd.trade_price.setGeometry(100, 150, 60, 40)
+
+        wnd.bpr_label = QLabel(wnd)
+        wnd.bpr_label.setText('Buying Power Reduction:')
+        wnd.bpr_label.setGeometry(10, 200, 60, 40)
+
+        wnd.bpr = QLabel(wnd)
+        wnd.bpr.setText(
+            f"""{
+                get_bpr(
+                    CURRENT_TRADE_STOCK_NAME,
+                    int(wnd.quantity_spinbox.value()),
+                    wi.tableWidget().item(wi.row(), 0).text(),
+                    "Sell" if wi.column() == 2 else "Buy",
+                    wi.tableWidget().item(wi.row(), 19).text(),
+                    wi.tableWidget().item(wi.row(), 2).text()
+                )
+            }"""
+        )
+        wnd.quantity_spinbox.valueChanged.connect(
+            lambda: wnd.bpr.setText(
+                f"""{
+                    get_bpr(
+                        CURRENT_TRADE_STOCK_NAME,
+                        int(wnd.quantity_spinbox.value()),
+                        float(wi.tableWidget().item(wi.row(), 0).text()),
+                        "Sell" if wi.column() == 2 else "Buy",
+                        wi.tableWidget().item(wi.row(), 19).text(),
+                        wi.tableWidget().item(wi.row(), 1).text() == 'ITM'
+                    )
+                }"""
+            )
+        )
+        wnd.bpr.setGeometry(100, 200, 60, 40)
+        OPTION_TRADE_FLAG = True
+        OPTION_WINDOW = wnd
+        CURRENT_TRADE_OPTION_NAME = wi.tableWidget().item(wi.row(), 19).text()
+
+        wnd.place_trade.clicked.connect(preview_option_trade)
+        def init_option_trade_close(_):
+            global OPTION_TRADE_FLAG
+            OPTION_TRADE_FLAG = False
+        wnd.closeEvent = init_option_trade_close
+
+        wnd.exec()
+
+
+def update_option_trade_dialog():
+    while True:
+        if OPTION_TRADE_FLAG:
+            try:
+                all_modules = yq.Ticker(CURRENT_TRADE_OPTION_NAME).all_modules[CURRENT_TRADE_OPTION_NAME]
+            except KeyError:
+                pass
+            summary = all_modules['summaryDetail']
+
+            OPTION_WINDOW.limit_stop_bid.setText(f"Bid:\n{summary['bid']}")
+            OPTION_WINDOW.limit_stop_ask.setText(f"Ask:\n{summary['ask']}")
+            OPTION_WINDOW.limit_stop_mid.setText(f"Mid:\n{(summary['bid'] + summary['ask']) / 2}")
+            slider_range = (summary['ask'] - summary['bid']) * 100
+            OPTION_WINDOW.price_slider.setRange(0, slider_range)
+
+            OPTION_WINDOW.trade_price.setText(
+                f"{OPTION_WINDOW.price_slider.value() / 100 + summary['bid']}"
+                if OPTION_WINDOW.ordertype_combobox.currentText() != 'Market'
+                else (
+                    f"{summary['bid']}"
+                    if OPTION_WINDOW.windowTitle()[:4] == 'Sell'
+                    else f"{summary['ask']}"
+                )
+            )
+
+        time.sleep(.1)
+
+
+def update_stock_trade_dialog():
     """
     Updates the trade dialog UI with current bid, ask, and last trade price information
     """
-    ticker_symbol = CURRENT_TRADE_STOCK
-    yq_ticker = yq.Ticker(ticker_symbol)
-    all_modules = yq_ticker.all_modules[ticker_symbol]
+    try:
+        all_modules = yq.Ticker(CURRENT_TRADE_STOCK_NAME).all_modules[CURRENT_TRADE_STOCK_NAME]
 
-    quote_type = all_modules['quoteType']
-    prices = all_modules['price']
-    summary = all_modules['summaryDetail']
+        quote_type = all_modules['quoteType']
+        prices = all_modules['price']
+        summary = all_modules['summaryDetail']
 
-    trade_dialog.stocks.basic_info_gb.full_name_label.setText(quote_type['shortName'])
-    trade_dialog.stocks.basic_info_gb.price_label.setText(
-        f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})"
-    )
-    trade_dialog.stocks.basic_info_gb.bid_label.setText(f"Bid: {summary['bid']} ({summary['bidSize']})")
-    trade_dialog.stocks.basic_info_gb.ask_label.setText(f"Ask: {summary['ask']} ({summary['askSize']})")
+        stocks.basic_info_gb.full_name_label.setText(quote_type['shortName'])
+        stocks.basic_info_gb.price_label.setText(
+            f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})"
+        )
+        stocks.basic_info_gb.bid_label.setText(f"Bid: {summary['bid']} ({summary['bidSize']})")
+        stocks.basic_info_gb.ask_label.setText(f"Ask: {summary['ask']} ({summary['askSize']})")
 
-    trade_dialog.stocks.order_gb.limit_stop_bid.setText(f"Bid:\n{summary['bid']}\n({summary['bidSize']})")
-    trade_dialog.stocks.order_gb.limit_stop_ask.setText(f"Ask:\n{summary['ask']}\n({summary['askSize']})")
-    trade_dialog.stocks.order_gb.limit_stop_mid.setText(f"Mid:\n{(summary['bid'] + summary['ask']) / 2}")
-    slider_range = (summary['ask'] - summary['bid']) * 100
-    trade_dialog.stocks.order_gb.price_slider.setRange(0, slider_range)
+        stocks.order_gb.limit_stop_bid.setText(f"Bid:\n{summary['bid']}\n({summary['bidSize']})")
+        stocks.order_gb.limit_stop_ask.setText(f"Ask:\n{summary['ask']}\n({summary['askSize']})")
+        stocks.order_gb.limit_stop_mid.setText(f"Mid:\n{(summary['bid'] + summary['ask']) / 2}")
+        slider_range = (summary['ask'] - summary['bid']) * 100
+        stocks.order_gb.price_slider.setRange(0, slider_range)
+    except KeyError:
+        pass
 
 
 def on_ordertype_change(value):
@@ -5505,21 +6127,22 @@ def on_ordertype_change(value):
     """
     match value:
         case 'Market':
-            trade_dialog.stocks.order_gb.price_slider.setVisible(False)
-            trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(False)
-            trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(False)
-            trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(False)
+            stocks.order_gb.price_slider.setVisible(False)
+            stocks.order_gb.limit_stop_bid.setVisible(False)
+            stocks.order_gb.limit_stop_ask.setVisible(False)
+            stocks.order_gb.limit_stop_mid.setVisible(False)
         case _:
-            trade_dialog.stocks.order_gb.price_slider.setVisible(True)
-            trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(True)
-            trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(True)
-            trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(True)
+            stocks.order_gb.price_slider.setVisible(True)
+            stocks.order_gb.limit_stop_bid.setVisible(True)
+            stocks.order_gb.limit_stop_ask.setVisible(True)
+            stocks.order_gb.limit_stop_mid.setVisible(True)
 
 
 def on_previeworder_click():
     """
     Shows dialog with preview of the user's order
     """
+
     wnd = QDialog(widget)
     wnd.setWindowTitle("Preview Order")
     wnd.setLayout(QVBoxLayout())
@@ -5527,7 +6150,7 @@ def on_previeworder_click():
     ticker_widget = QWidget()
     ticker_widget.setLayout(QHBoxLayout())
     ticker_widget.layout().addWidget(QLabel('Ticker:'))
-    ticker_label = QLabel(CURRENT_TRADE_STOCK)
+    ticker_label = QLabel(CURRENT_TRADE_STOCK_NAME)
     ticker_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     ticker_widget.layout().addWidget(ticker_label)
     wnd.layout().addWidget(ticker_widget)
@@ -5535,7 +6158,7 @@ def on_previeworder_click():
     transaction_widget = QWidget()
     transaction_widget.setLayout(QHBoxLayout())
     transaction_widget.layout().addWidget(QLabel('Transaction:'))
-    transaction_label = QLabel(trade_dialog.stocks.order_gb.action_combobox.currentText())
+    transaction_label = QLabel(stocks.order_gb.action_combobox.currentText())
     transaction_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     transaction_widget.layout().addWidget(transaction_label)
     wnd.layout().addWidget(transaction_widget)
@@ -5544,7 +6167,7 @@ def on_previeworder_click():
     ordertype_widget = QWidget()
     ordertype_widget.setLayout(QHBoxLayout())
     ordertype_widget.layout().addWidget(QLabel('Order Type:'))
-    ordertype_label = QLabel(trade_dialog.stocks.order_gb.type_combobox.currentText())
+    ordertype_label = QLabel(stocks.order_gb.type_combobox.currentText())
     ordertype_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     ordertype_widget.layout().addWidget(ordertype_label)
     wnd.layout().addWidget(ordertype_widget)
@@ -5553,14 +6176,14 @@ def on_previeworder_click():
     estprice_widget.setLayout(QHBoxLayout())
     estprice_widget.layout().addWidget(QLabel('Estimated Price'))
     estprice_label = QLabel()
-    if trade_dialog.stocks.order_gb.type_combobox.currentText() == 'Market':
-        if trade_dialog.stocks.order_gb.action_combobox.currentText() == 'Buy':
-            estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_ask.text().split('\n')[1])
+    if stocks.order_gb.type_combobox.currentText() == 'Market':
+        if stocks.order_gb.action_combobox.currentText() == 'Buy':
+            estprice_label.setText(stocks.order_gb.limit_stop_ask.text().split('\n')[1])
         else:
-            estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_bid.text().split('\n')[1])
+            estprice_label.setText(stocks.order_gb.limit_stop_bid.text().split('\n')[1])
     else:
         # change to limit/stop price
-        estprice_label.setText(trade_dialog.stocks.order_gb.limit_stop_bid.text())
+        estprice_label.setText(stocks.order_gb.limit_stop_bid.text())
     estprice_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     estprice_widget.layout().addWidget(estprice_label)
     wnd.layout().addWidget(estprice_widget)
@@ -5568,7 +6191,7 @@ def on_previeworder_click():
     qty_widget = QWidget()
     qty_widget.setLayout(QHBoxLayout())
     qty_widget.layout().addWidget(QLabel('Quantity:'))
-    qty_label = QLabel(str(trade_dialog.stocks.order_gb.qty_spinbox.value()))
+    qty_label = QLabel(f"{stocks.order_gb.qty_spinbox.value()}")
     qty_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     qty_widget.layout().addWidget(qty_label)
     wnd.layout().addWidget(qty_widget)
@@ -5583,7 +6206,7 @@ def on_previeworder_click():
         )
     )
 
-    est_cost_label = QLabel(str(int(qty_label.text()) * float(estprice_label.text())))
+    est_cost_label = QLabel(f"{int(qty_label.text()) * float(estprice_label.text())}")
     est_cost_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     est_cost_widget.layout().addWidget(est_cost_label)
     wnd.layout().addWidget(est_cost_widget)
@@ -5595,13 +6218,13 @@ def on_previeworder_click():
     actions_widget.layout().addWidget(cancel_button)
     ok_button = QPushButton('Confirm Order')
     def ok_button_clicked():
-        OPEN_ORDERS.append(
+        OPEN_PORT_ORDERS.append(
             [
-                CURRENT_TRADE_STOCK,
+                CURRENT_TRADE_STOCK_NAME,
                 transaction_label.text(),
                 ordertype_label.text(),
                 estprice_label.text(),
-                qty_label.text()
+                float(qty_label.text())
             ]
         )
         wnd.done(0)
@@ -5611,46 +6234,43 @@ def on_previeworder_click():
 
     wnd.exec()
 
-trade_dialog.stocks.order_gb.type_combobox = QComboBox(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.type_combobox.addItems(['Market', 'Limit', 'Stop'])
-trade_dialog.stocks.order_gb.type_combobox.setGeometry(10, 250, 100, 40)
-trade_dialog.stocks.order_gb.type_combobox.currentTextChanged.connect(on_ordertype_change)
+stocks.order_gb.type_combobox = QComboBox(stocks.order_gb)
+stocks.order_gb.type_combobox.addItems(('Market', 'Limit', 'Stop'))
+stocks.order_gb.type_combobox.setGeometry(10, 250, 100, 40)
+stocks.order_gb.type_combobox.currentTextChanged.connect(on_ordertype_change)
 
-trade_dialog.stocks.order_gb.price_slider = QSlider(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.price_slider.setOrientation(Qt.Orientation.Horizontal)
-trade_dialog.stocks.order_gb.price_slider.setRange(0, 10)
-trade_dialog.stocks.order_gb.price_slider.setGeometry(120, 250, 250, 40)
-trade_dialog.stocks.order_gb.price_slider.setVisible(False)
+stocks.order_gb.price_slider = QSlider(stocks.order_gb)
+stocks.order_gb.price_slider.setOrientation(Qt.Orientation.Horizontal)
+stocks.order_gb.price_slider.setRange(0, 10)
+stocks.order_gb.price_slider.setGeometry(120, 250, 250, 40)
+stocks.order_gb.price_slider.setVisible(False)
 
-trade_dialog.stocks.order_gb.limit_stop_bid = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.limit_stop_bid.setText("<bid>")
-trade_dialog.stocks.order_gb.limit_stop_bid.setGeometry(120, 300, 50, 50)
-trade_dialog.stocks.order_gb.limit_stop_bid.setVisible(False)
+stocks.order_gb.limit_stop_bid = QLabel(stocks.order_gb)
+stocks.order_gb.limit_stop_bid.setGeometry(120, 300, 50, 50)
+stocks.order_gb.limit_stop_bid.setVisible(False)
 
-trade_dialog.stocks.order_gb.limit_stop_ask = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.limit_stop_ask.setText("<ask>")
-trade_dialog.stocks.order_gb.limit_stop_ask.setGeometry(350, 300, 50, 50)
-trade_dialog.stocks.order_gb.limit_stop_ask.setVisible(False)
+stocks.order_gb.limit_stop_ask = QLabel(stocks.order_gb)
+stocks.order_gb.limit_stop_ask.setGeometry(350, 300, 50, 50)
+stocks.order_gb.limit_stop_ask.setVisible(False)
 
-trade_dialog.stocks.order_gb.limit_stop_mid = QLabel(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.limit_stop_mid.setText("<mid>")
-trade_dialog.stocks.order_gb.limit_stop_mid.setGeometry(240, 300, 50, 50)
-trade_dialog.stocks.order_gb.limit_stop_mid.setVisible(False)
+stocks.order_gb.limit_stop_mid = QLabel(stocks.order_gb)
+stocks.order_gb.limit_stop_mid.setGeometry(240, 300, 50, 50)
+stocks.order_gb.limit_stop_mid.setVisible(False)
 
-trade_dialog.stocks.order_gb.preview_order = QPushButton(trade_dialog.stocks.order_gb)
-trade_dialog.stocks.order_gb.preview_order.setText("Preview Order")
-trade_dialog.stocks.order_gb.preview_order.setGeometry(50, 340, 360, 50)
-trade_dialog.stocks.order_gb.preview_order.clicked.connect(on_previeworder_click)
+stocks.order_gb.preview_order = QPushButton(stocks.order_gb)
+stocks.order_gb.preview_order.setText("Preview Order")
+stocks.order_gb.preview_order.setGeometry(50, 340, 360, 50)
+stocks.order_gb.preview_order.clicked.connect(on_previeworder_click)
 
-trade_dialog.stocks.searchbar_gb.search_button.clicked.connect(trade_searchbar_click)
+stocks.searchbar_gb.search_button.clicked.connect(trade_searchbar_click)
 
-trade_dialog.stocks.chart_groupbox = QGroupBox(trade_dialog)
-trade_dialog.stocks.chart_groupbox.setTitle('Chart')
-trade_dialog.stocks.chart_groupbox.setStyleSheet('background-color: white')
-trade_dialog.stocks.chart_groupbox.setGeometry(500, 90, 650, 400)
+stocks.chart_groupbox = QGroupBox(stocks)
+stocks.chart_groupbox.setTitle('Chart')
+stocks.chart_groupbox.setStyleSheet('background-color: white')
+stocks.chart_groupbox.setGeometry(500, 90, 650, 400)
 
 day_chart = QChart()
-day_chartview = QChartView(trade_dialog.stocks.chart_groupbox)
+day_chartview = QChartView(stocks.chart_groupbox)
 day_lineseries = QLineSeries()
 day_chart.addSeries(day_lineseries)
 day_lineseries.setName('Stock')
@@ -5666,10 +6286,99 @@ y_axis = QValueAxis()
 day_chart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
 day_lineseries.attachAxis(y_axis)
 
-day_chartview.setGeometry(10, 20, 600, 400)
+day_chartview.setGeometry(10, 15, 600, 400)
 day_chartview.setChart(day_chart)
 
-trade_dialog.addTab(trade_dialog.stocks, "Trade Stocks")
+options = QTabWidget(trade_dialog)
+
+trade_dialog.addTab(stocks, "Stocks")
+trade_dialog.addTab(options, "Options")
+
+
+def update_option_chain():
+    try:
+        ticker = yq.Ticker(CURRENT_TRADE_STOCK_NAME)
+        new_option_chain = oc.split_option_chain(ticker.option_chain)
+        current_chain = widget.currentWidget().currentWidget().currentWidget()
+        index = widget.currentWidget().currentWidget().indexOf(current_chain)
+        date = widget.currentWidget().currentWidget().tabText(index)
+        table: QTableWidget = current_chain.currentWidget().children()[0].children()[0]
+
+        calls_puts = current_chain.tabText(current_chain.indexOf(current_chain.currentWidget()))
+        r = yq.Ticker('^FVX').price['^FVX']['regularMarketPrice'] / 100
+        s = ticker.price[CURRENT_TRADE_STOCK_NAME]['regularMarketPrice']
+        t = (datetime.strptime(f"{date} 16:00:00", "%Y-%m-%d %H:%M:%S") - datetime.now()).total_seconds() / 31536000
+
+        for chain in new_option_chain:
+            if f"{chain.index[0][1]}"[:10] == date:
+                chain_tuple_idx = 0 if calls_puts == 'Calls' else 1
+                chain = oc.split_calls_puts(chain)[chain_tuple_idx]
+
+
+                if table.item(0, 0) is None:
+                    table.setRowCount(len(chain.index))
+                    for i in range(table.rowCount()):
+                        chain_row = chain.iloc[i]
+                        greeks = gc.get_call_greeks(
+                            s, chain_row.at['strike'], chain_row.at['impliedVolatility'],
+                            t, r, "Call" if chain_tuple_idx == 0 else "Put"
+                        )
+
+                        table.setItem(i, 0, QTableWidgetItem(f"{chain_row.at['strike']}"))
+                        table.setItem(i, 1, QTableWidgetItem("ITM" if chain_row.at['inTheMoney'] else "OTM"))
+                        table.setItem(i, 2, QTableWidgetItem(f"{chain_row.at['bid']}"))
+                        table.setItem(i, 3, QTableWidgetItem(f"{chain_row.at['ask']}"))
+                        table.setItem(i, 4, QTableWidgetItem(f"{chain_row.at['lastPrice']}"))
+                        table.setItem(i, 5, QTableWidgetItem(f"{chain_row.at['change']}"))
+                        table.setItem(i, 6, QTableWidgetItem(F"{chain_row.at['percentChange']}"))
+                        table.setItem(i, 7, QTableWidgetItem(f"{chain_row.at['volume']}"))
+                        table.setItem(i, 8, QTableWidgetItem(f"{round(100 * chain_row.at['impliedVolatility'], 2)}%"))
+                        table.setItem(i, 9, QTableWidgetItem(f"{chain_row.at['openInterest']}"))
+                        table.setItem(i, 10, QTableWidgetItem(f"{greeks[0]}"))
+                        table.setItem(i, 11, QTableWidgetItem(f"{greeks[1]}"))
+                        table.setItem(i, 12, QTableWidgetItem(f"{greeks[2]}"))
+                        table.setItem(i, 13, QTableWidgetItem(f"{greeks[3]}"))
+                        table.setItem(i, 14, QTableWidgetItem(f"{greeks[4]}"))
+                        table.setItem(i, 15, QTableWidgetItem(f"{greeks[5]}"))
+                        table.setItem(i, 16, QTableWidgetItem(f"{greeks[6]}"))
+                        table.setItem(i, 17, QTableWidgetItem(f"{greeks[7]}"))
+
+                        table.setItem(i, 19, QTableWidgetItem(chain.iat[i, 0]))
+
+                        for j in range(15):
+                            table.item(i, j).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    table.resizeColumnsToContents()
+
+                else:
+                    for i in range(table.rowCount()):
+                        chain_row = chain.iloc[i]
+                        greeks = gc.get_call_greeks(
+                            s, chain_row.at['strike'], chain_row.at['impliedVolatility'],
+                            t, r, "Call" if chain_tuple_idx == 0 else "Put"
+                        )
+                        table.item(i, 0).setText(f"{chain_row.at['strike']}")
+                        table.item(i, 1).setText("ITM" if chain_row.at['inTheMoney'] else "OTM")
+                        table.item(i, 2).setText(f"{chain_row.at['bid']}")
+                        table.item(i, 3).setText(f"{chain_row.at['ask']}")
+                        table.item(i, 4).setText(f"{chain_row.at['lastPrice']}")
+                        table.item(i, 5).setText(f"{chain_row.at['change']}")
+                        table.item(i, 6).setText(F"{chain_row.at['percentChange']}")
+                        table.item(i, 7).setText(f"{chain_row.at['volume']}")
+                        table.item(i, 8).setText(f"{round(100 * chain_row.at['impliedVolatility'], 2)}%")
+                        table.item(i, 9).setText(f"{chain_row.at['openInterest']}")
+                        table.item(i, 10).setText(f"{greeks[0]}")
+                        table.item(i, 11).setText(f"{greeks[1]}")
+                        table.item(i, 12).setText(f"{greeks[2]}")
+                        table.item(i, 13).setText(f"{greeks[3]}")
+                        table.item(i, 14).setText(f"{greeks[4]}")
+                        table.item(i, 15).setText(f"{greeks[5]}")
+                        table.item(i, 16).setText(f"{greeks[6]}")
+                        table.item(i, 17).setText(f"{greeks[7]}")
+                        table.item(i, 19).setText(chain.iat[i, 0])
+
+    except IndexError:
+        pass
+
 
 #####################
 # stock info dialog #
@@ -6032,6 +6741,7 @@ dcf_dialog.outputs_gb.graham_gb.graham_ge_label.setGeometry(10, 80, 200, 50)
 dcf_dialog.outputs_gb.graham_gb.graham_growth_estimate = QLabel(dcf_dialog.outputs_gb.graham_gb)
 dcf_dialog.outputs_gb.graham_gb.graham_growth_estimate.setGeometry(490, 80, 100, 50)
 
+
 ######################
 # trade ideas dialog #
 ######################
@@ -6042,9 +6752,10 @@ scanner_dialog = QDialog()
 scanner_dialog.setStyleSheet('background-color: deepskyblue')
 scanner_dialog.setLayout(QGridLayout())
 
-def create_results_dialog(search_criteria=None, search_results: list[dict] | pd.DataFrame=None, sort_field=None, results_iterable=None):
+def create_results_dialog(search_criteria=None, search_results=None, sort_field=None, results_iterable=None):
     """
-    Changes the content of the "Scanner" dialog in the "Trade Ideas" tab to the scanner search results
+    Changes the content of the "Scanner" dialog in the "Trade Ideas" tab to the
+    scanner search results
     """
     new_scanner_dialog = QDialog()
     new_scanner_dialog.setStyleSheet('background-color: deepskyblue')
@@ -6077,7 +6788,7 @@ def create_results_dialog(search_criteria=None, search_results: list[dict] | pd.
             result_widget = QWidget()
             result_widget.setLayout(QHBoxLayout())
             for key in result.keys():
-                result_widget.layout().addWidget(QLabel(str(result[key])))
+                result_widget.layout().addWidget(QLabel(f"{result[key]}"))
 
             new_scanner_dialog.results_widget.layout().addWidget(result_widget)
     elif search_results is not None:
@@ -6085,7 +6796,7 @@ def create_results_dialog(search_criteria=None, search_results: list[dict] | pd.
             result_widget = QWidget()
             result_widget.setLayout(QHBoxLayout())
             for item in result:
-                result_widget.layout().addWidget(QLabel(str(item)))
+                result_widget.layout().addWidget(QLabel(f"{item}"))
 
             new_scanner_dialog.results_widget.layout().addWidget(result_widget)
 
@@ -6120,6 +6831,7 @@ def create_scanner(title, desc, search_criteria, xpos, ypos, sort_field=None):
 
     scanner_dialog.layout().addWidget(scanner_groupbox, ypos, xpos)
 
+
 create_scanner(
     'Day Gainers',
     "Find stocks that have gained the most relative to their close yesterday",
@@ -6152,7 +6864,7 @@ create_scanner(
 )
 
 create_scanner(
-    "Options Implied Volatility",
+    "Options Gamma",
     "Find options with the highest Implied Volatility",
     "top_options_implied_volatility",
     4, 0
@@ -6200,11 +6912,7 @@ def uncon_strat_enter(_: QEnterEvent, button: QPushButton):
     """
 
     button.setEnabled(True)
-    button.setStyleSheet(
-        """
-        border: 3px solid green;
-        """
-    )
+    button.setStyleSheet("border: 3px solid green;")
 
 
 def uncon_strat_leave(_, button: QPushButton):
@@ -6439,14 +7147,14 @@ wallet_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(
     6, QTableWidgetItem("Total Value"))
 wallet_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(
     7, QTableWidgetItem("Position Gain/Loss"))
-for i in range(8):
-    wallet_dialog.pos_view_gb.pos_view.horizontalHeaderItem(i).setFont(ARIAL_10)
+for row in range(8):
+    wallet_dialog.pos_view_gb.pos_view.horizontalHeaderItem(row).setFont(ARIAL_10)
 
-for i in range(wallet_dialog.pos_view_gb.pos_view.rowCount()):
-    wallet_dialog.pos_view_gb.pos_view.setVerticalHeaderItem(0, QTableWidgetItem("1"))
-    wallet_dialog.pos_view_gb.pos_view.verticalHeaderItem(i).setFont(ARIAL_10)
-    for j in range(wallet_dialog.pos_view_gb.pos_view.columnCount()):
-        wallet_dialog.pos_view_gb.pos_view.setItem(i, j, QTableWidgetItem())
+for row in range(wallet_dialog.pos_view_gb.pos_view.rowCount()):
+    wallet_dialog.pos_view_gb.pos_view.setVerticalHeaderItem(0, QTableWidgetItem(f"{row}"))
+    wallet_dialog.pos_view_gb.pos_view.verticalHeaderItem(row).setFont(ARIAL_10)
+    for col in range(wallet_dialog.pos_view_gb.pos_view.columnCount()):
+        wallet_dialog.pos_view_gb.pos_view.setItem(row, col, QTableWidgetItem())
 
 update_wallet_table()
 # cash labels
@@ -6484,6 +7192,281 @@ wallet_dialog.pos_view_gb.pos_view.resizeColumnsToContents()
 update_wallet_nav()
 
 
+#######################
+# crypto trade dialog #
+#######################
+
+def update_crypto_trade_dialog():
+    """
+    Updates the trade dialog UI with current bid, ask, and last trade price information
+    """
+    try:
+        all_modules = yq.Ticker(CURRENT_TRADE_TOKEN_NAME).all_modules[CURRENT_TRADE_TOKEN_NAME]
+
+        quote_type = all_modules['quoteType']
+        prices = all_modules['price']
+
+        crypto.basic_info_gb.full_name_label.setText(quote_type['shortName'])
+        crypto.basic_info_gb.price_label.setText(
+            f"{prices['regularMarketPrice']} ({prices['regularMarketChange']})"
+        )
+    except KeyError:
+        pass
+
+
+def on_crypto_ordertype_change(value):
+    """
+    Shows or hides the price slider depending on the type of order selected
+    (show for limit/stop, hide for market)
+    """
+    match value:
+        case 'Market':
+            crypto.order_gb.price_spinbox.setVisible(False)
+        case _:
+            crypto.order_gb.price_spinbox.setVisible(True)
+            crypto.order_gb.price_spinbox.setValue(float(crypto.basic_info_gb.price_label.text().split('(')[0]))
+
+
+def on_crypto_previeworder_click():
+    """
+    Shows dialog with preview of the user's order
+    """
+
+    wnd = QDialog(widget)
+    wnd.setWindowTitle("Preview Order")
+    wnd.setLayout(QVBoxLayout())
+
+    ticker_widget = QWidget()
+    ticker_widget.setLayout(QHBoxLayout())
+    ticker_widget.layout().addWidget(QLabel('Ticker:'))
+    ticker_label = QLabel(CURRENT_TRADE_TOKEN_NAME)
+    ticker_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ticker_widget.layout().addWidget(ticker_label)
+    wnd.layout().addWidget(ticker_widget)
+
+    transaction_widget = QWidget()
+    transaction_widget.setLayout(QHBoxLayout())
+    transaction_widget.layout().addWidget(QLabel('Transaction:'))
+    transaction_label = QLabel(crypto.order_gb.action_combobox.currentText())
+    transaction_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    transaction_widget.layout().addWidget(transaction_label)
+    wnd.layout().addWidget(transaction_widget)
+
+
+    ordertype_widget = QWidget()
+    ordertype_widget.setLayout(QHBoxLayout())
+    ordertype_widget.layout().addWidget(QLabel('Order Type:'))
+    ordertype_label = QLabel(crypto.order_gb.type_combobox.currentText())
+    ordertype_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    ordertype_widget.layout().addWidget(ordertype_label)
+    wnd.layout().addWidget(ordertype_widget)
+
+    estprice_widget = QWidget()
+    estprice_widget.setLayout(QHBoxLayout())
+    estprice_widget.layout().addWidget(QLabel('Estimated Price'))
+    estprice_label = QLabel()
+    if crypto.order_gb.type_combobox.currentText() == 'Market':
+        estprice_label.setText(crypto.basic_info_gb.price_label.text().split('(')[0])
+    else:
+        # change to limit/stop price
+        estprice_label.setText(crypto.order_gb.price_spinbox.text())
+    estprice_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    estprice_widget.layout().addWidget(estprice_label)
+    wnd.layout().addWidget(estprice_widget)
+
+    qty_widget = QWidget()
+    qty_widget.setLayout(QHBoxLayout())
+    qty_widget.layout().addWidget(QLabel('Quantity:'))
+    qty_label = QLabel(f"{crypto.order_gb.qty_spinbox.value()}")
+    qty_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    qty_widget.layout().addWidget(qty_label)
+    wnd.layout().addWidget(qty_widget)
+
+    est_cost_widget = QWidget()
+    est_cost_widget.setLayout(QHBoxLayout())
+    est_cost_widget.layout().addWidget(
+        QLabel(
+            "Estimated Net Debit"
+            if transaction_label.text() == "Buy"
+            else "Estimated Net Credit"
+        )
+    )
+
+    est_cost_label = QLabel(f"{float(qty_label.text()) * float(estprice_label.text())}")
+    est_cost_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    est_cost_widget.layout().addWidget(est_cost_label)
+    wnd.layout().addWidget(est_cost_widget)
+
+    actions_widget = QWidget()
+    actions_widget.setLayout(QHBoxLayout())
+    cancel_button = QPushButton('Change Order')
+    cancel_button.clicked.connect(wnd.done(0))
+    actions_widget.layout().addWidget(cancel_button)
+    ok_button = QPushButton('Confirm Order')
+    def ok_button_clicked():
+        OPEN_WALLET_ORDERS.append(
+            [
+                CURRENT_TRADE_TOKEN_NAME,
+                transaction_label.text(),
+                ordertype_label.text(),
+                estprice_label.text(),
+                qty_label.text()
+            ]
+        )
+        wnd.done(0)
+    ok_button.clicked.connect(ok_button_clicked)
+    actions_widget.layout().addWidget(ok_button)
+    wnd.layout().addWidget(actions_widget)
+
+    wnd.exec()
+
+
+def crypto_trade_searchbar_click():
+    """
+    Updates trade dialog when a stock is selected for trading
+    """
+    global CURRENT_TRADE_TOKEN_NAME
+
+    symbol = crypto.searchbar_gb.searchBar.text().split(' ')[0]
+    CURRENT_TRADE_TOKEN_NAME = symbol
+    ticker = yq.Ticker(symbol)
+    crypto.order_gb.max_btn.setEnabled(True)
+    prices = ticker.history('1d', '1m')
+    crypto_day_chart.removeAllSeries()
+    crypto_day_chart_series = QLineSeries()
+    for idx, close in enumerate(prices.loc[:, 'close']):
+        price_dt = QDateTime().fromString(f"{prices.index[idx][1]}"[0:19], "yyyy-MM-dd hh:mm:ss")
+        epoch_dt = float(price_dt.toMSecsSinceEpoch())
+        crypto_day_chart_series.append(epoch_dt, close)
+
+    crypto_day_chart.addSeries(crypto_day_chart_series)
+
+    crypto_day_chart.createDefaultAxes()
+    crypto_day_chart.axes(Qt.Orientation.Horizontal)[0].hide()
+
+    crypto_day_chart_x_axis = QDateTimeAxis()
+    crypto_day_chart_x_axis.setTickCount(7)
+    crypto_day_chart_x_axis.setFormat("h:mm")
+    crypto_day_chart_x_axis.setTitleText("Date")
+    crypto_day_chart_x_axis.setVisible(True)
+
+    crypto_day_chart.addAxis(crypto_day_chart_x_axis, Qt.AlignmentFlag.AlignBottom)
+    crypto_day_chart_series.attachAxis(crypto_day_chart_x_axis)
+
+
+trade_crypto_dialog = QTabWidget()
+
+crypto = QDialog(trade_crypto_dialog)
+crypto.setStyleSheet('background-color: goldenrod')
+
+crypto.searchbar_gb = QGroupBox(crypto)
+crypto.searchbar_gb.setStyleSheet('background-color: black; color: white;')
+crypto.searchbar_gb.setTitle("Find a Stock")
+crypto.searchbar_gb.setGeometry(10, 10, 960, 70)
+crypto.searchbar_gb.searchBar = QLineEdit(crypto.searchbar_gb)
+crypto.searchbar_gb.searchBar.setGeometry(10, 20, 850, 40)
+crypto.searchbar_gb.searchBar.textChanged.connect(search_text_changed)
+crypto.searchbar_gb.searchBar.setFont(ARIAL_10)
+crypto.searchbar_gb.searchBar.setCompleter(completer)
+crypto.searchbar_gb.search_button = QPushButton(crypto.searchbar_gb)
+crypto.searchbar_gb.search_button.setGeometry(870, 20, 80, 40)
+crypto.searchbar_gb.search_button.setText("Trade")
+
+crypto.basic_info_gb = QGroupBox(crypto)
+crypto.basic_info_gb.setStyleSheet('background-color: black; color: white;')
+crypto.basic_info_gb.setTitle("Information")
+crypto.basic_info_gb.setGeometry(980, 10, 300, 70)
+
+crypto.basic_info_gb.full_name_label = QLabel(crypto.basic_info_gb)
+crypto.basic_info_gb.full_name_label.setText("")
+crypto.basic_info_gb.full_name_label.setGeometry(10, 15, 150, 15)
+
+crypto.basic_info_gb.price_label = QLabel(crypto.basic_info_gb)
+crypto.basic_info_gb.price_label.setGeometry(160, 15, 100, 20)
+
+crypto.basic_info_gb.bid_label = QLabel(crypto.basic_info_gb)
+crypto.basic_info_gb.bid_label.setGeometry(10, 30, 140, 20)
+
+crypto.basic_info_gb.ask_label = QLabel(crypto.basic_info_gb)
+crypto.basic_info_gb.ask_label.setGeometry(160, 30, 140, 20)
+
+crypto.order_gb = QGroupBox(crypto)
+crypto.order_gb.setStyleSheet('background-color: black; color: white;')
+crypto.order_gb.setTitle("Create Order")
+crypto.order_gb.setGeometry(10, 90, 450, 400)
+
+crypto.order_gb.action_label = QLabel(crypto.order_gb)
+crypto.order_gb.action_label.setText("Action")
+crypto.order_gb.action_label.setGeometry(10, 50, 100, 15)
+
+crypto.order_gb.action_combobox = QComboBox(crypto.order_gb)
+crypto.order_gb.action_combobox.addItems(('Buy', 'Sell'))
+crypto.order_gb.action_combobox.setGeometry(10, 70, 100, 40)
+crypto.order_gb.action_combobox.setStyleSheet('border: 1px solid white;')
+
+crypto.order_gb.qty_label = QLabel(crypto.order_gb)
+crypto.order_gb.qty_label.setText("Quantity")
+crypto.order_gb.qty_label.setGeometry(10, 150, 100, 15)
+
+crypto.order_gb.qty_spinbox = QDoubleSpinBox(crypto.order_gb)
+crypto.order_gb.qty_spinbox.setGeometry(10, 170, 100, 40)
+
+crypto.order_gb.max_btn = QPushButton(crypto.order_gb)
+crypto.order_gb.max_btn.setText("Max")
+crypto.order_gb.max_btn.setGeometry(120, 170, 100, 40)
+crypto.order_gb.max_btn.setEnabled(False)
+crypto.order_gb.max_btn.setStyleSheet('border: 1px solid white;')
+
+crypto.order_gb.type_label = QLabel(crypto.order_gb)
+crypto.order_gb.type_label.setText("Order Type")
+crypto.order_gb.type_label.setGeometry(10, 230, 100, 15)
+
+crypto.order_gb.type_combobox = QComboBox(crypto.order_gb)
+crypto.order_gb.type_combobox.addItems(('Market', 'Limit', 'Stop'))
+crypto.order_gb.type_combobox.setGeometry(10, 250, 100, 40)
+crypto.order_gb.type_combobox.currentTextChanged.connect(on_crypto_ordertype_change)
+crypto.order_gb.type_combobox.setStyleSheet('border: 1px solid white;')
+
+crypto.order_gb.price_spinbox = QDoubleSpinBox(crypto.order_gb)
+crypto.order_gb.price_spinbox.setGeometry(120, 250, 100, 40)
+crypto.order_gb.price_spinbox.setVisible(False)
+
+
+crypto.order_gb.preview_order = QPushButton(crypto.order_gb)
+crypto.order_gb.preview_order.setText("Preview Order")
+crypto.order_gb.preview_order.setGeometry(50, 340, 360, 50)
+crypto.order_gb.preview_order.clicked.connect(on_crypto_previeworder_click)
+
+crypto.searchbar_gb.search_button.clicked.connect(crypto_trade_searchbar_click)
+
+crypto.chart_groupbox = QGroupBox(crypto)
+crypto.chart_groupbox.setTitle('Chart')
+crypto.chart_groupbox.setStyleSheet('background-color: black; color: white;')
+crypto.chart_groupbox.setGeometry(500, 90, 650, 400)
+
+crypto_day_chart = QChart()
+crypto_day_chartview = QChartView(crypto.chart_groupbox)
+day_lineseries = QLineSeries()
+crypto_day_chart.addSeries(day_lineseries)
+day_lineseries.setName('Stock')
+
+crypto_x_axis = QDateTimeAxis()
+crypto_x_axis.setFormat('h:mm')
+crypto_x_axis.setTitleText('Time')
+crypto_x_axis.setVisible(True)
+crypto_day_chart.addAxis(crypto_x_axis, Qt.AlignmentFlag.AlignBottom)
+day_lineseries.attachAxis(crypto_x_axis)
+
+crypto_y_axis = QValueAxis()
+crypto_day_chart.addAxis(crypto_y_axis, Qt.AlignmentFlag.AlignLeft)
+day_lineseries.attachAxis(crypto_y_axis)
+
+crypto_day_chartview.setGeometry(10, 15, 600, 400)
+crypto_day_chartview.setChart(crypto_day_chart)
+crypto_day_chartview.setStyleSheet('background-color: black; color: black;')
+
+trade_crypto_dialog.addTab(crypto, "Crypto")
+
 ######################
 # end of dialog init #
 ######################
@@ -6496,12 +7479,15 @@ widget.addTab(stockinfo_dialog, "Get Stock Info")
 widget.addTab(dcf_dialog, "DCF Modelling")
 widget.addTab(ideas_dialog, "Trade Ideas")
 widget.addTab(wallet_dialog, "Your Crypto Wallet")
+widget.addTab(trade_crypto_dialog, "Trade Crypto")
 widget.addTab(minigame_dialog, "Minigame")
 widget.addTab(settings_dialog, "Settings")
+
 widget.resize(1300, 700)
 widget.show()
 splash.close()
 
 # instantiate thread which runs the updateNav function in an infinite loop
 Thread(target=update_ui, daemon=True).start()
+Thread(target=update_option_trade_dialog, daemon=True).start()
 sys.exit(app.exec())

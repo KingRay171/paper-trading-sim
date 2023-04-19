@@ -1,11 +1,6 @@
 
 import yahooquery as yq
-from dependencies import finviznews as fn
-import time
-import yfinance as yf
+from dependencies import optionchain as oc
+from PySide6.QtWidgets import QTableWidgetItem
 
-t1 = time.perf_counter()
-news = yf.Ticker('AAPL').news
-t2 = time.perf_counter()
-print(f"{t2 - t1} seconds")
-print(news)
+print(type(yq.Ticker('BTC-USD').history('5d').iat[-1, 5]))

@@ -1,19 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<watchlist>
-
-    <equity>
-
-        <name>US Dollars</name>
-        <amount>10000</amount>
-
-    </equity>
-
-    <equity>
-
-        <name>BTC-USD</name>
-        <amount>0.1</amount>
-        <costbasis>36205.87</costbasis>
-
-    </equity>
-
-</watchlist>
+<?xml version="1.0" encoding="utf-8"?>
+<portfolio> <equity>
+<name>US Dollars</name>
+<amount>9994.444</amount>
+</equity><equity>
+<name>BTC-USD</name>
+<amount>0.1</amount>
+<costbasis>30190.861</costbasis>
+</equity></portfolio>

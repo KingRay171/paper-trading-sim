@@ -94,6 +94,3 @@ def predict_stock_price(ticker_name, into_future=30, plot=True):
     stock_df = pd.DataFrame({'date': list(timesteps['date']), 'adjclose': list(stock_price['adjclose'])}).set_index('date')
     future_stock_df = pd.DataFrame({'date': next_time_steps, 'adjclose': future_forecast}).set_index('date')
     return stock_df, future_stock_df
-
-# Example usage
-predict_stock_price(ticker_name='TQQQ')

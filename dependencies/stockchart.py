@@ -167,10 +167,6 @@ def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, a
 
     s = mpf.make_mpf_style(base_mpf_style=base_style[0].text, marketcolors=colors)
 
-
-
-
-
     if period is not None:
         data = yf.download(
             tickers=ticker, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc

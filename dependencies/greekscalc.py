@@ -42,7 +42,7 @@ def get_call_greeks(s, k, sigma, t, r, call_or_put) -> tuple:
         charm = round(-pdf_d1 * (2 * r * t - d2_ * sigma * sqrt(t)) / (2 * t * sigma * sqrt(t)), 4)
 
 
-        return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta)
+        return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta, speed, zomma, color)
     else:
         cdf_negd1 = norm.cdf(-d1_)
         cdf_negd2 = norm.cdf(-d2_)
@@ -54,5 +54,5 @@ def get_call_greeks(s, k, sigma, t, r, call_or_put) -> tuple:
         rho = round(0.01 * (k * t * exp(-r*t) * cdf_d2), 4)
 
         charm = round(-pdf_d1 * (2 * r * t - d2_ * sigma * sqrt(t)) / (2 * t * sigma * sqrt(t)), 4)
-        return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta)
+        return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta, speed, zomma, color)
 

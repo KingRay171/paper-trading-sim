@@ -21,7 +21,7 @@ def get_data(ticker_name):
   df = ticker.history(period="1y", interval="1d")   # max
   df.reset_index(inplace=True)
   df = df[['date', 'adjclose']]
-  
+
   # Create table of time and prices
   timesteps = pd.DataFrame(df['date'])
   df = df.set_index('date')
@@ -32,10 +32,10 @@ def process_data(X, y):
   # 1. Turn X and y into tensor Datasets
   features_dataset_all = tf.data.Dataset.from_tensor_slices(X)
   labels_dataset_all = tf.data.Dataset.from_tensor_slices(y)
-  
+
   # 2. Combine features & labels
   dataset_all = tf.data.Dataset.zip((features_dataset_all, labels_dataset_all))
-  
+
   # 3. Batch and prefetch for optimal performance
   BATCH_SIZE = 1024 # taken from Appendix D in N-BEATS paper
   dataset_all = dataset_all.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
@@ -53,13 +53,13 @@ def make_model(dataset_all, ticker):
   # Compile
   model_9.compile(loss=tf.keras.losses.mae,
                   optimizer=tf.keras.optimizers.Adam())
-  
+
   # Fit model on all of the data to make future forecasts
   model_9.fit(dataset_all,
               epochs=100)
   filename = ticker+'.sav'
-  
-  path = rf"{os.getcwd()}/models/"+filename
+
+  path = rf"{os.getcwd()}\dependencies\models\{filename}"
   with open( path, 'wb') as f:
     pickle.dump(model_9, f)
   return model_9
@@ -128,8 +128,8 @@ def run_main(ticker, model_9=None):
   df, stock_price, timesteps = get_data(ticker)
   # Make a copy of the stock historical data with block reward feature
   stock_prices_windowed = df
-  
-  
+
+
   #window stuffs
   # Add windowed columns [training data] -> [label]
   # [0, 1, 2, 3, 4, 5, 6] -> [7]
@@ -137,41 +137,41 @@ def run_main(ticker, model_9=None):
   # [2, 3, 4, 5, 6, 7, 8] -> [9]
   for i in range(WINDOW_SIZE): # Shift values for each step in WINDOW_SIZE
     stock_prices_windowed[f"adjclose+{i+1}"] = stock_prices_windowed["adjclose"].shift(periods=i+1)
-  
+
   X = stock_prices_windowed.dropna().drop("adjclose", axis=1).astype(np.float32)
   y = stock_prices_windowed.dropna()["adjclose"].astype(np.float32)
-  
+
   dataset_all = process_data(X, y)
-  
+
   if(model_9 == None):
     print("I start training")
     model_9 = make_model(dataset_all, ticker)
   else:
     print("I already exist")
-  
+
   # Windows and labels ready. Now turn them into performance optimized TensorFlow Datasets by
-  
+
   # Last timestep of timesteps (currently in np.datetime64 format)
   last_timestep = stock_price.index[-1]
-  
+
   # Get next two weeks of timesteps
   next_time_steps = get_future_dates(start_date=last_timestep,
                                      into_future=INTO_FUTURE)
-  
+
   # Make forecasts into future of the price of Bitcoin
   future_forecast = make_future_forecast(values=y,
                                          model=model_9,
                                          into_future=INTO_FUTURE,
                                          window_size=WINDOW_SIZE)
-  
-  
+
+
   # Insert last timestep/final price so the graph doesn't look messed
   next_time_steps = np.insert(next_time_steps, 0, last_timestep)
   future_forecast = np.insert(future_forecast, 0, stock_price['adjclose'][-1])
-    
-  
-  
-  
+
+
+
+
   # Plot future price predictions of stock
   plt.figure(figsize=(5, 3))
   print(stock_price.index, len(stock_price.index))
@@ -180,4 +180,4 @@ def run_main(ticker, model_9=None):
   plot_time_series(next_time_steps, future_forecast, format="-", label="Predicted Stock Price")
   #plt.show()
   return plt
-  
+

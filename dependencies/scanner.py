@@ -20,13 +20,12 @@ def get_results(search_criteria, sort_field=None) -> list[dict]:
                 sort_field : quote[sort_field]
             } for quote in scan_results
         ]
-    else:
-        return [
-            {
-                'symbol' : quote['symbol'],
-                'name' : quote['shortName'],
-                'price' : quote['regularMarketPrice'],
-                'price_chg': quote['regularMarketChange'],
-                'price_chg_pct' : quote['regularMarketChangePercent']
-            } for quote in scan_results
-        ]
+    return [
+        {
+            'symbol' : quote['symbol'],
+            'name' : quote['shortName'],
+            'price' : quote['regularMarketPrice'],
+            'price_chg': quote['regularMarketChange'],
+            'price_chg_pct' : quote['regularMarketChangePercent']
+        } for quote in scan_results
+    ]

@@ -131,7 +131,7 @@ def update_data(_, ticker: str, interval: str, ta_indicators: str, prepost: bool
 
     for indicator in ta_indicators:
         indicator = (eval(indicator[0]), indicator[1], indicator[2])
-        indicator_plot = func_map[indicator[0]](data=data, settings=indicator[2], ax=axes[indicator[1] * 2])
+        indicator_plot = func_map[indicator[0]](data, indicator[2], axis=axes[indicator[1] * 2])
         plot += indicator_plot
 
     for i in range(0, len(axes), 1):
@@ -183,7 +183,7 @@ def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, a
 
     for idx, indicator in enumerate(ta_indicators):
 
-        indicator_plot = func_map[eval(indicator[0])](data=data, settings=indicator[2], panel=indicator[1])
+        indicator_plot = func_map[eval(indicator[0])](data, indicator[2], panel=indicator[1])
 
         indicator_plot_isempty = True
         for i in range(len(indicator_plot)):

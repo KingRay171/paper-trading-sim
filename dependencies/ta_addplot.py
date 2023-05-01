@@ -92,8 +92,8 @@ def aroonosc_addplot(data, settings, axis=None, panel=None):
 
     return plot
 
-def ao_addplot(data, axis=None, panel=None, fastma_period=5, slowma_period=34):
-    ao = momentum.awesome_oscillator(data['High'], data['Low'], fastma_period, slowma_period)
+def ao_addplot(data, settings, axis=None, panel=None):
+    ao = momentum.awesome_oscillator(data['High'], data['Low'], settings[0], settings[1])
     ao_ta = pd.DataFrame(index=data.index,
                             data={"ao": ao})
 

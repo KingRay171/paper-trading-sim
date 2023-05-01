@@ -22,13 +22,15 @@ def get_call_greeks(s, k, sigma, t, r, call_or_put) -> tuple:
 
     vomma = round(0.01 * vega * d1_ * d2_ / sigma, 4)
 
-    veta = round(-s * pdf_d1 * sqrt(t) * (r * d1_ / (sigma * sqrt(t)) - ((1 + d1_ * d2_) / (2 * t))), 4)
+    veta = round(-s * pdf_d1 * sqrt(t) * (r * d1_ / (sigma * sqrt(t)) - ((1 + d1_ * d2_) / (2 * t))) / 36500, 4)
 
     speed = round(-gamma / s * (d1_ / (sigma * sqrt(t)) + 1), 4)
 
-    zomma = round((gamma * d1_ * d2_ - 1) / sigma , 4)
+    zomma = round((gamma * d1_ * d2_ - 1) / sigma / 100, 4)
 
-    color = round(pdf_d1 / (2 * s * t * sigma * sqrt(t)) * (1 + d1_ * (2 * r * t - d2_ * sigma * sqrt(t)) / (sigma * sqrt(t))) , 4)
+    color = round(pdf_d1 / (2 * s * t * sigma * sqrt(t)) * (1 + d1_ * (2 * r * t - d2_ * sigma * sqrt(t)) / (sigma * sqrt(t))) / 365, 4)
+
+    charm = round(-pdf_d1 * (2 * r * t - d2_ * sigma * sqrt(t)) / (2 * t * sigma * sqrt(t)) / 365, 4)
 
     #ultima = round( , 4)
 
@@ -38,9 +40,6 @@ def get_call_greeks(s, k, sigma, t, r, call_or_put) -> tuple:
         theta = round(0.01*(-(s* pdf_d1 *sigma)/(2*sqrt(t)) - r*k*exp(-r*t) * cdf_d2), 4)
 
         rho = round(0.01*(k*t*exp(-r*t)*cdf_d2), 4)
-
-        charm = round(-pdf_d1 * (2 * r * t - d2_ * sigma * sqrt(t)) / (2 * t * sigma * sqrt(t)), 4)
-
 
         return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta, speed, zomma, color)
     else:
@@ -53,6 +52,5 @@ def get_call_greeks(s, k, sigma, t, r, call_or_put) -> tuple:
 
         rho = round(0.01 * (k * t * exp(-r*t) * cdf_d2), 4)
 
-        charm = round(-pdf_d1 * (2 * r * t - d2_ * sigma * sqrt(t)) / (2 * t * sigma * sqrt(t)), 4)
         return (delta, gamma, theta, vega, rho, vanna, charm, vomma, veta, speed, zomma, color)
 

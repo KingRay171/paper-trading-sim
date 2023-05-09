@@ -62,14 +62,25 @@ series = QLineSeries()
 series2 = QLineSeries()
 
 
+
 series.setName("Real")
 series.setColor(QColor("blue"))
-series.append(timesteps.values.ravel(), stock_price.values.ravel())
-
 
 series2.setName("Prediction")
 series2.setColor(QColor("red"))
-series2.append(next_time_steps, future_forecast)
+
+
+timesteps = timesteps.values.ravel()
+stock_price = stock_price.values.ravel()
+
+# getting length of list
+length = len(timesteps)
+for i in range(length):
+  series.append(timesteps[i], stock_price[i])
+  
+length = len(next_time_steps)
+for i in range(length):
+  series2.append(next_time_steps[i], future_forecast[i])
 
 ptchart.addSeries(series)
 ptchart.addSeries(series2)

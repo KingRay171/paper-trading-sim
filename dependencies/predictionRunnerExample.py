@@ -64,7 +64,7 @@ series2 = QLineSeries()
 
 series.setName("Real")
 series.setColor(QColor("blue"))
-series.append(timesteps, stock_price)
+series.append(timesteps.values.ravel(), stock_price.values.ravel())
 
 
 series2.setName("Prediction")

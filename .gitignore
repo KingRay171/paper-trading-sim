@@ -1,3 +1,18 @@
+<<<<<<< Updated upstream
+<<<<<<< Updated upstream
 venv/
 .vscode/
 *.pyc
+=======
+=======
+>>>>>>> Stashed changes
+*.pyc
+.vscode/
+venv/
+activate
+<<<<<<< Updated upstream
+.pylintrc
+>>>>>>> Stashed changes
+=======
+.pylintrc
+>>>>>>> Stashed changes

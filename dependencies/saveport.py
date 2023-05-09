@@ -20,7 +20,7 @@ def save_port(asset_types: list, tickers: list, amts: list, cost_bases: list):
         "xml"
     )
     soup.select_one('portfolio').append(liquidity_soup.select_one('equity'))
-    zip_obj = zip(asset_types[1:], tickers[1:], amts[1:], cost_bases)
+    zip_obj = zip(asset_types[1:], tickers[1:], amts[1:], cost_bases[1:])
     for asset_type, ticker, amt, basis in zip_obj:
         soup2 = BeautifulSoup(
             f"""

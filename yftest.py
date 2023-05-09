@@ -7,7 +7,6 @@ import time
 import xml.etree.ElementTree as et
 from datetime import datetime, timedelta
 import math
-
 import pandas as pd
 # pylint: disable-msg=E0611
 # pylint: disable-msg=W0603
@@ -39,10 +38,17 @@ from dependencies import stock_prediction as spred
 from dependencies import greekscalc as gc
 from dependencies import savewallet as sw
 import ta_widget
+from widgets.portfolio import portfolio
+from widgets.portfolio import portfolio_tab
+from widgets.chart_stocks import stock_chart_tab
+
 from minigame import main
 app = QApplication(sys.argv)
 app.setWindowIcon(QIcon('wsb.jpg'))
 
+
+
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
 CWD = os.getcwd() + '\\'
 
@@ -147,11 +153,12 @@ def update_ui():
                 update_crypto_trade_dialog()
             if mktopen.market_is_open():
                 if widget.currentWidget() == port_dialog:
-                    update_portfolio_options()
-                    update_portfolio_table()
-                    update_watchlist_tickers()
-                    update_portfolio_nav()
-                    update_portfolio_piechart()
+                    port.update_options()
+                    port_dialog.port.update(port)
+                    port_dialog.watchlist.update(watchlist_tickers)
+                    port_dialog.port_overview.update(port_dialog.port.table, port)
+                    port_dialog.chart.update(port_dialog.port, port, port_dialog.port_overview)
+
                 update_port_trades()
 
             else:
@@ -279,7 +286,7 @@ def execute_crypto_sell(order, cash, trade_price):
             wallet_amts.remove(order[4])
             wallet_costbases.remove(wallet_costbases[idx - 1])
 
-            port_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+            wallet_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
             new_cb = round(
                 (old_basis * (token_amt - trade_qty) + trade_price * trade_qty) / token_amt, 2
             )
@@ -302,8 +309,8 @@ def execute_crypto_sell(order, cash, trade_price):
         wallet_tickers.append(order[0])
         wallet_amts.append(-1 * trade_qty)
         wallet_costbases.append(str(trade_price))
-        port_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
-        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        wallet_dialog.pos_view_gb.pos_view.setRowCount(len(wallet_amts) - 1)
+        column_count = wallet_dialog.pos_view_gb.pos_view.columnCount()
         for j in range(column_count):
             wallet_dialog.pos_view_gb.pos_view.setItem(column_count - 1, j, QTableWidgetItem())
     OPEN_WALLET_ORDERS.remove(order)
@@ -370,7 +377,7 @@ def execute_buy(order: list, ticker: yq.Ticker, asset_type: str, cash: float, tr
             purchase_prices.remove(purchase_prices[idx - 1])
             portfolio_asset_types.remove(portfolio_asset_types[idx])
 
-            port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+            port_dialog.port.table.setRowCount(len(portfolio_amts) - 1)
 
         elif trade_qty < pos_size:
             stock_amt = pos_size + trade_qty
@@ -403,13 +410,14 @@ def execute_buy(order: list, ticker: yq.Ticker, asset_type: str, cash: float, tr
         portfolio_asset_types.append(asset_type)
         purchase_prices.append(trade_price)
 
-        port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
-        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        port_dialog.port.table.setRowCount(len(portfolio_amts) - 1)
+        column_count = port_dialog.port.table.columnCount()
         for k in range(column_count):
-            port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, k, QTableWidgetItem())
+            port_dialog.port.table.setItem(column_count - 1, k, QTableWidgetItem())
 
 
     OPEN_PORT_ORDERS.remove(order)
+    port_dialog.trades.update(OPEN_PORT_ORDERS)
 
 
 def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, trade_price=None):
@@ -436,7 +444,7 @@ def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, t
             portfolio_amts.remove(order[4])
             purchase_prices.remove(purchase_prices[idx - 1])
             portfolio_asset_types.remove(portfolio_asset_types[idx])
-            port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
+            port_dialog.port.table.setRowCount(len(portfolio_amts) - 1)
 
         else:
             stock_amt = pos_size - trade_qty
@@ -457,12 +465,13 @@ def execute_sell(order: list, ticker: yq.Ticker, asset_type: str, cash: float, t
         portfolio_asset_types.append(asset_type)
         purchase_prices.append(trade_price)
 
-        port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
-        column_count = port_dialog.pos_view_gb.pos_view.columnCount()
+        port_dialog.port.table.setRowCount(len(portfolio_amts) - 1)
+        column_count = port_dialog.port.table.columnCount()
         for j in range(column_count):
-            port_dialog.pos_view_gb.pos_view.setItem(column_count - 1, j, QTableWidgetItem())
+            port_dialog.port.table.setItem(column_count - 1, j, QTableWidgetItem())
 
     OPEN_PORT_ORDERS.remove(order)
+    port_dialog.trades.update(OPEN_PORT_ORDERS)
 
 
 def num_options_on_underlying(ticker: str, calls_puts: str):
@@ -517,96 +526,6 @@ def get_bpr(ticker: str, quantity: int, strike: float, buy_sell: str, option_tic
                 return 0
     else:
         return 0
-
-
-def update_portfolio_piechart():
-    """
-    Updates the asset class piechart on the portfolio dialog
-    """
-
-    # gets the present value of the portfolio broken down by asset type
-    long_etfs = 0
-    short_etfs = 0
-    long_stocks = 0
-    short_stocks = 0
-    long_options = 0
-    short_options = 0
-    cash_amount = 0
-
-    for idx, amount in enumerate(portfolio_amts):
-        if portfolio_asset_types[idx] != 'Liquidity':
-            asset_price = float(port_dialog.pos_view_gb.pos_view.item(idx - 1, 2).text()[1:])
-
-        match portfolio_asset_types[idx]:
-            case "ETF":
-                if amount > 0:
-                    long_etfs += amount * asset_price
-                else:
-                    short_etfs -= amount * asset_price
-            case "Liquidity":
-                cash_amount += amount
-            case "Stock":
-                if amount > 0:
-                    long_stocks += amount * asset_price
-                else:
-                    short_stocks -= amount * asset_price
-            case "Option":
-                if amount > 0:
-                    long_options += amount * asset_price * 100
-                else:
-                    short_options -= amount * asset_price * 100
-
-    cash_amount -= 2 * float(port_dialog.nav_gb.liabilities.text()[2:].replace(",", ""))
-    # loads values into pie chart and displays them
-
-    asset_class_chart.slices()[0].setValue(round(long_etfs / portfolio_nav * 100, 2))
-    if long_etfs != 0:
-        asset_class_chart.slices()[0].setLabel(
-            f"Long ETFs: {round(long_etfs / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[0].setLabelVisible(True)
-
-    asset_class_chart.slices()[1].setValue(round(short_etfs / portfolio_nav * 100, 2))
-    if short_etfs != 0:
-        asset_class_chart.slices()[1].setLabel(
-            f"Short ETFs: {round(short_etfs / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[1].setLabelVisible(True)
-
-    asset_class_chart.slices()[2].setValue(round(long_stocks / portfolio_nav * 100, 2))
-    if long_stocks != 0:
-        asset_class_chart.slices()[2].setLabel(
-            f"Long Stocks: {round(long_stocks / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[2].setLabelVisible(True)
-
-    asset_class_chart.slices()[3].setValue(round(short_stocks / portfolio_nav * 100, 2))
-    if short_stocks != 0:
-        asset_class_chart.slices()[3].setLabel(
-            f"Short Stocks: {round(short_stocks / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[3].setLabelVisible(True)
-
-    asset_class_chart.slices()[4].setValue(long_options / portfolio_nav * 100)
-    if long_options != 0:
-        asset_class_chart.slices()[4].setLabel(
-            f"Long Options: {round(long_options / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[4].setLabelVisible(True)
-
-    asset_class_chart.slices()[5].setValue(short_options / portfolio_nav * 100)
-    if short_options != 0:
-        asset_class_chart.slices()[5].setLabel(
-            f"Short Options: {round(short_options / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[5].setLabelVisible(True)
-
-    asset_class_chart.slices()[6].setValue(cash_amount / portfolio_nav * 100)
-    if cash_amount != 0:
-        asset_class_chart.slices()[6].setLabel(
-            f"Cash: {round(cash_amount / portfolio_nav * 100, 2)}%"
-        )
-        asset_class_chart.slices()[6].setLabelVisible(True)
 
 
 def update_wallet_table():
@@ -668,113 +587,6 @@ def update_wallet_table():
         # eighth cell is the user's net P/L on the position from when it was opened
         wallet_dialog.pos_view_gb.pos_view.item(idx, 7).setText(
             f'${total_return:0,.2f} ({percent_change}%)'
-        )
-
-
-def update_portfolio_options():
-    """
-    Removes expired options from the user's portfolio, if any are there
-    """
-    port_zip = zip(portfolio_tickers[1:], portfolio_asset_types[1:], portfolio_amts[1:], purchase_prices)
-    for ticker, type_, amt, basis in port_zip:
-        if type_ == "Option":
-            exp_date = yq.Ticker(ticker).summary_detail[ticker]['expireDate']
-            exp_dt_obj = datetime.strptime(exp_date, "%Y-%m-%d %H:%M:%S") + timedelta(hours=20)
-            cur_dt_obj = datetime.now()
-            if cur_dt_obj > exp_dt_obj:
-                portfolio_tickers.remove(ticker)
-                portfolio_asset_types.remove(type_)
-                portfolio_amts.remove(amt)
-                purchase_prices.remove(basis)
-
-
-def update_portfolio_table():
-    """
-    Updates the table with all the user's positions in the portfolio dialog
-    """
-
-    # for each asset in the portfolio
-    prices = yq.Ticker(portfolio_tickers[1:]).price
-    price_data = [
-        (
-            prices[ticker]['regularMarketPrice'],
-            prices[ticker]['regularMarketOpen'],
-            prices[ticker]['regularMarketPreviousClose']
-        )
-        for ticker in portfolio_tickers[1:]
-    ]
-
-    port_zip = zip(price_data, purchase_prices, portfolio_amts[1:])
-    for idx, (data, basis, amt) in enumerate(port_zip):
-        # get the current price and the price it last closed at
-
-        current_price = data[0]
-        last_close = data[2]
-        # calculate the return since the position was opened in dollar and percent terms
-        total_return = (current_price - basis) * amt
-        percent_change = round(total_return / (basis * amt) * 100, 2)
-        if amt < 0:
-            percent_change *= -1
-        # update the table with the new information
-
-        if port_dialog.pos_view_gb.pos_view.item(idx, 0) is None:
-            column_count = port_dialog.pos_view_gb.pos_view.columnCount()
-            for k in range(column_count):
-                port_dialog.pos_view_gb.pos_view.setItem(idx, k, QTableWidgetItem())
-
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 0).setText(portfolio_tickers[idx + 1])
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 1).setIcon(update_ticker_icon(data))
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 2).setText(f'${current_price:0,.2f}')
-
-        last_close_change = current_price - last_close
-        port_dialog.pos_view_gb.pos_view.item(idx, 3).setText(
-            f'${last_close_change:0,.2f} ({round(last_close_change / last_close * 100, 2)}%)'
-        )
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 4).setText(f'${basis:0,.2f}')
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 5).setText(f"{amt}")
-
-        option_modifier = 100 if portfolio_asset_types[idx + 1] == 'Option' else 1
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 6).setText(f'${(current_price * amt * option_modifier):0,.2f}')
-
-        port_dialog.pos_view_gb.pos_view.item(idx, 7).setText(
-            f'${total_return * option_modifier:0,.2f} ({percent_change}%)')
-
-
-def update_watchlist_tickers():
-    """
-    Updates the table with all the tickers in the user's watchlist in the portfolio dialog
-    """
-
-    # for each ticker in the watchlist
-    prices = yq.Ticker(watchlist_tickers).price
-    price_data = [
-        (
-            prices[ticker]['regularMarketPrice'],
-            prices[ticker]['regularMarketOpen'],
-            prices[ticker]['regularMarketPreviousClose']
-        ) for ticker in watchlist_tickers
-    ]
-    for idx, data in enumerate(price_data):
-
-        ticker_current = data[0]
-        last_close = data[2]
-
-        port_dialog.watchlist_gb.watchlist.item(idx, 0).setText(watchlist_tickers[idx])
-
-        port_dialog.watchlist_gb.watchlist.item(idx, 1).setIcon(update_ticker_icon(data))
-
-        port_dialog.watchlist_gb.watchlist.item(idx, 2).setText(f'${ticker_current:0,.2f}')
-
-        last_close_change = ticker_current - last_close
-        port_dialog.watchlist_gb.watchlist.item(idx, 3).setText(
-            f'${last_close_change:0,.2f} ({round(last_close_change / last_close * 100, 2)}%)'
-
         )
 
 
@@ -944,65 +756,6 @@ def update_ticker_icon(data: tuple) -> QIcon:
     # returns a tablewidgetitem containing the new icon
 
 
-def update_portfolio_nav():
-    """
-    Updates the user's NAV tab. Buying power is calculated as
-    cash + (.5 * value of all long positions) -
-    (1.5 * value of all short positions).
-    """
-
-    global option_collateral
-
-    # sets buying power to user's cash
-    new_val = portfolio_amts[0]
-    liabilities = 0
-    assets = 0
-
-    # for each stock in the portfolio, get its price and check if it's held long or sold short
-    for idx, amt in enumerate(portfolio_amts[1:]):
-        # slice returns only the dollar value without the '$'
-        cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-
-
-        if amt > 0:
-            # if it's long, add its value to the new value and to the assets tally
-            new_val += cur_val * amt
-            assets += cur_val * amt
-        elif amt < 0:
-            # if it's short, subtract its value from the new value and add to the liabilities tally
-            new_val += cur_val * amt
-            liabilities += cur_val * amt
-
-    option_collateral = 0
-
-    for idx, ticker in enumerate(portfolio_tickers[1:]):
-        if portfolio_asset_types[idx + 1] == 'Option' and portfolio_amts[idx + 1] < 0:
-            option_obj = yq.Ticker(ticker).all_modules[ticker]
-            shortname_list = option_obj['price']['shortName'].split(' ')
-            underlying_price = yq.Ticker(shortname_list[0]).price[shortname_list[0]]['regularMarketPrice']
-            is_itm = float(shortname_list[-2]) > underlying_price
-            strike = float(shortname_list[-2])
-            option_collateral += (
-                .2 * underlying_price * 100 * portfolio_amts[idx + 1]
-            ) if is_itm else max(
-                .1 * strike * 100, .2 * (underlying_price - (underlying_price - strike)) * 100
-            ) * portfolio_amts[idx + 1]
-
-    port_dialog.nav_gb.liq.setText(f'${new_val:0,.2f}')
-
-    port_dialog.nav_gb.bp.setText(f'${get_portfolio_bp():0,.2f}')
-
-    port_dialog.nav_gb.cash.setText(f'${portfolio_cash:0,.2f}')
-
-    port_dialog.nav_gb.assets.setText(f'${assets:0,.2f}')
-
-    port_dialog.nav_gb.liabilities.setText(f'${liabilities:0,.2f}')
-
-    port_dialog.nav_gb.option_req.setText(f'${option_collateral:0,.2f}')
-
-    port_dialog.nav_gb.returnSinceInception.setText(f'{((new_val / 10000 - 1) * 100):0,.2f}%')
-
-
 def update_wallet_nav():
     """Updates the user's NAV tab. Calculated as cash + (.5 * value of all long positions) -
     (1.5 * value of all short positions)."""
@@ -1032,30 +785,6 @@ def update_wallet_nav():
     wallet_dialog.nav_gb.liabilities.setText(f'${liabilities:0,.2f}')
 
     wallet_dialog.nav_gb.returnSinceInception.setText(f'{((new_val / 10000 - 1) * 100):0,.2f}%')
-
-
-def get_portfolio_bp() -> float:
-    """
-    Returns the user's portfolio buying power.
-    Calculated as cash + (long assets * 0.5) - (short assets * 1.5)
-    """
-    buying_power = portfolio_cash
-    total_long = 0
-    total_short = 0
-
-    for idx, amt in enumerate(portfolio_amts[1:]):
-        cur_val = float(port_dialog.pos_view_gb.pos_view.item(idx, 2).text()[1:])
-        if amt > 0:
-            total_long += cur_val * amt
-        elif amt < 0:
-            total_short += cur_val * amt
-
-    buying_power += .5 * total_long
-    buying_power += 1.5 * total_short
-
-    buying_power -= abs(option_collateral)
-    return buying_power
-
 
 def get_wallet_bp() -> float:
     """
@@ -1901,10 +1630,13 @@ portfolio_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\portfoli
 portfolio_asset_types = [type.text for type in ra.get_xml_data(r'assets\portfolio.xml', 'type')]
 portfolio_amts = [float(amt.text) for amt in ra.get_xml_data(r'assets\portfolio.xml', 'amount')]
 purchase_prices = [float(price.text) for price in ra.get_xml_data(r'assets\portfolio.xml', 'costbasis')]
+purchase_prices.insert(0, None)
 wallet_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\wallet.xml', 'name')]
 wallet_amts = [float(amt.text) for amt in ra.get_xml_data(r'assets\wallet.xml', 'amount')]
 wallet_costbases = [float(basis.text) for basis in ra.get_xml_data(r'assets\wallet.xml', 'costbasis')]
 watchlist_tickers = [ticker.text for ticker in ra.get_xml_data(r'assets\watchlist.xml', 'name')]
+
+port = portfolio.Portfolio(portfolio_tickers, purchase_prices, portfolio_amts, portfolio_asset_types)
 
 trades = ra.get_xml_data(r'assets\trades.xml', 'trade')
 
@@ -1999,152 +1731,12 @@ QFontDatabase.addApplicationFont('fonts/genius.ttf')
 progressBar.setValue(50)
 
 
+
 ####################
 # portfolio dialog #
 ####################
 
-# dialog settings
-port_dialog = QWidget()
-port_dialog.setObjectName("Dialog")
-port_dialog.resize(1000, 600)
-port_dialog.setAutoFillBackground(True)
-port_dialog.setStyleSheet('background-color: deepskyblue;')
-
-# positions table settings
-port_dialog.pos_view_gb = QGroupBox(port_dialog)
-port_dialog.pos_view_gb.setGeometry(10, 270, 1050, 250)
-port_dialog.pos_view_gb.setTitle("Your Portfolio")
-port_dialog.pos_view_gb.setStyleSheet('background-color: white;')
-
-port_dialog.pos_view_gb.pos_view = QTableWidget(port_dialog.pos_view_gb)
-port_dialog.pos_view_gb.pos_view.setEditTriggers(
-    QAbstractItemView.EditTrigger.NoEditTriggers)
-port_dialog.pos_view_gb.pos_view.setFont(ARIAL_10)
-port_dialog.pos_view_gb.pos_view.setRowCount(len(portfolio_amts) - 1)
-port_dialog.pos_view_gb.pos_view.setColumnCount(8)
-port_dialog.pos_view_gb.pos_view.setGeometry(10, 20, 1040, 200)
-port_dialog.pos_view_gb.pos_view.setStyleSheet('background-color: white;')
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(1, QTableWidgetItem("Today's Performance"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(3, QTableWidgetItem("P/L Per Share Today"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(4, QTableWidgetItem("Purchase Price"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(5, QTableWidgetItem("# of Shares"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(6, QTableWidgetItem("Total Value"))
-port_dialog.pos_view_gb.pos_view.setHorizontalHeaderItem(7, QTableWidgetItem("Position Gain/Loss"))
-for row in range(8):
-    port_dialog.pos_view_gb.pos_view.horizontalHeaderItem(row).setFont(ARIAL_10)
-for row in range(port_dialog.pos_view_gb.pos_view.rowCount()):
-    port_dialog.pos_view_gb.pos_view.setVerticalHeaderItem(row, QTableWidgetItem("1"))
-    port_dialog.pos_view_gb.pos_view.verticalHeaderItem(row).setFont(ARIAL_10)
-    for column in range(port_dialog.pos_view_gb.pos_view.columnCount()):
-        port_dialog.pos_view_gb.pos_view.setItem(row, column, QTableWidgetItem())
-update_portfolio_table()
-port_dialog.pos_view_gb.pos_view.resizeColumnsToContents()
-progressBar.setValue(60)
-
-# user's nav settings
-port_dialog.nav_gb = QGroupBox(port_dialog)
-port_dialog.nav_gb.setTitle("Your NAV")
-port_dialog.nav_gb.setGeometry(10, 10, 250, 250)
-port_dialog.nav_gb.setStyleSheet('background-color: white;')
-# net liquidation value labels
-port_dialog.nav_gb.netLiq = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.netLiq.setText("Net Liq: ")
-port_dialog.nav_gb.netLiq.setGeometry(10, 20, 80, 20)
-port_dialog.nav_gb.netLiq.setFont(QFont('genius', 10))
-port_dialog.nav_gb.liq = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.liq.setGeometry(10, 40, 160, 40)
-port_dialog.nav_gb.liq.setFont(QFont('genius', 20))
-# cash value labels
-port_dialog.nav_gb.cashLabel = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.cashLabel.setText("Cash: ")
-port_dialog.nav_gb.cashLabel.setGeometry(10, 90, 80, 20)
-port_dialog.nav_gb.cash = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.cash.setGeometry(100, 90, 80, 20)
-progressBar.setValue(70)
-# buying power labels
-port_dialog.nav_gb.bp_label = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.bp_label.setText("Buying Power: ")
-port_dialog.nav_gb.bp_label.setGeometry(10, 110, 80, 20)
-port_dialog.nav_gb.bp = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.bp.setGeometry(100, 110, 80, 20)
-# assets labels
-port_dialog.nav_gb.assetsLabel = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.assetsLabel.setText("Long Assets: ")
-port_dialog.nav_gb.assetsLabel.setGeometry(10, 130, 80, 20)
-port_dialog.nav_gb.assets = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.assets.setGeometry(100, 130, 80, 20)
-# liabilities labels
-port_dialog.nav_gb.liabilitiesLabel = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.liabilitiesLabel.setText("Short Assets: ")
-port_dialog.nav_gb.liabilitiesLabel.setGeometry(10, 150, 80, 20)
-port_dialog.nav_gb.liabilities = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.liabilities.setGeometry(100, 150, 80, 20)
-# option requirement labels
-port_dialog.nav_gb.option_req_label = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.option_req_label.setText("Option Req:")
-port_dialog.nav_gb.option_req_label.setGeometry(10, 170, 80, 20)
-port_dialog.nav_gb.option_req = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.option_req.setText(f'${option_collateral:0,.2f}')
-port_dialog.nav_gb.option_req.setGeometry(100, 170, 80, 20)
-
-
-# return since inception labels
-port_dialog.nav_gb.returnSinceInceptionLabel = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.returnSinceInceptionLabel.setText("Return Since Inception: ")
-port_dialog.nav_gb.returnSinceInceptionLabel.setGeometry(10, 190, 120, 20)
-port_dialog.nav_gb.returnSinceInception = QLabel(port_dialog.nav_gb)
-port_dialog.nav_gb.returnSinceInception.setFont(QFont('genius', 20))
-port_dialog.nav_gb.returnSinceInception.setGeometry(10, 210, 120, 30)
-update_portfolio_nav()
-progressBar.setValue(80)
-# watchlist table settings
-port_dialog.watchlist_gb = QGroupBox(port_dialog)
-port_dialog.watchlist_gb.setTitle("Your Watchlist")
-port_dialog.watchlist_gb.setGeometry(270, 10, 500, 250)
-port_dialog.watchlist_gb.setStyleSheet('background-color: white;')
-port_dialog.watchlist_gb.watchlist = QTableWidget(port_dialog.watchlist_gb)
-port_dialog.watchlist_gb.watchlist.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-port_dialog.watchlist_gb.watchlist.setRowCount(len(watchlist_tickers))
-port_dialog.watchlist_gb.watchlist.setColumnCount(4)
-port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(0, QTableWidgetItem("Ticker"))
-port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(
-    1, QTableWidgetItem("Today's Performance"))
-port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(2, QTableWidgetItem("Current Price"))
-port_dialog.watchlist_gb.watchlist.setHorizontalHeaderItem(
-    3, QTableWidgetItem("Gain/Loss Per Share"))
-for row in range(4):
-    port_dialog.watchlist_gb.watchlist.horizontalHeaderItem(row).setFont(ARIAL_10)
-for row in range(port_dialog.watchlist_gb.watchlist.rowCount()):
-    port_dialog.watchlist_gb.watchlist.setVerticalHeaderItem(row, QTableWidgetItem(f"{row + 1}"))
-    port_dialog.watchlist_gb.watchlist.verticalHeaderItem(row).setFont(ARIAL_10)
-    for column in range(port_dialog.watchlist_gb.watchlist.columnCount()):
-        port_dialog.watchlist_gb.watchlist.setItem(row, column, QTableWidgetItem())
-
-port_dialog.watchlist_gb.watchlist.setFont(ARIAL_10)
-port_dialog.watchlist_gb.watchlist.setGeometry(10, 20, 500, 200)
-update_watchlist_tickers()
-port_dialog.watchlist_gb.watchlist.resizeColumnsToContents()
-# asset class pie chart
-asset_class_chart = QPieSeries()
-asset_class_chart.append("Long ETFs", 1)
-asset_class_chart.append("Short ETFs", 2)
-asset_class_chart.append("Long Stocks", 3)
-asset_class_chart.append("Short Stocks", 4)
-asset_class_chart.append("Long Options", 5)
-asset_class_chart.append("Short Options", 6)
-asset_class_chart.append("Cash", 7)
-chart = QChart()
-chart.addSeries(asset_class_chart)
-chart.setTitle("Positions by Asset Class")
-chart.setVisible(True)
-port_dialog.chart_view = QChartView(chart)
-port_dialog.chart_view.setParent(port_dialog)
-port_dialog.chart_view.setGeometry(780, 1, 500, 265)
-port_dialog.chart_view.setVisible(True)
-update_portfolio_piechart()
-
+port_dialog = portfolio_tab.PortfolioTab(port, watchlist_tickers, OPEN_PORT_ORDERS)
 
 ################
 # chart dialog #
@@ -2650,6 +2242,7 @@ def preview_option_trade():
                 float(qty_label.text())
             ]
         )
+        port_dialog.trades.update(OPEN_PORT_ORDERS)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
     actions_widget.layout().addWidget(ok_button)
@@ -2954,6 +2547,7 @@ def on_previeworder_click():
                 float(qty_label.text())
             ]
         )
+        port_dialog.trades.update(OPEN_PORT_ORDERS)
         wnd.done(0)
     ok_button.clicked.connect(ok_button_clicked)
     actions_widget.layout().addWidget(ok_button)
@@ -4177,6 +3771,7 @@ widget.addTab(wallet_dialog, "Your Crypto Wallet")
 widget.addTab(trade_crypto_dialog, "Trade Crypto")
 widget.addTab(minigame_dialog, "Minigame")
 widget.addTab(settings_dialog, "Settings")
+widget.addTab(stock_chart_tab.StockChartTab(all_tickers_list, selected_ta), "test")
 
 widget.resize(1300, 700)
 widget.show()

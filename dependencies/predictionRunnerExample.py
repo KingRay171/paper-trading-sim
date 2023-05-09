@@ -35,6 +35,7 @@ def run_model(ticker):
 next_time_steps, future_forecast, timesteps, stock_price =  run_model('AMZN')
 
 #import PySide6.QtWidgets
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtCharts import (QChart, QChartView, QLineSeries, QDateTimeAxis)
 from PySide6.QtGui  import QColor, QPixmap
 import sys
@@ -47,6 +48,7 @@ ptchart = QChart()
 ptlineseries = QLineSeries()
 ptlineseries.setName("stock")
 ptchart.addSeries(ptlineseries)
+throwaway =  QGuiApplication()
 x_axis = QDateTimeAxis()
 x_axis.setTickCount(7)
 x_axis.setFormat("yyyy-MM-dd")

@@ -2,8 +2,4 @@
 .vscode/
 venv/
 activate
-<<<<<<< Updated upstream
 .pylintrc
-=======
-.pylintrc
->>>>>>> Stashed changes

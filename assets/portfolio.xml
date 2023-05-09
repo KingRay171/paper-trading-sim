@@ -2,10 +2,10 @@
 <portfolio> <equity>
 <type>Liquidity</type>
 <name>US Dollars</name>
-<amount>10000.00</amount>
+<amount>18133.35</amount>
 </equity><equity>
 <type>ETF</type>
 <name>SPY</name>
-<amount>10</amount>
-<costbasis>400.00</costbasis>
+<amount>-20.0</amount>
+<costbasis>413.2</costbasis>
 </equity></portfolio>

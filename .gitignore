@@ -1,3 +1,6 @@
-venv/
-.vscode/
+
 *.pyc
+.vscode/
+venv/
+activate
+.pylintrc

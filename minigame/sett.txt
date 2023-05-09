@@ -1,16 +1,16 @@
 600
 400
 5
-14
+15
 0.5
 
 DART (speed, pierce, damage)
 16
-8
-8
+9
+10
 Enemy
 1
 MONEY
-260.0
+1000.0
 WAVE
 1

@@ -122,4 +122,3 @@ def get_fairval(ticker: str, discount_rate: float, perpetual_rate: float, growth
 
     result.update(graham(data))
     return result
-

@@ -1,9 +1,7 @@
 import math
 import sys
 import mplfinance as mpf
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.widgets import MultiCursor
 from matplotlib import axes
 
 import ta_addplot
@@ -69,7 +67,7 @@ func_map = {
 }
 
 
-def onclose(fig):
+def onclose(_):
     global isclosed
     print("closed")
     isclosed = True
@@ -97,14 +95,68 @@ def on_xlims_change(event_ax):
 
     scaled_xlims = xlims
 
-def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: bool, adjust_ohlc: bool, split_dividend: bool, volume: bool, period=None, start_date=None, end_date=None):
+
+plot = []
+
+def update_data(_, ticker: str, interval: str, ta_indicators: str, prepost: bool, adjust_ohlc: bool, volume: bool, style, period=None, start_date=None, end_date=None):
+    global plot
+    global data
+    global scaled_xlims
+
+    ax_main = axes[0]
+    ax_vol = axes[2] if volume else None
+    old_data_size = data['Close'].size
+    if period is not None:
+        data = yf.download(
+            tickers=ticker,
+            period=period,
+            interval=interval,
+            prepost=prepost,
+            auto_adjust=adjust_ohlc
+        )
+    else:
+        data = yf.download(
+            tickers=ticker,
+            start=start_date,
+            end=end_date,
+            interval=interval,
+            prepost=prepost,
+            auto_adjust=adjust_ohlc
+        )
+    if data['Close'].size > old_data_size:
+        scaled_xlims = (scaled_xlims[0], scaled_xlims[1] + 1)
+    if data['Close'].size < old_data_size:
+        scaled_xlims = (scaled_xlims[0], scaled_xlims[1] - 1)
+    plot = []
+
+    for indicator in ta_indicators:
+        indicator = (eval(indicator[0]), indicator[1], indicator[2])
+        indicator_plot = func_map[indicator[0]](data, indicator[2], axis=axes[indicator[1] * 2])
+        plot += indicator_plot
+
+    for i in range(0, len(axes), 1):
+        axes[i].clear()
+        axes[i].set_xlim(scaled_xlims)
+
+    ax_main.callbacks.connect('xlim_changed', on_xlims_change)
+
+    if volume:
+        mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol,style=style)
+    else:
+        mpf.plot(data,type='candle',addplot=plot,ax=ax_main,style=style)
+
+    return axes
+
+
+def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, adjust_ohlc: bool, split_dividend: bool, volume: bool, period=None, start_date=None, end_date=None):
 
     global axes
     global data
     global xlims
     global scaled_xlims
 
-    plot = []
+
+
 
     up_color = ra.get_xml_data('assets/settings.xml', 'upcolor')
     down_color = ra.get_xml_data('assets/settings.xml', 'downcolor')
@@ -115,68 +167,14 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
 
     s = mpf.make_mpf_style(base_mpf_style=base_style[0].text, marketcolors=colors)
 
-
-    def update_data(ival):
-        global plot
-        global data
-        global scaled_xlims
-        global default_xlims
-
-        ax_main = axes[0]
-
-        ax_vol = axes[2] if volume else None
-
-        old_data_size = data['Close'].size
-
-
-        if period is not None:
-            data = yf.download(
-                tickers=ticker_symbol,
-                period=period,
-                interval=interval,
-                prepost=prepost,
-                auto_adjust=adjust_ohlc
-            )
-        else:
-            data = yf.download(
-                tickers=ticker_symbol,
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                prepost=prepost,
-                auto_adjust=adjust_ohlc
-            )
-
-        if data['Close'].size > old_data_size:
-            scaled_xlims = (scaled_xlims[0], scaled_xlims[1] + 1)
-
-        if data['Close'].size < old_data_size:
-            scaled_xlims = (scaled_xlims[0], scaled_xlims[1] - 1)
-
-        plot = []
-
-        for indicator in ta_indicators:
-            indicator = (eval(indicator[0]), indicator[1], indicator[2])
-            indicator_plot = func_map[indicator[0]](data=data, settings=indicator[2], ax=axes[indicator[1] * 2])
-            plot += indicator_plot
-        for i in range(0, len(axes), 1):
-
-            axes[i].clear()
-            axes[i].set_xlim(scaled_xlims)
-
-        ax_main.callbacks.connect('xlim_changed', on_xlims_change)
-
-        if volume:
-            mpf.plot(data,type='candle',addplot=plot,ax=ax_main,volume=ax_vol,style=s)
-        else:
-            mpf.plot(data,type='candle',addplot=plot,ax=ax_main,style=s)
-        return axes
-
-
     if period is not None:
-        data = yf.download(tickers=ticker_symbol, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+        data = yf.download(
+            tickers=ticker, period=period, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc
+        )
     else:
-        data = yf.download(tickers=ticker_symbol, start=start_date, end=end_date, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc)
+        data = yf.download(
+            tickers=ticker, start=start_date, end=end_date, interval=interval, prepost=prepost, auto_adjust=adjust_ohlc
+        )
 
     xlims = (-2, data['Close'].size + 2)
     scaled_xlims = xlims
@@ -185,7 +183,7 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
 
     for idx, indicator in enumerate(ta_indicators):
 
-        indicator_plot = func_map[eval(indicator[0])](data=data, settings=indicator[2], panel=indicator[1])
+        indicator_plot = func_map[eval(indicator[0])](data, indicator[2], panel=indicator[1])
 
         indicator_plot_isempty = True
         for i in range(len(indicator_plot)):
@@ -198,7 +196,7 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
                 ta_indicators[i] = (ta_indicators[i][0], ta_indicators[i][1] - 1)
             ta_indicators[idx] = None
         else:
-            plot += indicator_plot
+            plot.extend(indicator_plot)
 
     ta_indicators = [x for x in ta_indicators if x is not None]
 
@@ -210,7 +208,11 @@ def startChart(ticker_symbol: str, interval: str, ta_indicators: list, prepost: 
     axes[0].callbacks.connect('xlim_changed', on_xlims_change)
 
 
-    ani = animation.FuncAnimation(fig, update_data, interval=50)
+    _ = animation.FuncAnimation(
+        fig, update_data,
+        fargs=(ticker, interval, ta_indicators, prepost, adjust_ohlc, volume, s, period, start_date, end_date),
+        interval=50
+    )
 
     mpf.show()
 

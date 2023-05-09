@@ -144,10 +144,7 @@ def run_main(ticker, model_9=None):
   dataset_all = process_data(X, y)
 
   if(model_9 == None):
-    print("I start training")
     model_9 = make_model(dataset_all, ticker)
-  else:
-    print("I already exist")
 
   # Windows and labels ready. Now turn them into performance optimized TensorFlow Datasets by
 

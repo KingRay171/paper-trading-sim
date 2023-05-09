@@ -13,7 +13,7 @@ def run_model(ticker):
   print(path)
   print(isExist)
   model_9 = 0
-  
+
   next_time_steps, future_forecast, timesteps, stock_price = 0,0,0,0
   if(isExist):
 
@@ -35,20 +35,21 @@ def run_model(ticker):
 next_time_steps, future_forecast, timesteps, stock_price =  run_model('AMZN')
 
 #import PySide6.QtWidgets
-from PySide6.QtGui import QGuiApplication
 from PySide6.QtCharts import (QChart, QChartView, QLineSeries, QDateTimeAxis)
 from PySide6.QtGui  import QColor, QPixmap
+from PySide6.QtWidgets import QApplication
 import sys
 from PySide6.QtCore import Qt
 
 #1478
 #need return chartview
+_ =  QApplication()
 print("wow1")
 ptchart = QChart()
 ptlineseries = QLineSeries()
 ptlineseries.setName("stock")
 ptchart.addSeries(ptlineseries)
-throwaway =  QGuiApplication()
+
 x_axis = QDateTimeAxis()
 x_axis.setTickCount(7)
 x_axis.setFormat("yyyy-MM-dd")
@@ -60,15 +61,12 @@ print("wow2")
 series = QLineSeries()
 series2 = QLineSeries()
 
-timesteps = ['2023-05-05' '2023-05-06' '2023-05-07']
-stock_price = [1, 5, 3]
+
 series.setName("Real")
 series.setColor(QColor("blue"))
 series.append(timesteps, stock_price)
 
 
-next_time_steps = ['2023-05-08' '2023-05-09' '2023-05-10']
-future_forecast = [10,2,5]
 series2.setName("Prediction")
 series2.setColor(QColor("red"))
 series2.append(next_time_steps, future_forecast)

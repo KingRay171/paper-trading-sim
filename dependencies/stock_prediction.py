@@ -173,11 +173,5 @@ def run_main(ticker, model_9=None):
 
 
   # Plot future price predictions of stock
-  plt.figure(figsize=(5, 3))
-  print(stock_price.index, len(stock_price.index))
-  print(timesteps, len(timesteps))
-  plot_time_series(timesteps, stock_price, start=0, format="-", label="Actual Stock Price")
-  plot_time_series(next_time_steps, future_forecast, format="-", label="Predicted Stock Price")
-  #plt.show()
-  return plt
+  return next_time_steps, future_forecast, timesteps, stock_price
 

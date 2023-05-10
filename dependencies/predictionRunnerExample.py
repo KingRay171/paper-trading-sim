@@ -1,7 +1,8 @@
 #run this
 import stock_prediction as ml
 import os
-from datetime import date, datetime
+import datetime
+from datetime import date
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QHBoxLayout
 from PySide6.QtCore import Qt
 
@@ -49,7 +50,7 @@ from PySide6.QtCore import Qt
 #1478
 #need return chartview
 _ =  QApplication()
-print("wow1")
+#print("wow1")
 ptchart = QChart()
 ptlineseries = QLineSeries()
 ptlineseries.setName("stock")
@@ -61,7 +62,7 @@ x_axis.setFormat("yyyy-MM-dd")
 x_axis.setTitleText("Date")
 x_axis.setVisible(True)
 
-print("wow2")
+#print("wow2")
 
 series = QLineSeries()
 series2 = QLineSeries()
@@ -80,22 +81,47 @@ stock_price = stock_price.values.ravel()
 
 # getting length of list
 length = len(timesteps)
-for i in range(length):
-  print(datetime.combine(timesteps[i], datetime.min.time()).timestamp())
 
-  series.append(float(QDateTime().fromString(timesteps[i].strftime("%Y.%m.%d"), "yyyy.mm.dd").toMSecsSinceEpoch()), stock_price[i])
+#setRange(min, max)
+#print(type(timesteps[0]))
+
+import datetime
+
+min = datetime.datetime.combine(timesteps[0], datetime.time.min).timestamp()*1000
+#min1 = min
+for i in range(length):
+  time = datetime.datetime.combine(timesteps[i], datetime.time.min).timestamp()*1000
+  #print(timesteps[i])
+  #print(time)
+  #if(time<min):
+  #  print("this is not supposed to happem")
+  #  min1 = time
+  series.append(time, stock_price[i])
 
 length = len(next_time_steps)
+#print("start part 2")
+
 
 for i in range(length):
-  print(next_time_steps[i].astype("datetime64[s]").astype('int'))
-  series2.append(next_time_steps[i].astype("datetime64[s]").astype('int'), future_forecast[i])
+  time = next_time_steps[i].astype("datetime64[s]").astype('float')*1000
+  #print(time)
+  series2.append(time, future_forecast[i])
+  max = time
+
 
 
 ptchart.addSeries(series)
 ptchart.addSeries(series2)
+
 ptchart.createDefaultAxes()
 ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
+
+from PySide6.QtCore import  QDateTime
+
+
+min = QDateTime.fromSecsSinceEpoch(min/1000)
+max = QDateTime.fromSecsSinceEpoch(max/1000)
+x_axis.setRange(min, max)
 ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
 series.attachAxis(x_axis)
 
@@ -105,4 +131,4 @@ w.setLayout(QHBoxLayout())
 w.layout().addWidget(ptchartview)
 w.exec()
 
-print("wow")
+#print("wow")

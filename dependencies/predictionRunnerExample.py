@@ -3,6 +3,7 @@ import stock_prediction as ml
 import os
 from datetime import date, datetime
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QHBoxLayout
+from PySide6.QtCore import Qt
 
 #from stock_prediction import GRU
 #from stock_prediction import input_data
@@ -40,6 +41,7 @@ next_time_steps, future_forecast, timesteps, stock_price =  run_model('AMZN')
 #import PySide6.QtWidgets
 from PySide6.QtCharts import (QChart, QChartView, QLineSeries, QDateTimeAxis)
 from PySide6.QtGui  import QColor, QPixmap
+from PySide6.QtCore import QDateTime
 from PySide6.QtWidgets import QApplication
 import sys
 from PySide6.QtCore import Qt
@@ -58,7 +60,7 @@ x_axis.setTickCount(7)
 x_axis.setFormat("yyyy-MM-dd")
 x_axis.setTitleText("Date")
 x_axis.setVisible(True)
-ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
+
 print("wow2")
 
 series = QLineSeries()
@@ -79,15 +81,23 @@ stock_price = stock_price.values.ravel()
 # getting length of list
 length = len(timesteps)
 for i in range(length):
-  #print(type(timesteps[i]))
-  series.append(datetime.combine(timesteps[i], datetime.min.time()).timestamp(), stock_price[i])
+  print(datetime.combine(timesteps[i], datetime.min.time()).timestamp())
+
+  series.append(float(QDateTime().fromString(timesteps[i].strftime("%Y.%m.%d"), "yyyy.mm.dd").toMSecsSinceEpoch()), stock_price[i])
 
 length = len(next_time_steps)
+
 for i in range(length):
-  series2.append(next_time_steps[i].astype("int"), future_forecast[i])
+  print(next_time_steps[i].astype("datetime64[s]").astype('int'))
+  series2.append(next_time_steps[i].astype("datetime64[s]").astype('int'), future_forecast[i])
+
 
 ptchart.addSeries(series)
 ptchart.addSeries(series2)
+ptchart.createDefaultAxes()
+ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
+ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
+series.attachAxis(x_axis)
 
 ptchartview = QChartView(ptchart)
 w = QDialog()

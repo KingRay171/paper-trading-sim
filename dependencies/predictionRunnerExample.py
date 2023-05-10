@@ -1,6 +1,9 @@
 #run this
 import stock_prediction as ml
 import os
+from datetime import date, datetime
+from PySide6.QtWidgets import QApplication, QWidget, QDialog, QHBoxLayout
+
 #from stock_prediction import GRU
 #from stock_prediction import input_data
 #from stock_prediction import ModelAccessor
@@ -76,14 +79,20 @@ stock_price = stock_price.values.ravel()
 # getting length of list
 length = len(timesteps)
 for i in range(length):
-  series.append(timesteps[i], stock_price[i])
-  
+  #print(type(timesteps[i]))
+  series.append(datetime.combine(timesteps[i], datetime.min.time()).timestamp(), stock_price[i])
+
 length = len(next_time_steps)
 for i in range(length):
-  series2.append(next_time_steps[i], future_forecast[i])
+  series2.append(next_time_steps[i].astype("int"), future_forecast[i])
 
 ptchart.addSeries(series)
 ptchart.addSeries(series2)
 
 ptchartview = QChartView(ptchart)
+w = QDialog()
+w.setLayout(QHBoxLayout())
+w.layout().addWidget(ptchartview)
+w.exec()
+
 print("wow")

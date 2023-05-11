@@ -62,6 +62,10 @@ x_axis.setFormat("yyyy-MM-dd")
 x_axis.setTitleText("Date")
 x_axis.setVisible(True)
 
+y_axis = QDateTimeAxis()
+y_axis.setTitleText("Price")
+y_axis.setVisible(True)
+
 #print("wow2")
 
 series = QLineSeries()
@@ -87,7 +91,9 @@ length = len(timesteps)
 
 import datetime
 
-min = datetime.datetime.combine(timesteps[0], datetime.time.min).timestamp()*1000
+min_x = datetime.datetime.combine(timesteps[0], datetime.time.min).timestamp()*1000
+min_y = stock_price.min()
+max_y = stock_price.max()
 #min1 = min
 for i in range(length):
   time = datetime.datetime.combine(timesteps[i], datetime.time.min).timestamp()*1000
@@ -106,8 +112,12 @@ for i in range(length):
   time = next_time_steps[i].astype("datetime64[s]").astype('float')*1000
   #print(time)
   series2.append(time, future_forecast[i])
-  max = time
+  max_x = time
 
+if(max(future_forecast)>max_y):
+  max_y = max(future_forecast)
+if(min(future_forecast)<min_y):
+  min_y = min(future_forecast)
 
 
 ptchart.addSeries(series)
@@ -119,11 +129,18 @@ ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
 from PySide6.QtCore import  QDateTime
 
 
-min = QDateTime.fromSecsSinceEpoch(min/1000)
-max = QDateTime.fromSecsSinceEpoch(max/1000)
-x_axis.setRange(min, max)
+min_x = QDateTime.fromSecsSinceEpoch(min_x/1000)
+max_x = QDateTime.fromSecsSinceEpoch(max_x/1000)
+
+
+x_axis.setRange(min_x, max_x)
+y_axis.setRange(min_y*0.9, max_y*1.1)
+
 ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
 series.attachAxis(x_axis)
+
+ptchart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
+series.attachAxis(y_axis)
 
 ptchartview = QChartView(ptchart)
 w = QDialog()

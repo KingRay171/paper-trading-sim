@@ -62,9 +62,6 @@ x_axis.setFormat("yyyy-MM-dd")
 x_axis.setTitleText("Date")
 x_axis.setVisible(True)
 
-y_axis = QDateTimeAxis()
-y_axis.setTitleText("Price")
-y_axis.setVisible(True)
 
 #print("wow2")
 
@@ -129,18 +126,16 @@ ptchart.axes(Qt.Orientation.Horizontal)[0].hide()
 from PySide6.QtCore import  QDateTime
 
 
-min_x = QDateTime.fromSecsSinceEpoch(min_x/1000)
-max_x = QDateTime.fromSecsSinceEpoch(max_x/1000)
+min_x = QDateTime.fromSecsSinceEpoch(int(min_x/1000))
+max_x = QDateTime.fromSecsSinceEpoch(int(max_x/1000))
 
 
 x_axis.setRange(min_x, max_x)
-y_axis.setRange(min_y*0.9, max_y*1.1)
+ptchart.axes(Qt.Orientation.Vertical)[0].setRange(min_y*0.9, max_y*1.1)
 
 ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
 series.attachAxis(x_axis)
 
-ptchart.addAxis(y_axis, Qt.AlignmentFlag.AlignLeft)
-series.attachAxis(y_axis)
 
 ptchartview = QChartView(ptchart)
 w = QDialog()

@@ -1,7 +1,8 @@
 # Stock Market Game
 
 [![forthebadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com) &nbsp;
-[![forthebadge](https://forthebadge.com/generator/?plabel=and+held+together&slabel=with+duct+tape)](https://forthebadge.com) &nbsp;
+![and-held-together-with-duct-tape](https://github.com/KingRay171/paper-trading-sim/assets/33167191/03145542-8913-4c44-bad0-b1c4641c6860)
+
 
 
 paper-trading-sim is a game where the goal is to generate the highest returns possible trading real securities and derivatives with simulated funds

@@ -8,4 +8,4 @@ class StockChartTab(QTabWidget):
         super().__init__()
         self.setStyleSheet('background-color: deepskyblue;')
         self.addTab(ChartConfigs(string_list, selected_ta), "Chart Configurations")
-        self.addTab(IndicatorsWidget(), "Technical Indicators")
+        self.addTab(IndicatorsWidget(selected_ta), "Technical Indicators")

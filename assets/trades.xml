@@ -1,16 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<trades> <trade>
-<asset>SPY</asset>
-<transaction>Buy</transaction>
-<type>Market</type>
-<price>0.0</price>
-<qty>3.0</qty>
-<dt>2023-05-09 08:29:12.322531</dt>
-</trade><trade>
-<asset>QQQ</asset>
-<transaction>Buy</transaction>
-<type>Market</type>
-<price>0.0</price>
-<qty>1.0</qty>
-<dt>2023-05-09 08:29:12.323531</dt>
-</trade></trades>
+<trades> </trades>

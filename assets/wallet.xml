@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <portfolio> <equity>
 <name>US Dollars</name>
-<amount>9994.444</amount>
+<amount>4719.255367929999</amount>
 </equity><equity>
 <name>BTC-USD</name>
 <amount>0.1</amount>
-<costbasis>30190.861</costbasis>
+<costbasis>26927.262</costbasis>
+</equity><equity>
+<name>LTC-USD</name>
+<amount>1.0</amount>
+<costbasis>87.44351</costbasis>
 </equity></portfolio>

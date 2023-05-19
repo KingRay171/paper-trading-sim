@@ -33,3 +33,9 @@ class Portfolio():
         expired_options = list(filter(self._option_has_expired, list(filter(lambda e: e.asset_type == "Option", self))))
         for exp_option in expired_options:
             self.positions.remove(exp_option)
+
+    def get_index_by_ticker(self, ticker):
+        for position in self.positions:
+            if position.ticker == ticker:
+                return self.positions.index(position)
+        return -1

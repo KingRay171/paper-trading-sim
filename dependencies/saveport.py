@@ -1,12 +1,18 @@
 import os
 from bs4 import BeautifulSoup
+from widgets.portfolio.portfolio import Portfolio
 
 
-def save_port(asset_types: list, tickers: list, amts: list, cost_bases: list):
+def save_port(port: Portfolio):
     """
     Parses the given lists of portfolio tickers, asset types, amounts, and cost bases
     into an XML file and saves it to the assets directory
     """
+    tickers = [pos.ticker for pos in port]
+    amts = [pos.amt for pos in port]
+    cost_bases = [pos.basis for pos in port]
+    asset_types = [pos.asset_type for pos in port]
+
     currentdir = os.getcwd()
     soup = BeautifulSoup("<portfolio> </portfolio>", "xml")
     liquidity_soup = BeautifulSoup(

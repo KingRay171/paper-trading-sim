@@ -13,8 +13,8 @@ def getOrderBook(stockName):
     content = []
 
     for element in webd.find_elements(By.TAG_NAME, 'td'):
-    if len(element.text) > 0:
-            content.append(element.text)
+      if len(element.text) > 0:
+        content.append(element.text)
 
 
 
@@ -89,14 +89,4 @@ def getOrderBook(stockName):
 
     return Bids, Asks, last10, orders_accepted, total_volume
 
-bids, asks, last10, orders, total = getOrderBook("AMZN")
-
-print(bids)
-
-print(asks)
-
-print(last10)
-
-print(orders)
-
-print(total)
+print(getOrderBook('AMZN'))

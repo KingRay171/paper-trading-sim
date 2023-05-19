@@ -4,3 +4,5 @@
 venv/
 activate
 .pylintrc
+geckodriver.log
+test.py

@@ -10,13 +10,12 @@ paper-trading-sim is a game where the goal is to generate the highest returns po
 
 [Changelog »](https://github.com/KingRay171/paper-trading-sim/blob/main/CHANGELOG.rst)
 
-What's new in version 1.1
+What's new in version 1.0
 -------------------------
-- further optimized portfolio, watchlist, and wallet ui updates
-- optimized generation of etf information dialog
-- optimized trade handling
-- further optimized creation of technical indicator dialog
-- added 8 types of scanners to trade ideas dialog
-- added Inverse Cramer, Google Trends, and WallStreetBets scanners to trade ideas dialog
-- optimized retrieval and parsing of scanner data
+- Optimized trade handling
+- Optimized startup processes
+- Improved layout management
+- Faster generation of AI stock recommendations
+- Open trades can now be tracked in Portfolio tab
+- Other small fixes and changes
 

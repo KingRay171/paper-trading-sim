@@ -27,7 +27,7 @@ jobs:
       run: |
         sudo apt-get install -y libgl1-mesa-dev
         python -m pip install --upgrade pip
-        pip install flake8 pytest pytest-qt PyQt5 PyQt6 PySide2 PySide6
+        pip install flake8 pytest pytest-qt PyQt5 PyQt6 PySide2 PySide6 yahooquery
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |

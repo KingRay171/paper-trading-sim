@@ -3,6 +3,7 @@
 [![forthebadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com) &nbsp;
 ![and-held-together-with-duct-tape](https://github.com/KingRay171/paper-trading-sim/assets/33167191/03145542-8913-4c44-bad0-b1c4641c6860)
 [![forthebadge](https://forthebadge.com/images/badges/powered-by-qt.svg)](https://forthebadge.com)
+![tests](https://github.com/KingRay171/paper-trading-sim/actions/workflows/tests.yml/badge.svg)
 
 
 

@@ -14,6 +14,7 @@ class Watchlist(QGroupBox):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setRowCount(len(watchlist_tickers))
         self.table.setColumnCount(4)
+
         headers = ("Ticker", "Today's Performance", "Current Price", "Gain/Loss Per Share")
         for idx, header in enumerate(headers):
             self.table.setHorizontalHeaderItem(idx, QTableWidgetItem(header))

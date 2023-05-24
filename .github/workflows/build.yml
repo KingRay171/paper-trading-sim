@@ -22,6 +22,7 @@ jobs:
           ./configure
           make
           sudo make install
+          cd ./..
           pip install pygame
           pip install -r requirements.txt
       - name: Run PyInstaller

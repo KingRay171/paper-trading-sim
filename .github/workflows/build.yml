@@ -29,11 +29,11 @@ jobs:
           pip install -r requirements.txt
       - name: Run PyInstaller
         run: |
-          python -m PyInstaller qwiklab_badge_checker.spec
+          python -m PyInstaller yftest.spec
       - uses: actions/upload-artifact@v2
         with:
           name: Windows_qwiklabs
-          path: dist/qwiklab_badge_checker.exe
+          path: dist/yftest.exe
 
       - name: create release
         id: create_release
@@ -55,6 +55,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{steps.create_release.outputs.upload_url}}
-          asset_path: dist/qwiklab_badge_checker.exe
+          asset_path: dist/yftest.exe
           asset_name: Qwiklab-Badge-Checker-Windows-amd64.exe
           asset_content_type: application/zip

@@ -12,7 +12,6 @@ pytest_qt==4.2.0
 Requests==2.31.0
 scipy==1.10.1
 selenium==4.9.1
-site==packages
 ta==0.10.2
 TA_Lib==0.4.24
 tensorflow==2.11.0

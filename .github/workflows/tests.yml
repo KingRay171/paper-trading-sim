@@ -33,6 +33,13 @@ jobs:
       run: |
         sudo apt-get install -y libgl1-mesa-dev
         python -m pip install --upgrade pip
+        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+        tar xvfz ta-lib-0.4.0-src.tar.gz
+        cd ta-lib
+        ./configure
+        make
+        sudo make install
+        cd ./..
         pip install flake8 pytest pytest-qt PyQt5 PyQt6 PySide2 PySide6 yahooquery opencv-python-headless
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8

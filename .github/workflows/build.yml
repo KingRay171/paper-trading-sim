@@ -34,7 +34,6 @@ jobs:
         with:
           name: Windows_qwiklabs
           path: dist/yftest.exe
-
       - name: create release
         id: create_release
         uses: actions/create-release@v1

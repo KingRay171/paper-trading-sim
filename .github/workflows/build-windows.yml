@@ -16,4 +16,5 @@ jobs:
       - name: Run PyInstaller
         run: |
           pip install pyinstaller
+          pip install Pillow
           python -m PyInstaller yftest.spec

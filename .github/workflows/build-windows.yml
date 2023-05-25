@@ -15,4 +15,5 @@ jobs:
           conda install -c conda-forge ta-lib
       - name: Run PyInstaller
         run: |
+          pip install pyinstaller
           python -m PyInstaller yftest.spec

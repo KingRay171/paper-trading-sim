@@ -13,3 +13,6 @@ jobs:
       - name: Install TA-Lib
         run: |
           conda install -c conda-forge ta-lib
+      - name: Run PyInstaller
+        run: |
+          python -m PyInstaller yftest.spec

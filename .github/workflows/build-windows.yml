@@ -1,12 +1,15 @@
-name: linux build
+name: windows build
 
 on:
   push:
 jobs:
   build-windows:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v1
       - name: Setup Conda
         uses: s-weigand/setup-conda@v1
+      - name: Install TA-Lib
+        run: |
+          conda install -c conda-forge ta-lib

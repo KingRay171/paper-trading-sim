@@ -18,3 +18,8 @@ jobs:
           pip install pyinstaller
           pip install Pillow
           python -m PyInstaller yftest.spec
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+            name: windows-build
+            path: build/yftest/yftest.exe

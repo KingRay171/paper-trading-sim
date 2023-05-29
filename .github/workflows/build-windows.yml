@@ -21,13 +21,18 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-            name: windows-build
+            name: linux-build
             path: dist/yftest
   build-windows:
     runs-on: windows-latest
+    needs: build-linux
     steps:
       - name: Checkout
         uses: actions/checkout@v1
+      - name: Download Artifcat
+        uses: actions/download-artifact@v2
+        with: 
+          name: windows-build
       - name: Setup Conda
         uses: s-weigand/setup-conda@v1
       - name: Install TA-Lib

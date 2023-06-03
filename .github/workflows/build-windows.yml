@@ -32,7 +32,7 @@ jobs:
       - name: Download Artifcat
         uses: actions/download-artifact@v2
         with: 
-          name: windows-build
+          name: linux-build
       - name: Setup Conda
         uses: s-weigand/setup-conda@v1
       - name: Install TA-Lib
@@ -48,6 +48,12 @@ jobs:
         with:
             name: windows-build
             path: dist/yftest.exe
-      
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            linux-build
+            windows-build
         
       

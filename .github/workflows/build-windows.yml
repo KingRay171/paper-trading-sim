@@ -53,7 +53,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            linux-build
-            windows-build
+            yftest
+            yftest.exe
         
       

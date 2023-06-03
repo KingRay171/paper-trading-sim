@@ -20,7 +20,7 @@ jobs:
           python -m PyInstaller yftest.spec
       - name: Assemble Linux Build
         run: |
-          cp -R /assets /dependencies /fonts /icons /splashscreen-images /dist
+          cp -R assets dependencies fonts icons splashscreen-images dist
           zip linux-build.zip dist
       - name: Upload Artifact
         uses: actions/upload-artifact@v2

@@ -52,6 +52,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/heads/')
         with:
+          tag_name: ${{ github.event.head_commit.message }}
+          release_name: ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: false
+          overwrite: true
           files: |
             yftest
             yftest.exe

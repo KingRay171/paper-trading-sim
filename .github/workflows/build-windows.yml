@@ -18,11 +18,15 @@ jobs:
           pip install pyinstaller
           pip install Pillow
           python -m PyInstaller yftest.spec
+      - name: Assemble Linux Build
+        run: |
+          cp assets dependencies fonts icons splashscreen-images dist
+          zip linux-build.zip dist
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
             name: linux-build
-            path: dist/yftest
+            path: linux-build.zip
   build-windows:
     runs-on: windows-latest
     needs: build-linux
@@ -56,7 +60,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            yftest
+            linux-build.zip
             dist/yftest.exe
         
       

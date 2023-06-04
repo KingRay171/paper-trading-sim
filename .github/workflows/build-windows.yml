@@ -1,4 +1,4 @@
-name: windows build
+name: build
 
 on:
   push:
@@ -47,6 +47,11 @@ jobs:
           pip install pyinstaller
           pip install Pillow
           python -m PyInstaller yftest.spec
+      - name: Assemble Windows Build
+        run: |
+          for %a in ("assets" "dependencies" "fonts" "icons" "splashscreen-images") 
+          do (xcopy /s "%~a" "dist")
+          powershell Compress-Archive dist windows-build.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
@@ -61,6 +66,6 @@ jobs:
           prerelease: false
           files: |
             linux-build.zip
-            dist/yftest.exe
+            windows-build.zip
         
       

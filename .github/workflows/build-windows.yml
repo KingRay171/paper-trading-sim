@@ -49,8 +49,12 @@ jobs:
           python -m PyInstaller yftest.spec
       - name: Assemble Windows Build
         run: |
-          for %a in ("assets" "dependencies" "fonts" "icons" "splashscreen-images") do (xcopy /s "%~a" "dist")
-          powershell Compress-Archive dist windows-build.zip
+          Copy-Item -Path "assets" -Destination "dist" -Recurse
+          Copy-Item -Path "dependencies" -Destination "dist" -Recurse
+          Copy-Item -Path "fonts" -Destination "dist" -Recurse
+          Copy-Item -Path "icons" -Destination "dist" -Recurse
+          Copy-Item -Path "splashscreen-images" -Destination "dist" -Recurse
+          Compress-Archive dist windows-build.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:

@@ -44,10 +44,8 @@ jobs:
           conda install -c conda-forge ta-lib
       - name: Run PyInstaller
         run: |
-          conda uninstall Pillow
-          python -m pip install Pillow
-          conda install -c conda-forge pyinstaller pandas holidays beautifulsoup4 scipy tensorflow matplotlib mplfinance
-          python -m pip install yahooquery holidays PySide6 PySide6-Addons PySide6-Essentials
+          conda install -c conda-forge pyinstaller pandas holidays beautifulsoup4 scipy tensorflow 
+          python -m pip install matplotlib mplfinance yahooquery holidays PySide6 PySide6-Addons PySide6-Essentials
           
           python -m PyInstaller --add-data "c:/miniconda/lib/site-packages/PySide6/plugins;PySide6/plugins/" --onefile --noconsole --icon=wsb.jpg yftest.py
       - name: Assemble Windows Build

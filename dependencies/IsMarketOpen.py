@@ -1,7 +1,8 @@
 import datetime
 import holidays
 
-us_holidays = holidays.US()
+
+us_holidays = holidays.ny_stock_exchange.NYSE()
 
 def market_is_open(now=None) -> bool:
     """
@@ -25,3 +26,4 @@ def market_is_open(now=None) -> bool:
     if now.date().weekday()>4:
         return False
     return True
+

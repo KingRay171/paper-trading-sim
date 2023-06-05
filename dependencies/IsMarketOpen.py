@@ -1,6 +1,5 @@
 import datetime
-from holidays import ny_stock_exchange
-
+from holidays.financial import ny_stock_exchange
 
 us_holidays = ny_stock_exchange.NYSE()
 

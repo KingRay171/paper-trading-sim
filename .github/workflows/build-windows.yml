@@ -45,7 +45,7 @@ jobs:
       - name: Run PyInstaller
         run: |
           conda install -c conda-forge pyinstaller pandas pyside6 holidays beautifulsoup4
-          python -m pip install yahooquery holidays 
+          python -m pip install yahooquery holidays PySide6-Addons PySide6-Essentials
           pip install Pillow
           python -m PyInstaller yftest.spec
       - name: Assemble Windows Build

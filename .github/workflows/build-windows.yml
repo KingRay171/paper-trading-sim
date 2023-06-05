@@ -44,8 +44,9 @@ jobs:
           conda install -c conda-forge ta-lib
       - name: Run PyInstaller
         run: |
-          conda install -c conda-forge pyinstaller beautifulsoup4 holidays lxml matplotlib mplfinance numpy pandas pygame pyside6 requests scipy selenium ta tensorflow yfinance
-          
+          conda install -c conda-forge pyinstaller
+          conda install -c conda-forge pip
+          python -m pip install -r requirements.txt
           pip install Pillow
           python -m PyInstaller yftest.spec
       - name: Assemble Windows Build

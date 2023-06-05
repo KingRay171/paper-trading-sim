@@ -44,8 +44,8 @@ jobs:
           conda install -c conda-forge ta-lib
       - name: Run PyInstaller
         run: |
-          conda install -c conda-forge pyinstaller pandas pyside6 holidays
-          python -m pip install yahooquery
+          conda install -c conda-forge pyinstaller pandas pyside6 holidays beautifulsoup4
+          python -m pip install yahooquery holidays 
           pip install Pillow
           python -m PyInstaller yftest.spec
       - name: Assemble Windows Build

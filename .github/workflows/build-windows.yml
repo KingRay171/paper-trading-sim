@@ -45,7 +45,7 @@ jobs:
       - name: Run PyInstaller
         run: |
           conda install -c conda-forge pyinstaller
-          conda install --file requirements.txt
+          conda install -c conda-forge --file requirements.txt
           
           pip install Pillow
           python -m PyInstaller yftest.spec

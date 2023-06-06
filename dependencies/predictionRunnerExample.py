@@ -42,7 +42,7 @@ def run(ticker):
 
 
 
-  next_time_steps, future_forecast, timesteps, stock_price =  run_model('AMZN')
+  next_time_steps, future_forecast, timesteps, stock_price =  run_model(ticker)
 
   #import PySide6.QtWidgets
   from PySide6.QtCharts import (QChart, QChartView, QLineSeries, QDateTimeAxis)

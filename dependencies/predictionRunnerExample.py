@@ -25,15 +25,8 @@ def run(ticker):
     model_9 = 0
 
     next_time_steps, future_forecast, timesteps, stock_price = 0,0,0,0
-    if(isExist):
 
-      model_9 = ml.load_model(path)
-      next_time_steps, future_forecast, timesteps, stock_price = ml.run_main(ticker, model_9)
-
-
-    else:
-      #model = torch.load(path)
-      next_time_steps, future_forecast, timesteps, stock_price = ml.run_main(ticker)
+    next_time_steps, future_forecast, timesteps, stock_price = ml.run_main(ticker)
 
 
     #print(model.runPredictions("ml_model/out.csv", 5, 30))

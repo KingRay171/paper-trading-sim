@@ -57,11 +57,6 @@ def make_model(dataset_all, ticker):
   # Fit model on all of the data to make future forecasts
   model_9.fit(dataset_all,
               epochs=100)
-  filename = ticker+'.sav'
-
-  path = rf"{os.getcwd()}\dependencies\models\{filename}"
-  with open( path, 'wb') as f:
-    pickle.dump(model_9, f)
   return model_9
 
 def load_model(filename):

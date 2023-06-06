@@ -55,6 +55,7 @@ jobs:
           Copy-Item -Path "fonts" -Destination "dist" -Recurse
           Copy-Item -Path "icons" -Destination "dist" -Recurse
           Copy-Item -Path "splashscreen-images" -Destination "dist" -Recurse
+          Copy-Item -Path "minigame" -Destination "dist" -Recurse
           Compress-Archive dist windows-build.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v2

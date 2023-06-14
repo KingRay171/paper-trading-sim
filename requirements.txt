@@ -1,0 +1,6 @@
+PySide6~=6.5.1.1
+pandas~=2.0.2
+requests~=2.31.0
+lxml~=4.9.2
+numpy~=1.24.3
+yahooquery~=2.3.1

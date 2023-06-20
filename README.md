@@ -11,12 +11,10 @@ paper-trading-sim is a game where the goal is to generate the highest returns po
 
 [Changelog »](https://github.com/KingRay171/paper-trading-sim/blob/main/CHANGELOG.rst)
 
-What's new in version 1.0
+What's new in version 1.1
 -------------------------
-- Optimized trade handling
-- Optimized startup processes
-- Improved layout management
-- Faster generation of AI stock recommendations
-- Open trades can now be tracked in Portfolio tab
-- Other small fixes and changes
+- Fixed all issues with stock charting
+- Stock chart no longer uses the command line to start chart
+- Other optimizations and changes to charting feature
+
 

@@ -1,11 +1,10 @@
 import math
-import sys
 import mplfinance as mpf
 import matplotlib.animation as animation
 from matplotlib import axes
 
-import ta_addplot
-import readassets as ra
+from dependencies import ta_addplot
+from dependencies import readassets as ra
 # pylint: disable-msg=E1101
 # pylint: disable-msg=W0123
 # pylint: disable-msg=W0603
@@ -14,6 +13,8 @@ import talib
 import ta
 import yfinance as yf
 import pandas as pd
+import multiprocessing as mp
+
 
 pd.options.mode.chained_assignment = None
 
@@ -148,15 +149,12 @@ def update_data(_, ticker: str, interval: str, ta_indicators: str, prepost: bool
     return axes
 
 
-def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, adjust_ohlc: bool, split_dividend: bool, volume: bool, period=None, start_date=None, end_date=None):
+def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, adjust_ohlc: bool, split_dividend: bool, volume: bool, queue: mp.Queue, period=None, start_date=None, end_date=None):
 
     global axes
     global data
     global xlims
     global scaled_xlims
-
-
-
 
     up_color = ra.get_xml_data('assets/settings.xml', 'upcolor')
     down_color = ra.get_xml_data('assets/settings.xml', 'downcolor')
@@ -216,30 +214,4 @@ def startChart(ticker: str, interval: str, ta_indicators: list, prepost: bool, a
 
     mpf.show()
 
-print(sys.argv)
-
-
-
-if len(sys.argv) == 9:
-    startChart(
-        sys.argv[1],
-        sys.argv[2],
-        eval(sys.argv[3]),
-        eval(sys.argv[5]),
-        eval(sys.argv[6]),
-        eval(sys.argv[7]),
-        eval(sys.argv[8]),
-        period=sys.argv[4]
-    )
-elif len(sys.argv) == 10:
-    startChart(
-        sys.argv[1],
-        sys.argv[2],
-        eval(sys.argv[3]),
-        eval(sys.argv[6]),
-        eval(sys.argv[7]),
-        eval(sys.argv[8]),
-        eval(sys.argv[9]),
-        start_date=sys.argv[4],
-        end_date=sys.argv[5]
-    )
+    queue.put(_)

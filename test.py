@@ -1,80 +1,58 @@
-#run this
-import stock_prediction as ml
-import os
-#from stock_prediction import GRU
-#from stock_prediction import input_data
-#from stock_prediction import ModelAccessor
+from PySide6.QtWidgets import QMainWindow, QPushButton, QApplication, QLabel, QWidget
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import mplfinance as mpf
+from PySide6 import QtCore, QtWidgets
+import numpy as np
+from dependencies import stockchart as sc
+import multiprocessing as mp
 
-print("starting up")
-def run_model(ticker):
-  path = rf"{os.getcwd()}/models/" +ticker+".sav"
-  isExist = os.path.exists(path)
+class MainWindow(QMainWindow):
+     
+     def __init__(self):
+          self.anim = None
+          super(MainWindow, self).__init__()
+          btn = QPushButton('Click me!', self)
+          btn.clicked.connect(self.onClick)
 
-  print(path)
-  print(isExist)
-  model_9 = 0
+     def onClick(self):
+          queue = mp.Queue()
+          p = mp.Process(target=sc.startChart, args=("BTC-USD", "5m", [], False, True, False, True, queue, "1d"))
+          p.start()
+          mpf.show()
 
-  next_time_steps, future_forecast, timesteps, stock_price = 0,0,0,0
-  if(isExist):
+class SecondWindow(QMainWindow):
+    def __init__(self):
+         super(SecondWindow, self).__init__()
+         self.main_widget = QtWidgets.QWidget(self)
 
-    model_9 = ml.load_model(path)
-    next_time_steps, future_forecast, timesteps, stock_price = ml.run_main(ticker, model_9)
+         layout = QtWidgets.QVBoxLayout(self.main_widget)
+         sc = MyMplCanvas(self.main_widget, width = 300, height = 300)
+         layout.addWidget(sc)
 
+class MyMplCanvas(FigureCanvas):
 
-  else:
-    #model = torch.load(path)
-    next_time_steps, future_forecast, timesteps, stock_price = ml.run_main(ticker)
+    def __init__(self, parent=None, width= 300, height= 300):
+        fig = Figure(figsize=(width, height))
+        self.axes = fig.add_subplot(111)
 
+        self.compute_figure()
 
-  #print(model.runPredictions("ml_model/out.csv", 5, 30))
-  return next_time_steps, future_forecast, timesteps, stock_price
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
 
+        FigureCanvas.setSizePolicy(self, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
 
+    def compute_figure(self):
+        t = np.arange(0.0, 3.0, 0.01)
+        s = np.sin(2*np.pi*t)
+        self.axes.plot(t, s)
 
-
-next_time_steps, future_forecast, timesteps, stock_price =  run_model('AMZN')
-
-#import PySide6.QtWidgets
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtCharts import (QChart, QChartView, QLineSeries, QDateTimeAxis)
-from PySide6.QtGui  import QColor, QPixmap
-import sys
-from PySide6.QtCore import Qt
-
-#1478
-#need return chartview
-print("wow1")
-ptchart = QChart()
-ptlineseries = QLineSeries()
-ptlineseries.setName("stock")
-ptchart.addSeries(ptlineseries)
-throwaway =  QGuiApplication()
-x_axis = QDateTimeAxis()
-x_axis.setTickCount(7)
-x_axis.setFormat("yyyy-MM-dd")
-x_axis.setTitleText("Date")
-x_axis.setVisible(True)
-ptchart.addAxis(x_axis, Qt.AlignmentFlag.AlignBottom)
-print("wow2")
-
-series = QLineSeries()
-series2 = QLineSeries()
-
-timesteps = ['2023-05-05' '2023-05-06' '2023-05-07']
-stock_price = [1, 5, 3]
-series.setName("Real")
-series.setColor(QColor("blue"))
-series.append(timesteps, stock_price)
-
-
-next_time_steps = ['2023-05-08' '2023-05-09' '2023-05-10']
-future_forecast = [10,2,5]
-series2.setName("Prediction")
-series2.setColor(QColor("red"))
-series2.append(next_time_steps, future_forecast)
-
-ptchart.addSeries(series)
-ptchart.addSeries(series2)
-
-ptchartview = QChartView(ptchart)
-print("wow")
+if __name__ == '__main__':
+    import sys
+    app = QApplication(sys.argv)
+    MW = MainWindow()
+    MW.resize(500, 500)
+    MW.show()
+    sys.exit(app.exec_())

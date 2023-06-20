@@ -1,12 +1,10 @@
-from typing import Optional
-import PySide6.QtCore
 from PySide6.QtWidgets import QDialog
 from widgets.chart_stocks.broad_market import BroadMarketWidget
 from widgets.chart_stocks.search_bar import SearchBar
 from widgets.chart_stocks.settings_widget import ChartSettingsWidget
-from threading import Thread
+from dependencies import stockchart as sc
+import multiprocessing as mp
 import os
-
 class ChartConfigs(QDialog):
     def __init__(self, string_list, selected_ta) -> None:
         super().__init__()
@@ -62,24 +60,19 @@ class ChartConfigs(QDialog):
             self.chart_by_period(ticker, interval, prepost, ohlc, split_dividend, volume, selected_ta)
 
     def chart_by_dates(self, ticker, interval, prepost, ohlc, split_dividend, volume, selected_ta):
-        def thread_worker(title, start, end, interval):
-            cla = f'{title} {interval} "{selected_ta}" {start} {end} {prepost} {ohlc} {split_dividend} {volume}'
-            os.system(rf"python3 {self.cwd}dependencies\stockchart.py {cla}")
-
         start = self.settings.start_date.selectedDate().toString("yyyy-MM-dd")
         end = self.settings.end_date.selectedDate().toString("yyyy-MM-dd")
+        queue = mp.Queue()
 
-        Thread(daemon=True, target=thread_worker, args=(ticker, start, end, interval)).start()
+        mp.Process(target=sc.startChart, daemon=True, args=(ticker, interval, selected_ta, prepost, ohlc, split_dividend, volume, queue, None, start, end)).start()
 
     def chart_by_period(self, ticker: str, interval: str, prepost: str, ohlc: str, split_div: str, vol: str, selected_ta):
         """
         Starts chart UI, passes a period as a command line argument
         """
-        def thread_worker(title, period, interval):
-            cla = f'{title} {interval} "{selected_ta}" {period} {prepost} {ohlc} {split_div} {vol}'
-            os.system(rf"python3 {self.cwd}dependencies\stockchart.py {cla}")
 
         period = self.settings.period_combobox.currentText()
+        queue = mp.Queue()
 
-        Thread(daemon=True, target=thread_worker, args=(ticker, period, interval)).start()
+        mp.Process(target=sc.startChart, daemon=True, args=(ticker, interval, selected_ta, prepost, ohlc, split_div, vol, queue, period, None, None)).start()
 

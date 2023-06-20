@@ -9,6 +9,8 @@
 
 paper-trading-sim is a game where the goal is to generate the highest returns possible trading real securities and derivatives with simulated funds
 
+Playable versions of the game can be found in the releases section. The executable can be ran without need for a Python interpreter or downloads of any dependencies.
+
 [Changelog »](https://github.com/KingRay171/paper-trading-sim/blob/main/CHANGELOG.rst)
 
 What's new in version 1.1

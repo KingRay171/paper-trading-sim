@@ -1,5 +1,19 @@
 Changelog
 =========
+1.1.0
+------
+- Fixed all issues with stock charting
+- Stock chart no longer uses the command line to start chart
+- Other optimizations and changes to charting feature
+
+1.0.0
+------
+- Optimized trade handling
+- Optimized startup processes
+- Improved layout management
+- Faster generation of AI stock recommendations
+- Open trades can now be tracked in Portfolio tab
+- Other small fixes and changes
 
 1b.1.1
 ------

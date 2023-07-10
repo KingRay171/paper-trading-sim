@@ -47,7 +47,7 @@ jobs:
           conda install -c conda-forge pyinstaller pandas holidays beautifulsoup4 scipy tensorflow 
           python -m pip install matplotlib mplfinance yahooquery holidays PySide6 PySide6-Addons PySide6-Essentials pygame
           
-          python -m PyInstaller --add-data "c:/miniconda/lib/site-packages/PySide6/plugins;PySide6/plugins/" --onefile --noconsole --icon=wsb.jpg yftest.py
+          python -m PyInstaller --hidden-import talib.stream --add-data "c:/miniconda/lib/site-packages/PySide6/plugins;PySide6/plugins/" --onefile --noconsole --icon=wsb.jpg yftest.py
       - name: Assemble Windows Build
         run: |
           Copy-Item -Path "assets" -Destination "dist" -Recurse

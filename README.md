@@ -1,10 +1,11 @@
 # Stock Market Game
 
-[![forthebadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com)
+
+![forthebadge](https://github.com/BraveUX/for-the-badge/blob/master/src/images/badges/made-with-python.svg)
 ![and-held-together-with-duct-tape](https://github.com/KingRay171/paper-trading-sim/assets/33167191/03145542-8913-4c44-bad0-b1c4641c6860)
-[![forthebadge](https://forthebadge.com/images/badges/powered-by-qt.svg)](https://forthebadge.com)
+![forthebadge](https://github.com/BraveUX/for-the-badge/blob/master/src/images/badges/powered-by-qt.svg)
 ![tests](https://github.com/KingRay171/paper-trading-sim/actions/workflows/tests.yml/badge.svg)
-[![Build](https://github.com/KingRay171/paper-trading-sim/actions/workflows/build.yml/badge.svg)](https://github.com/KingRay171/paper-trading-sim/actions/workflows/build.yml)
+![build](https://github.com/KingRay171/paper-trading-sim/actions/workflows/build-windows.yml/badge.svg)
 
 
 paper-trading-sim is a game where the goal is to generate the highest returns possible trading real securities and derivatives with simulated funds
